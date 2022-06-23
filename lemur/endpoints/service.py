@@ -105,7 +105,7 @@ def get_all_pending_rotation():
     that have been replaced.
     :return:
     """
-    return Endpoint.query.filter(Endpoint.replaced.any()).all()
+    return Endpoint.query.filter(Endpoint.certificate.replaced.any()).all()
 
 
 def create(**kwargs):
@@ -151,7 +151,7 @@ def update(endpoint_id, **kwargs):
     endpoint = database.get(Endpoint, endpoint_id)
 
     endpoint.policy = kwargs["policy"]
-    endpoint.certificate = kwargs["certificate"]
+    endpoint.certificates = kwargs["certificate"]
     endpoint.source = kwargs["source"]
     endpoint.certificate_path = kwargs.get("certificate_path")
     endpoint.registry_type = kwargs.get("registry_type")
@@ -181,7 +181,7 @@ def render(args):
     :return:
     """
     query = database.session_query(Endpoint)\
-        .options(joinedload(Endpoint.certificate))\
+        .options(joinedload(Endpoint.certificates_assoc))\
         .options(joinedload(Endpoint.source))
     filt = args.pop("filter")
 

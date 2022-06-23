@@ -1,11 +1,12 @@
 import json
 from datetime import date
 
-from factory import Sequence, post_generation, SubFactory
+from factory import Sequence, post_generation, SubFactory, List
 from factory.alchemy import SQLAlchemyModelFactory
 from factory.fuzzy import FuzzyChoice, FuzzyText, FuzzyDate, FuzzyInteger
 
 from lemur.database import db
+from lemur.models import EndpointsCertificates
 from lemur.authorities.models import Authority
 from lemur.certificates.models import Certificate
 from lemur.destinations.models import Destination
@@ -312,6 +313,18 @@ class PolicyFactory(BaseFactory):
         model = Policy
 
 
+class EndpointsCertificatesFactory(BaseFactory):
+    """EndpointsCertificates Association Factory."""
+
+    primary = True
+    certificate = SubFactory(CertificateFactory)
+
+    class Meta:
+        """Factory Configuration."""
+
+        model = EndpointsCertificates
+
+
 class EndpointFactory(BaseFactory):
     """Endpoint Factory."""
 
@@ -322,13 +335,16 @@ class EndpointFactory(BaseFactory):
     port = FuzzyInteger(0, high=65535)
     dnsname = "endpoint.example.com"
     policy = SubFactory(PolicyFactory)
-    certificate = SubFactory(CertificateFactory)
+    certificates_assoc = List([SubFactory(EndpointsCertificatesFactory)])
     source = SubFactory(SourceFactory)
 
     class Meta:
         """Factory Configuration."""
 
         model = Endpoint
+
+
+EndpointsCertificatesFactory.endpoint = SubFactory(EndpointFactory)
 
 
 class ApiKeyFactory(BaseFactory):

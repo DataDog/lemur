@@ -8,7 +8,8 @@
     :license: Apache, see LICENSE for more details.
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
-from sqlalchemy import Column, Integer, ForeignKey, Index, UniqueConstraint
+from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, ForeignKey, Index, UniqueConstraint, String, Boolean
 
 from lemur.database import db
 
@@ -202,3 +203,19 @@ Index(
     pending_cert_role_associations.c.pending_cert_id,
     pending_cert_role_associations.c.role_id,
 )
+
+
+class EndpointsCertificates(db.Model):
+    __tablename__ = "endpoints_certificates"
+    certificate_id = Column(ForeignKey("certificates.id"), primary_key=True)
+    endpoint_id = Column(ForeignKey("endpoints.id"), primary_key=True)
+    path = Column(String(256))
+    primary = Column(Boolean, default=True)
+    certificate = relationship("Certificate", back_populates="endpoints_assoc")
+    endpoint = relationship("Endpoint", back_populates="certificates_assoc")
+
+    def __init__(self, certificate=None, endpoint=None, primary=True, path=""):
+        self.certificate = certificate
+        self.endpoint = endpoint
+        self.primary = primary
+        self.path = path
