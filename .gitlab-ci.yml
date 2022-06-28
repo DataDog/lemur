@@ -1,5 +1,6 @@
 variables:
   CURRENT_CI_IMAGE: v7679051-11c779a8
+  KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: lemur
 
 stages:
   - build-image
