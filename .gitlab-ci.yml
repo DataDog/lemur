@@ -1,0 +1,18 @@
+variables:
+  CURRENT_CI_IMAGE: v7679051-11c779a8
+
+stages:
+  - build-image
+
+build-image:
+  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/images:$CURRENT_CI_IMAGE
+  stage: build-image
+  when: on_success
+  # the 3h timeout is required for images compiling large projects for ARM using qemu
+  # we can revert back to 1h when we use native builders for ARM
+  timeout: 3h
+  tags: ["arch:amd64"]
+  variables:
+    CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
+  script:
+    - echo "Hello"
