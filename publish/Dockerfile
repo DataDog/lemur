@@ -14,7 +14,8 @@ RUN chmod +x setup_14.x && \
 # Download Lemur source code and verify checksum
 
 #TODO - get sha from gitlab
-RUN curl -OL "https://github.com/Netflix/lemur/archive/${LEMUR_VERSION}.zip"
+RUN echo "Getting code from COMMIT SHA ${CI_COMMIT_SHA}"
+RUN curl -OL "https://github.com/Netflix/lemur/archive/${CI_COMMIT_SHA}.zip"
 RUN mkdir -p /opt/lemur && \
     unzip ${LEMUR_VERSION}.zip && mv lemur-${LEMUR_VERSION}/* /opt/lemur/
 
