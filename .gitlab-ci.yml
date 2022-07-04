@@ -28,4 +28,4 @@ tests:
   stage: tests
   tags: ["arch:amd64"]
   script:
-    - make test
+    - docker-compose up
