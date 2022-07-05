@@ -19,7 +19,7 @@ build-image:
   script:
     - cd publish && docker buildx build --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA --push .
 
-tests:
+test-lemur:
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/images:$CURRENT_CI_IMAGE
   stage: tests
   when: on_success
