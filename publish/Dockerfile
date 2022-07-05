@@ -19,7 +19,7 @@ RUN chmod +x setup_14.x && \
 RUN echo "Getting code from COMMIT SHA $CI_COMMIT_SHA"
 RUN curl -OL "https://github.com/DataDog/lemur/archive/$CI_COMMIT_SHA.zip"
 RUN mkdir -p /opt/lemur && \
-    unzip $CI_COMMIT_SHA.zip && mv lemur-$LEMUR_VERSION/* /opt/lemur/
+    unzip $CI_COMMIT_SHA.zip && mv lemur-$CI_COMMIT_SHA/* /opt/lemur/
 
 WORKDIR /opt/lemur
 
