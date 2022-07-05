@@ -15,7 +15,7 @@ tests:
   timeout: 3h
   tags: [ "arch:amd64" ]
   script:
-    - docker-compose up
+    - make test
 
 build-image:
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/images:$CURRENT_CI_IMAGE
