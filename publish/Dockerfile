@@ -14,10 +14,10 @@ RUN chmod +x setup_14.x && \
 # Download Lemur source code and verify checksum
 
 #TODO - get sha from gitlab
-RUN echo "Getting code from COMMIT SHA $CI_COMMIT_SHA"
+RUN echo "Getting code from COMMIT SHA ${CI_COMMIT_SHA}"
 RUN curl -OL "https://github.com/DataDog/lemur/archive/${CI_COMMIT_SHA}.zip"
 RUN mkdir -p /opt/lemur && \
-    unzip ${LEMUR_VERSION}.zip && mv lemur-$LEMUR_VERSION/* /opt/lemur/
+    unzip ${CI_COMMIT_SHA}.zip && mv lemur-$LEMUR_VERSION/* /opt/lemur/
 
 WORKDIR /opt/lemur
 
