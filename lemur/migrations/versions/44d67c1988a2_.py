@@ -22,7 +22,7 @@ def upgrade():
         sa.Column("certificate_id", sa.Integer(), nullable=False),
         sa.Column("endpoint_id", sa.Integer(), nullable=False),
         sa.Column("path", sa.String(length=256), nullable=True),
-        sa.Column("primary", sa.Boolean(), nullable=False),
+        sa.Column("primary_certificate", sa.Boolean(), nullable=False),
     )
     op.create_primary_key(
         None,
