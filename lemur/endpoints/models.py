@@ -139,7 +139,7 @@ class Endpoint(db.Model):
                 assoc.certificate = cert
                 return
         self.certificates_assoc.append(
-            EndpointsCertificates(certificate=cert, endpoint=self, primary=True, path="")
+            EndpointsCertificates(certificate=cert, endpoint=self, primary_certificate=True, path="")
         )
 
     @hybrid_property

@@ -316,7 +316,7 @@ class PolicyFactory(BaseFactory):
 class EndpointsCertificatesFactory(BaseFactory):
     """EndpointsCertificates Association Factory."""
 
-    primary = True
+    primary_certificate = True
     certificate = SubFactory(CertificateFactory)
 
     class Meta:

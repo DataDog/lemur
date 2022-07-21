@@ -214,8 +214,8 @@ class EndpointsCertificates(db.Model):
     certificate = relationship("Certificate", back_populates="endpoints_assoc")
     endpoint = relationship("Endpoint", back_populates="certificates_assoc")
 
-    def __init__(self, certificate=None, endpoint=None, primary=True, path=""):
+    def __init__(self, certificate=None, endpoint=None, primary_certificate=True, path=""):
         self.certificate = certificate
         self.endpoint = endpoint
-        self.primary = primary
+        self.primary_certificate = primary_certificate
         self.path = path
