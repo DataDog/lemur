@@ -30,9 +30,9 @@ def upgrade():
         ["certificate_id", "endpoint_id"]
     )
 
-    print("Creating certificates_id foreign key on endpoints_certificates table")
+    print("Creating certificate_id_fkey foreign key on endpoints_certificates table")
     op.create_foreign_key(
-        None,
+        "certificate_id_fkey",
         "endpoints_certificates",
         "certificates",
         ["certificate_id"],
@@ -40,9 +40,9 @@ def upgrade():
         ondelete="CASCADE",
     )
 
-    print("Creating endpoints_id foreign key on endpoints_certificates table")
+    print("Creating endpoint_id_fkey foreign key on endpoints_certificates table")
     op.create_foreign_key(
-        None,
+        "endpoint_id_fkey",
         "endpoints_certificates",
         "endpoints",
         ["endpoint_id"],
@@ -66,7 +66,8 @@ def upgrade():
 
 def downgrade():
     print("Removing foreign key constraints on endpoints_certificates table")
-    op.drop_constraint(None, "endpoints_certificates", type_="foreignkey")
+    op.drop_constraint("certificate_id_fkey", "endpoints_certificates", type_="foreignkey")
+    op.drop_constraint("endpoint_id_fkey", "endpoints_certificates", type_="foreignkey")
 
     print("Removing endpoints_certificates table")
     op.drop_table("endpoints_certificates")
