@@ -124,18 +124,16 @@ class Endpoint(db.Model):
         return issues
 
     @hybrid_property
-    @deprecated("The certificate attribute is deprecated and will be removed soon.")
-    def certificate(self):
-        """DEPRECATED: Returns the primary certificate associated with the endpoint."""
+    def primary_certificate(self):
+        """Returns the primary certificate associated with the endpoint."""
         for assoc in self.certificates_assoc:
             if assoc.primary_certificate:
                 return assoc.certificate
         return None
 
-    @certificate.setter
-    @deprecated("The certificate attribute is deprecated and will be removed soon.")
-    def certificate(self, cert):
-        """DEPRECATED: Sets the primary certificate associated with the endpoint."""
+    @primary_certificate.setter
+    def primary_certificate(self, cert):
+        """Sets the primary certificate associated with the endpoint."""
         for assoc in self.certificates_assoc:
             if assoc.primary_certificate:
                 assoc.certificate = cert
@@ -145,21 +143,31 @@ class Endpoint(db.Model):
         )
 
     @hybrid_property
-    @deprecated("The certificate_path attribute is deprecated and will be removed soon.")
+    @deprecated("The certificate attribute is deprecated and will be removed soon. Use Endpoint.primary_certificate instead.")
+    def certificate(self):
+        """DEPRECATED: Returns the primary certificate associated with the endpoint."""
+        return self.primary_certificate
+
+    @certificate.setter
+    @deprecated("The certificate attribute is deprecated and will be removed soon. Use Endpoint.primary_certificate instead.")
+    def certificate(self, cert):
+        """DEPRECATED: Sets the primary certificate associated with the endpoint."""
+        self.primary_certificate = cert
+
+    @hybrid_property
+    @deprecated("The certificate_path attribute is deprecated and will be removed soon. Use Endpoint.primary_certificate.path instead.")
     def certificate_path(self):
         """DEPRECATED: Returns the path of the primary certificate associated with the endpoint."""
-        for assoc in self.certificates_assoc:
-            if assoc.primary_certificate:
-                return assoc.path
-        return ""
+        if self.primary_certificate:
+            return self.primary_certificate.path
+        return None
 
     @certificate_path.setter
-    @deprecated("The certificate_path attribute is deprecated and will be removed soon.")
+    @deprecated("The certificate_path attribute is deprecated and will be removed soon. Use Endpoint.primary_certificate.path instead")
     def certificate_path(self, path):
-        for assoc in self.certificates_assoc:
-            if assoc.primary_certificate:
-                assoc.path = path
-                return
+        """DEPRECATED: Sets the path of the primary certificate associated with the endpoint."""
+        if self.primary_certificate:
+            self.primary_certificate = path
 
     def __repr__(self):
         return "Endpoint(name={name})".format(name=self.name)
