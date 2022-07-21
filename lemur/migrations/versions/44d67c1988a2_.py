@@ -56,10 +56,10 @@ def upgrade():
             text("select id, certificate_id, certificate_path from endpoints")
     ):
         stmt = text(
-            "insert into endpoints_certificates (endpoint_id, certificate_id, path, \"primary\") values (:endpoint_id, :certificate_id, :path, :primary)"
+            "insert into endpoints_certificates (endpoint_id, certificate_id, path, primary_certificate) values (:endpoint_id, :certificate_id, :path, :primary_certificate)"
         )
         stmt = stmt.bindparams(
-            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, primary=True
+            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, primary_certificate=True
         )
         op.execute(stmt)
 
