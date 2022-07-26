@@ -1326,7 +1326,7 @@ def get_certificates_for_expiration_metrics(expiry_window):
 
     # if expiry_window param was passed in then get only certs within that window
     if expiry_window:
-        query = query.filter(Certificate.not_after <= arrow.now().shift(days=expiry_window).format("YYYY-MM-DD"))
+        query = query.filter(Certificate.not_after <= arrow.now().shift(days=int(expiry_window)).format("YYYY-MM-DD"))
 
     return query.all()
 
