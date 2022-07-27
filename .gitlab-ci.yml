@@ -4,6 +4,7 @@ variables:
 
 stages:
   - build-image
+  - build-prod-image
   - tests
 
 build-image:
@@ -18,6 +19,22 @@ build-image:
     CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
   script:
     - cd publish/test && docker buildx build --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA --push .
+
+# build a prod image when we create a new tag
+build-prod-image:
+  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/images:$CURRENT_CI_IMAGE
+  stage: build-prod-image
+  when: on_success
+  # the 3h timeout is required for images compiling large projects for ARM using qemu
+  # we can revert back to 1h when we use native builders for ARM
+  timeout: 3h
+  tags: ["arch:amd64"]
+  variables:
+    CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
+  script:
+    - cd publish/test && docker buildx build --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:$CI_COMMIT_TAG --push .
+  only:
+    - tags
 
 tests:
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA
