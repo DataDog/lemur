@@ -33,4 +33,4 @@ build-prod-image:
   script:
     - cd publish/test && docker buildx build --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:$CI_COMMIT_TAG --push .
   only:
-    - master
+    - tags
