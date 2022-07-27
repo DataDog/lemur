@@ -37,6 +37,7 @@ build-prod-image:
     - tags
 
 tests:
+  stage: tests
   services:
     - postgres:12
   variables:
