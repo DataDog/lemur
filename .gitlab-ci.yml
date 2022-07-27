@@ -3,9 +3,9 @@ variables:
   KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: lemur
 
 stages:
+  - tests
   - build-image
   - build-prod-image
-  - tests
 
 build-image:
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/images:$CURRENT_CI_IMAGE
