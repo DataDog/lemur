@@ -3,7 +3,6 @@ variables:
   KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: lemur
 
 stages:
-  - tests
   - build-image
   - build-prod-image
 
@@ -34,26 +33,4 @@ build-prod-image:
   script:
     - cd publish/test && docker buildx build --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:$CI_COMMIT_TAG --push .
   only:
-    - tags
-
-tests:
-  image: python:3.7-buster
-  stage: tests
-  services:
-    - postgres:12
-  variables:
-    POSTGRES_USER: lemur
-    POSTGRES_PASSWORD: lemur
-  script:
-    - apt-get update -qy
-    - apt-get install -y make software-properties-common curl
-    - curl -sL https://deb.nodesource.com/setup_7.x | bash -
-    - apt-get update
-    - apt-get install -y npm libldap2-dev libsasl2-dev libldap2-dev libssl-dev
-    - pip install pip==20.0.2
-    - pip install coveralls bandit
-    - pip install -e .
-    - pip install "file://`pwd`#egg=lemur[dev]"
-    - pip install "file://`pwd`#egg=lemur[tests]"
-    - make test
-
+    - master
