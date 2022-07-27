@@ -37,12 +37,21 @@ build-prod-image:
     - tags
 
 tests:
-  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA
-  stage: tests
-  when: on_success
-  # the 3h timeout is required for images compiling large projects for ARM using qemu
-  # we can revert back to 1h when we use native builders for ARM
-  timeout: 3h
-  tags: [ "arch:amd64" ]
+  services:
+    - postgres:12
+  variables:
+    POSTGRES_USER: lemur
+    POSTGRES_PASSWORD: lemur
   script:
-    - cd /opt/lemur && make test
+    - apt-get update -qy
+    - apt-get install -y make software-properties-common curl
+    - curl -sL https://deb.nodesource.com/setup_7.x | bash -
+    - apt-get update
+    - apt-get install -y npm libldap2-dev libsasl2-dev libldap2-dev libssl-dev
+    - pip install pip==20.0.2
+    - pip install coveralls bandit
+    - pip install -e .
+    - pip install "file://`pwd`#egg=lemur[dev]"
+    - pip install "file://`pwd`#egg=lemur[tests]"
+    - make test
+
