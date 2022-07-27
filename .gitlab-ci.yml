@@ -49,15 +49,11 @@ build-test-image:
   script:
     - cd publish && docker buildx build -f ci_test.Dockerfile --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:test-v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA --push .
 
-
 tests:
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/lemur:test-v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA
   stage: tests
   when: on_success
   timeout: 3h
   tags: [ "arch:amd64" ]
-  variables:
-    CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
   script:
-    - source /opt/venv/bin/activate
-    - make test
+    - source /opt/venv/bin/activate && make test
