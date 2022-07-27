@@ -5,7 +5,7 @@ ARG CI_COMMIT_SHA
 
 USER root
 
-COPY ./files/setup_14.x .
+COPY ../files/setup_14.x .
 RUN chmod +x setup_14.x && \
     ./setup_14.x && \
     rm -rf setup_14.x && \
