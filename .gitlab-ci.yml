@@ -37,6 +37,7 @@ build-prod-image:
     - tags
 
 tests:
+  image: python:3.7-buster
   stage: tests
   services:
     - postgres:12
