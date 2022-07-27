@@ -63,8 +63,40 @@ def upgrade():
         )
         op.execute(stmt)
 
+    print("Removing endpoints_certificate_id_fkey foreign key from endpoints table")
+    op.drop_constraint("endpoints_certificate_id_fkey", "endpoints", type_="foreignkey")
+
+    print("Removing certificate_id and certificate_path columns from endpoints table")
+    op.drop_column("endpoints", "certificate_id")
+    op.drop_column("endpoints", "certificate_path")
+
 
 def downgrade():
+    print("Restoring endpoints_certificate_id_fkey foreign key to endpoints table")
+    op.create_foreign_key(
+        "endpoints_certificate_id_fkey",
+        "endpoints",
+        "certificates",
+        ["certificate_id"],
+        ["id"],
+    )
+
+    print("Restoring certificate_id and certificate_path columns to endpoints table")
+    op.add_column("endpoints", sa.Column("certificate_id", sa.String(length=256), nullable=True))
+    op.add_column("endpoints", sa.Column("certificate_path", sa.String(length=256), nullable=True))
+
+    conn = op.get_bind()
+    for certificate_id, endpoint_id, path in conn.execute(
+        text("select certificate_id, endpoint_id, path from endpoints_certificates")
+    ):
+        stmt = text(
+            "update endpoints set certificate_id = :certificate_id, certificate_path = :certificate_path where id = :endpoint_id"
+        )
+        stmt = stmt.bindparams(
+            certificate_id=certificate_id, endpoint_id = endpoint_id, certificate_path=certificate_path
+        )
+        op.execute(stmt)
+
     print("Removing foreign key constraints on endpoints_certificates table")
     op.drop_constraint("certificate_id_fkey", "endpoints_certificates", type_="foreignkey")
     op.drop_constraint("endpoint_id_fkey", "endpoints_certificates", type_="foreignkey")
