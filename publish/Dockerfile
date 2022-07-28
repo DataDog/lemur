@@ -48,13 +48,6 @@ FROM registry.ddbuild.io/base:focal
 USER root
 
 RUN apt-get update && apt-get -y install jq
-# Include credential helpers
-RUN set -x \
-    && DIGEST=$(curl -H "Accept: application/vnd.oci.image.manifest.v1+json" https://registry.ddbuild.io/v2/public/setup-docker-credentials/manifests/amd64 | jq -r '.layers[0].digest') \
-    && curl -L https://registry.ddbuild.io/v2/public/setup-docker-credentials/blobs/$DIGEST > /usr/bin/setup-docker-credentials \
-    && bash /usr/bin/setup-docker-credentials
-
-COPY ./files/config.json /root/.docker/
 
 COPY --from=builder /opt/lemur /opt/lemur
 COPY --from=builder /opt/venv /opt/venv
