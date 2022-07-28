@@ -8,7 +8,7 @@ stages:
 
 build-stage-image:
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/images:$CURRENT_CI_IMAGE
-  stage:build-stage-image
+  stage: build-stage-image
   when: on_success
   # the 3h timeout is required for images compiling large projects for ARM using qemu
   # we can revert back to 1h when we use native builders for ARM
