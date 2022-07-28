@@ -1,0 +1,23 @@
+{
+  "credHelpers": {
+    "013910733512.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "020998557671.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "028885352722.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "106868303682.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "112787438617.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "172597598159.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "174501549772.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "215132357479.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "415150448445.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "464622532012.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "486234852809.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "520699495846.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "601427279990.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "660570019801.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "663880652222.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "727006795293.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "836772462713.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "937875274457.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "registry.ddbuild.io": "ci"
+  }
+}
