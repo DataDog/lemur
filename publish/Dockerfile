@@ -13,9 +13,7 @@ RUN chmod +x setup_14.x && \
     apt-get install -y --no-install-recommends libpq-dev curl build-essential locales libffi-dev libsasl2-dev libldap2-dev \
         dh-autoreconf git python3-dev python3-pip python3-venv python3-wheel nodejs unzip make
 
-# Download Lemur source code and verify checksum
-
-#TODO - get sha from gitlab
+# Download Lemur source code
 RUN echo "Getting code from COMMIT SHA $CI_COMMIT_SHA"
 RUN curl -OL "https://github.com/DataDog/lemur/archive/$CI_COMMIT_SHA.zip"
 RUN mkdir -p /opt/lemur && \
