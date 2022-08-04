@@ -101,7 +101,7 @@ def downgrade():
             "update endpoints set certificate_id = :certificate_id, certificate_path = :certificate_path where id = :endpoint_id"
         )
         stmt = stmt.bindparams(
-            certificate_id=certificate_id, endpoint_id = endpoint_id, certificate_path=certificate_path
+            certificate_id=certificate_id, endpoint_id = endpoint_id, certificate_path=path
         )
         op.execute(stmt)
 
