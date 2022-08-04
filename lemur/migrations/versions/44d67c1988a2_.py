@@ -81,7 +81,7 @@ def upgrade():
 
 def downgrade():
     print("Restoring certificate_id and certificate_path columns to endpoints table")
-    op.add_column("endpoints", sa.Column("certificate_id", sa.String(length=256), nullable=True))
+    op.add_column("endpoints", sa.Column("certificate_id", sa.Integer(), nullable=True))
     op.add_column("endpoints", sa.Column("certificate_path", sa.String(length=256), nullable=True))
 
     print("Restoring endpoints_certificate_id_fkey foreign key to endpoints table")
