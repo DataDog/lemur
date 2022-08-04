@@ -50,6 +50,14 @@ def upgrade():
         ondelete="CASCADE",
     )
 
+    print("Creating partial index unique_primary_certificate_ix on endpoints_certificates table")
+    op.create_index(
+        "unique_primary_certificate_ix",
+        "endpoints_certificates",
+        ["certificate_id", "endpoint_id", "primary_certificate"],
+        postgresql_where=sa.Text("primary_certificate"),
+    )  # Enforces that only a single primary certificate can be associated with an endpoint.
+
     print("Populating endpoints_certificates table")
     conn = op.get_bind()
     for endpoint_id, certificate_id, certificate_path in conn.execute(
