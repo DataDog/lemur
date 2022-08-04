@@ -54,7 +54,7 @@ def upgrade():
     op.create_index(
         "unique_primary_certificate_ix",
         "endpoints_certificates",
-        ["certificate_id", "endpoint_id", "primary_certificate"],
+        ["endpoint_id", "primary_certificate"],
         postgresql_where=text("primary_certificate"),
     )  # Enforces that only a single primary certificate can be associated with an endpoint.
 
