@@ -97,9 +97,5 @@ def downgrade():
         )
         op.execute(stmt)
 
-    print("Removing foreign key constraints on endpoints_certificates table")
-    op.drop_constraint("certificate_id_fkey", "endpoints_certificates", type_="foreignkey")
-    op.drop_constraint("endpoint_id_fkey", "endpoints_certificates", type_="foreignkey")
-
     print("Removing endpoints_certificates table")
     op.drop_table("endpoints_certificates")
