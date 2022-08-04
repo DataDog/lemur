@@ -55,7 +55,7 @@ def upgrade():
         "unique_primary_certificate_ix",
         "endpoints_certificates",
         ["certificate_id", "endpoint_id", "primary_certificate"],
-        postgresql_where=sa.Text("primary_certificate"),
+        postgresql_where=text("primary_certificate"),
     )  # Enforces that only a single primary certificate can be associated with an endpoint.
 
     print("Populating endpoints_certificates table")
