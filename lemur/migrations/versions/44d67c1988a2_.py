@@ -52,7 +52,7 @@ def upgrade():
 
     print("Creating partial index unique_primary_certificate_ix on endpoints_certificates table")
     op.create_index(
-        "unique_primary_certificate_ix",
+        "unique_primary_certificate_endpoint_ix",
         "endpoints_certificates",
         ["endpoint_id", "primary_certificate"],
         postgresql_where=text("primary_certificate"),
