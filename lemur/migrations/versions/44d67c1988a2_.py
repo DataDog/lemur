@@ -59,6 +59,14 @@ def upgrade():
         unique=True,
     )  # Enforces that only a single primary certificate can be associated with an endpoint.
 
+    print("Creating partial index unique_certificate_endpoint_ix on endpoints_certificates table")
+    op.create_index(
+        "unique_certificate_endpoint_ix",
+        "endpoints_certificates",
+        ["certificate_id", "endpoint_id"],
+        unique=True,
+    )  # Enforces that a given certificate can be associated with an endpoint only once.
+
     print("Populating endpoints_certificates table")
     conn = op.get_bind()
     for endpoint_id, certificate_id, certificate_path in conn.execute(
