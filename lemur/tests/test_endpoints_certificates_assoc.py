@@ -61,7 +61,8 @@ def test_secondary_certificates_assoc():
 def test_primary_certificate_uniqueness():
     """Ensure that only one primary certificate can be associated with an endpoint."""
     # Create and associate two primary certificates with an endpoint
-    endpoint = Endpoint(name=_fake_name(), certificate=_fake_cert())
+    endpoint = Endpoint(name=_fake_name())
+    endpoint.certificate = _fake_cert()
 
     # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
     endpoint.certificates_assoc.append(
@@ -75,7 +76,8 @@ def test_primary_certificate_uniqueness():
 def test_certificate_uniqueness():
     """Ensure that a given certificate can only be associated with an endpoint once."""
     # Create and associate primary certificate with an endpoint
-    endpoint = Endpoint(name=_fake_name(), certificate=_fake_cert())
+    endpoint = Endpoint(name=_fake_name())
+    endpoint.certificate = _fake_cert()
 
     # Associate the same secondary certificate with the endpoint multiple times
     crt = _fake_cert()
