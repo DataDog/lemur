@@ -79,7 +79,7 @@ def test_certificate_uniqueness():
     endpoint = Endpoint(name=_fake_name())
     endpoint.certificate = _fake_cert()
 
-    # Associate the same secondary certificate with the endpoint multiple times
+    # Associate the same secondary certificate with the endpoint twice
     crt = _fake_cert()
 
     for _ in range(0, 2):
