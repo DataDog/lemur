@@ -64,11 +64,10 @@ def test_primary_certificate_uniqueness():
     endpoint = Endpoint(name=_fake_name())
     endpoint.certificate = _fake_cert()
 
-    endpoint.certificates_assoc.append(
-        EndpointsCertificates(certificate=_fake_cert(), endpoint=endpoint, primary_certificate=True)
-    )
-
     try:
+        endpoint.certificates_assoc.append(
+            EndpointsCertificates(certificate=_fake_cert(), endpoint=endpoint, primary_certificate=True)
+        )
         db.session.add(endpoint)
         db.session.commit()
     except Exception:
@@ -86,12 +85,11 @@ def test_certificate_uniqueness():
     # Associate the same secondary certificate with the endpoint twice
     crt = _fake_cert()
 
-    for _ in range(0, 2):
-        endpoint.certificates_assoc.append(
-            EndpointsCertificates(certificate=crt, endpoint=endpoint, primary_certificate=False)
-        )
-
     try:
+        for _ in range(0, 2):
+            endpoint.certificates_assoc.append(
+                EndpointsCertificates(certificate=crt, endpoint=endpoint, primary_certificate=False)
+            )
         db.session.add(endpoint)
         db.session.commit()
     except Exception:
