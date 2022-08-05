@@ -4,7 +4,6 @@ from lemur import database
 from lemur.certificates import service as certificate_service
 from lemur.endpoints import service as endpoint_service
 from lemur.endpoints.models import Endpoint
-from lemur.exceptions import DuplicateError
 from lemur.extensions import db
 from lemur.models import EndpointsCertificates
 from lemur.tests.factories import AuthorityFactory, CertificateFactory, UserFactory, SourceFactory
