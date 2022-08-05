@@ -1,4 +1,3 @@
-import pytest
 import uuid
 from lemur import database
 from lemur.certificates import service as certificate_service
@@ -69,8 +68,13 @@ def test_primary_certificate_uniqueness():
         EndpointsCertificates(certificate=_fake_cert(), endpoint=endpoint, primary_certificate=True)
     )
 
-    db.session.add(endpoint)
-    db.session.commit()
+    try:
+        db.session.add(endpoint)
+        db.session.commit()
+    except Exception:
+        return
+
+    assert False, "Exception must be raised when uniqueness constraint is violated"
 
 
 def test_certificate_uniqueness():
@@ -87,6 +91,10 @@ def test_certificate_uniqueness():
             EndpointsCertificates(certificate=crt, endpoint=endpoint, primary_certificate=False)
         )
 
-    with pytest.raises(Exception):
+    try:
         db.session.add(endpoint)
         db.session.commit()
+    except Exception:
+        return
+
+    assert False, "Exception must be raised when uniqueness constraint is violated"
