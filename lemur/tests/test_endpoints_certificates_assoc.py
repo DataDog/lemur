@@ -73,7 +73,7 @@ def test_primary_certificate_uniqueness():
     except Exception:
         return
 
-    assert False, "Exception must be raised when uniqueness constraint is violated"
+    assert False, "Exception must be raised when uniqueness constraint is violated" + print(endpoint.certificates)
 
 
 def test_certificate_uniqueness():
@@ -95,4 +95,4 @@ def test_certificate_uniqueness():
     except Exception:
         return
 
-    assert False, "Exception must be raised when uniqueness constraint is violated"
+    assert False, "Exception must be raised when uniqueness constraint is violated" + print(endpoint.certificates)
