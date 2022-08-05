@@ -5,6 +5,7 @@ from lemur.certificates import service as certificate_service
 from lemur.endpoints import service as endpoint_service
 from lemur.endpoints.models import Endpoint
 from lemur.exceptions import DuplicateError
+from lemur.extensions import db
 from lemur.models import EndpointsCertificates
 from lemur.tests.factories import AuthorityFactory, CertificateFactory, UserFactory, SourceFactory
 from lemur.tests.vectors import (
@@ -69,8 +70,8 @@ def test_primary_certificate_uniqueness():
         EndpointsCertificates(certificate=_fake_cert(), endpoint=endpoint, primary_certificate=True)
     )
 
-    with pytest.raises(DuplicateError):
-        database.create(endpoint)
+    db.session.add(endpoint)
+    db.session.commit()
 
 
 def test_certificate_uniqueness():
@@ -87,5 +88,6 @@ def test_certificate_uniqueness():
             EndpointsCertificates(certificate=crt, endpoint=endpoint, primary_certificate=False)
         )
 
-    with pytest.raises(DuplicateError):
-        database.create(endpoint)
+    with pytest.raises(Exception):
+        db.session.add(endpoint)
+        db.session.commit()
