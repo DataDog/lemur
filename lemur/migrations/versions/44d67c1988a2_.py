@@ -19,15 +19,12 @@ def upgrade():
     print("Creating endpoints_certificates table")
     op.create_table(
         "endpoints_certificates",
-        sa.Column("certificate_id", sa.Integer(), nullable=False),
-        sa.Column("endpoint_id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("certificate_id", sa.Integer(), nullable=True),
+        sa.Column("endpoint_id", sa.Integer(), nullable=True),
         sa.Column("path", sa.String(length=256), nullable=True),
         sa.Column("primary_certificate", sa.Boolean(), nullable=False),
-    )
-    op.create_primary_key(
-        None,
-        "endpoints_certificates",
-        ["certificate_id", "endpoint_id"]
+        sa.PrimaryKeyConstraint("id"),
     )
 
     print("Creating certificate_id_fkey foreign key on endpoints_certificates table")
@@ -37,7 +34,6 @@ def upgrade():
         "certificates",
         ["certificate_id"],
         ["id"],
-        ondelete="CASCADE",
     )
 
     print("Creating endpoint_id_fkey foreign key on endpoints_certificates table")
@@ -47,7 +43,6 @@ def upgrade():
         "endpoints",
         ["endpoint_id"],
         ["id"],
-        ondelete="CASCADE",
     )
 
     print("Creating partial index unique_primary_certificate_ix on endpoints_certificates table")

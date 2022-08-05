@@ -207,8 +207,9 @@ Index(
 
 class EndpointsCertificates(db.Model):
     __tablename__ = "endpoints_certificates"
-    certificate_id = Column(ForeignKey("certificates.id"), primary_key=True)
-    endpoint_id = Column(ForeignKey("endpoints.id"), primary_key=True)
+    id = Column(Integer, primary_key=True)
+    certificate_id = Column(ForeignKey("certificates.id"))
+    endpoint_id = Column(ForeignKey("endpoints.id"))
     path = Column(String(256))
     primary_certificate = Column(Boolean, default=True)
     certificate = relationship("Certificate", back_populates="endpoints_assoc")
