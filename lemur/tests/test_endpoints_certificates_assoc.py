@@ -1,69 +1,53 @@
 import pytest
-import uuid
-from lemur import database
-from lemur.certificates import service as certificate_service
-from lemur.endpoints import service as endpoint_service
+from lemur.endpoints.models import Endpoint
 from lemur.models import EndpointsCertificates
-from lemur.tests.factories import AuthorityFactory, CertificateFactory, EndpointFactory, UserFactory, SourceFactory
-from lemur.tests.vectors import (
-    CSR_STR,
-)
+from lemur.tests.factories import CertificateFactory, EndpointFactory
 
 
-def _fake_name():
-    return uuid.uuid4().hex
-
-
-def _fake_cert():
-    return certificate_service.create(
-        authority=AuthorityFactory(),
-        name=_fake_name(),
-        csr=CSR_STR,
-        creator=UserFactory(),
-        owner="foo@example.com",
-    )
-
-
-def test_primary_certificate_assoc():
+def test_primary_certificate_assoc(session):
     """Ensure that a primary certificate can be associated with an endpoint."""
     # Create and associate primary certificate with an endpoint
-    crt = _fake_cert()
+    crt = CertificateFactory()
 
-    expected_endpoint = endpoint_service.create(name=_fake_name(), certificate=crt, source=SourceFactory())
+    expected_endpoint = EndpointFactory()
+    expected_endpoint.primary_certificate = crt
 
-    actual_endpoint = endpoint_service.get_by_name(expected_endpoint.name)
+    actual_endpoint = session.query(Endpoint).filter(Endpoint.name == expected_endpoint.name).scalar()
     assert expected_endpoint == actual_endpoint
     assert actual_endpoint.primary_certificate == crt
 
 
-def test_secondary_certificates_assoc():
+def test_secondary_certificates_assoc(session):
     """Ensure that secondary certificates can be associated with an endpoint."""
     # Create and associate primary certificate with an endpoint
-    crt = _fake_cert()
+    crt = CertificateFactory()
 
-    expected_endpoint = endpoint_service.create(name=_fake_name(), certificate=crt, source=SourceFactory())
+    expected_endpoint = EndpointFactory()
+    expected_endpoint.primary_certificate = crt
 
     # Create and associate secondary certificates with endpoint
     additional_certs = [CertificateFactory() for _ in range(0, 5)]
 
-    # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
     for crt in additional_certs:
+        # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
         expected_endpoint.certificates_assoc.append(
             EndpointsCertificates(certificate=crt, endpoint=expected_endpoint, primary_certificate=False)
         )
-    database.update(expected_endpoint)
 
-    actual_endpoint = endpoint_service.get_by_name(expected_endpoint.name)
+    actual_endpoint = session.query(Endpoint).filter(Endpoint.name == expected_endpoint.name).scalar()
     assert expected_endpoint == actual_endpoint
+
 
 def test_primary_certificate_uniqueness(session):
     """Ensure that only one primary certificate can be associated with an endpoint."""
     # Create and associate two primary certificates with an endpoint
-    endpoint = endpoint_service.create(name=_fake_name(), certificate=_fake_cert(), source=SourceFactory())
+    crt = CertificateFactory()
+    endpoint = EndpointFactory()
+    endpoint.primary_certificate = crt
 
     # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
     endpoint.certificates_assoc.append(
-        EndpointsCertificates(certificate=_fake_cert(), endpoint=endpoint, primary_certificate=True)
+        EndpointsCertificates(certificate=CertificateFactory(), endpoint=endpoint, primary_certificate=True)
     )
 
     with pytest.raises(Exception):

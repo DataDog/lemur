@@ -227,6 +227,7 @@ Index(
     EndpointsCertificates.endpoint_id,
     EndpointsCertificates.primary_certificate,
     unique=True,
+    postgresql_where=EndpointsCertificates.primary_certificate,
 )
 
 Index(

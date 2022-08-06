@@ -56,7 +56,6 @@ class RotationPolicyFactory(BaseFactory):
 class CertificateFactory(BaseFactory):
     """Certificate factory."""
 
-    id = Sequence(lambda n: n)
     name = Sequence(lambda n: "certificate{0}".format(n))
     chain = INTERMEDIATE_CERT_STR
     body = SAN_CERT_STR
@@ -316,7 +315,6 @@ class PolicyFactory(BaseFactory):
 class EndpointFactory(BaseFactory):
     """Endpoint Factory."""
 
-    #id = Sequence(lambda n: n)
     owner = "joe@example.com"
     name = Sequence(lambda n: "endpoint{0}".format(n))
     type = FuzzyChoice(["elb"])
