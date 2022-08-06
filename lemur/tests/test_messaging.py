@@ -324,7 +324,7 @@ def create_cert_that_expires_in_days(days, serial=None, domains=None, owner=None
     endpoints = []
     for i in range(0, randrange(0, 5)):
         endpoints.append(EndpointFactory())
-    certificate.endpoints = endpoints
+    #certificate.endpoints = endpoints
     if serial:
         certificate.serial = serial
     if owner:
