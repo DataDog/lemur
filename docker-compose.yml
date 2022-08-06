@@ -7,7 +7,7 @@ services:
       - ".:/app"
     links:
       - postgres
-    command: make test
+    command: make test && sleep infinity
     environment:
       SQLALCHEMY_DATABASE_URI: postgresql://lemur:lemur@postgres:5432/lemur
       VIRTUAL_ENV: 'true'
