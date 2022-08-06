@@ -1,12 +1,11 @@
 import json
 from datetime import date
 
-from factory import Sequence, post_generation, SubFactory, List
+from factory import Sequence, post_generation, SubFactory
 from factory.alchemy import SQLAlchemyModelFactory
 from factory.fuzzy import FuzzyChoice, FuzzyText, FuzzyDate, FuzzyInteger
 
 from lemur.database import db
-from lemur.models import EndpointsCertificates
 from lemur.authorities.models import Authority
 from lemur.certificates.models import Certificate
 from lemur.destinations.models import Destination
@@ -57,6 +56,7 @@ class RotationPolicyFactory(BaseFactory):
 class CertificateFactory(BaseFactory):
     """Certificate factory."""
 
+    id = Sequence(lambda n: n)
     name = Sequence(lambda n: "certificate{0}".format(n))
     chain = INTERMEDIATE_CERT_STR
     body = SAN_CERT_STR
@@ -313,21 +313,10 @@ class PolicyFactory(BaseFactory):
         model = Policy
 
 
-class EndpointsCertificatesFactory(BaseFactory):
-    """EndpointsCertificates Association Factory."""
-
-    primary_certificate = True
-    certificate = SubFactory(CertificateFactory)
-
-    class Meta:
-        """Factory Configuration."""
-
-        model = EndpointsCertificates
-
-
 class EndpointFactory(BaseFactory):
     """Endpoint Factory."""
 
+    #id = Sequence(lambda n: n)
     owner = "joe@example.com"
     name = Sequence(lambda n: "endpoint{0}".format(n))
     type = FuzzyChoice(["elb"])
@@ -335,16 +324,12 @@ class EndpointFactory(BaseFactory):
     port = FuzzyInteger(0, high=65535)
     dnsname = "endpoint.example.com"
     policy = SubFactory(PolicyFactory)
-    certificates_assoc = List([SubFactory(EndpointsCertificatesFactory)])
     source = SubFactory(SourceFactory)
 
     class Meta:
         """Factory Configuration."""
 
         model = Endpoint
-
-
-EndpointsCertificatesFactory.endpoint = SubFactory(EndpointFactory)
 
 
 class ApiKeyFactory(BaseFactory):
