@@ -34,7 +34,7 @@ def test_primary_certificate_assoc():
 
     actual_endpoint = endpoint_service.get_by_name(expected_endpoint.name)
     assert expected_endpoint == actual_endpoint
-    assert actual_endpoint.primary_certificate != crt
+    assert actual_endpoint.primary_certificate == crt
 
 
 def test_secondary_certificates_assoc():

@@ -220,3 +220,18 @@ class EndpointsCertificates(db.Model):
         self.endpoint = endpoint
         self.primary_certificate = primary_certificate
         self.path = path
+
+
+Index(
+    "unique_primary_certificate_endpoint_ix",
+    EndpointsCertificates.endpoint_id,
+    EndpointsCertificates.primary_certificate,
+    unique=True,
+)
+
+Index(
+    "unique_certificate_endpoint_ix",
+    EndpointsCertificates.certificate_id,
+    EndpointsCertificates.endpoint_id,
+    unique=True,
+)
