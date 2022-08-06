@@ -1,9 +1,9 @@
+import pytest
 import uuid
 from lemur import database
 from lemur.certificates import service as certificate_service
 from lemur.endpoints import service as endpoint_service
 from lemur.endpoints.models import Endpoint
-from lemur.extensions import db
 from lemur.models import EndpointsCertificates
 from lemur.tests.factories import AuthorityFactory, CertificateFactory, UserFactory, SourceFactory
 from lemur.tests.vectors import (
@@ -58,25 +58,20 @@ def test_secondary_certificates_assoc():
     assert expected_endpoint == actual_endpoint
 
 
-def test_primary_certificate_uniqueness():
+def test_primary_certificate_uniqueness(session):
     """Ensure that only one primary certificate can be associated with an endpoint."""
     # Create and associate two primary certificates with an endpoint
     endpoint = Endpoint(name=_fake_name())
     endpoint.certificate = _fake_cert()
+    endpoint.certificates_assoc.append(
+        EndpointsCertificates(certificate=_fake_cert(), endpoint=endpoint, primary_certificate=True)
+    )
 
-    try:
-        endpoint.certificates_assoc.append(
-            EndpointsCertificates(certificate=_fake_cert(), endpoint=endpoint, primary_certificate=True)
-        )
-        db.session.add(endpoint)
-        db.session.commit()
-    except Exception:
-        return
-
-    assert False, "Exception must be raised when uniqueness constraint is violated" + print(endpoint.certificates)
+    with pytest.raises(Exception):
+        session.commit()
 
 
-def test_certificate_uniqueness():
+def test_certificate_uniqueness(session):
     """Ensure that a given certificate can only be associated with an endpoint once."""
     # Create and associate primary certificate with an endpoint
     endpoint = Endpoint(name=_fake_name())
@@ -84,15 +79,10 @@ def test_certificate_uniqueness():
 
     # Associate the same secondary certificate with the endpoint twice
     crt = _fake_cert()
+    for _ in range(0, 2):
+        endpoint.certificates_assoc.append(
+            EndpointsCertificates(certificate=crt, endpoint=endpoint, primary_certificate=False)
+        )
 
-    try:
-        for _ in range(0, 2):
-            endpoint.certificates_assoc.append(
-                EndpointsCertificates(certificate=crt, endpoint=endpoint, primary_certificate=False)
-            )
-        db.session.add(endpoint)
-        db.session.commit()
-    except Exception:
-        return
-
-    assert False, "Exception must be raised when uniqueness constraint is violated" + print(endpoint.certificates)
+    with pytest.raises(Exception):
+        session.commit()
