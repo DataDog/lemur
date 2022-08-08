@@ -99,7 +99,7 @@ def test_get_all_certs_attached_to_endpoint_without_autorotate(session):
     # add a certificate with endpoint
     ep = EndpointFactory()
     crt = CertificateFactory()
-    ep.primary_certificate = crt
+    ep.default_certificate = crt
 
     list_before = get_all_certs_attached_to_endpoint_without_autorotate()
     len_list_before = len(list_before)

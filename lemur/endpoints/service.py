@@ -121,7 +121,7 @@ def create(**kwargs):
         certificate = kwargs.pop("certificate")
     endpoint = Endpoint(**kwargs)
     endpoint.aliases = aliases
-    endpoint.primary_certificate = certificate
+    endpoint.default_certificate = certificate
     database.create(endpoint)
     metrics.send(
         "endpoint_added", "counter", 1,
@@ -154,9 +154,9 @@ def update(endpoint_id, **kwargs):
     endpoint = database.get(Endpoint, endpoint_id)
 
     endpoint.policy = kwargs["policy"]
-    endpoint.primary_certificate = kwargs["certificate"]
+    endpoint.default_certificate = kwargs["certificate"]
     endpoint.source = kwargs["source"]
-    endpoint.primary_certificate.path = kwargs.get("certificate_path")
+    endpoint.default_certificate.path = kwargs.get("certificate_path")
     endpoint.registry_type = kwargs.get("registry_type")
     existing_alias = {}
     for e in endpoint.aliases:

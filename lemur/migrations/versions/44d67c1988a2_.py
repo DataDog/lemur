@@ -23,7 +23,7 @@ def upgrade():
         sa.Column("certificate_id", sa.Integer(), nullable=True),
         sa.Column("endpoint_id", sa.Integer(), nullable=True),
         sa.Column("path", sa.String(length=256), nullable=True),
-        sa.Column("primary_certificate", sa.Boolean(), nullable=False),
+        sa.Column("default", sa.Boolean(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -45,14 +45,14 @@ def upgrade():
         ["id"],
     )
 
-    print("Creating partial index unique_primary_certificate_ix on endpoints_certificates table")
+    print("Creating partial index unique_default_certificate_ix on endpoints_certificates table")
     op.create_index(
-        "unique_primary_certificate_endpoint_ix",
+        "unique_default_certificate_endpoint_ix",
         "endpoints_certificates",
-        ["endpoint_id", "primary_certificate"],
-        postgresql_where=text("primary_certificate"),
+        ["endpoint_id", "default"],
+        postgresql_where=text("default"),
         unique=True,
-    )  # Enforces that only a single primary certificate can be associated with an endpoint.
+    )  # Enforces that only a single default certificate can be associated with an endpoint.
 
     print("Creating partial index unique_certificate_endpoint_ix on endpoints_certificates table")
     op.create_index(
@@ -68,10 +68,10 @@ def upgrade():
             text("select id, certificate_id, certificate_path from endpoints")
     ):
         stmt = text(
-            "insert into endpoints_certificates (endpoint_id, certificate_id, path, primary_certificate) values (:endpoint_id, :certificate_id, :path, :primary_certificate)"
+            "insert into endpoints_certificates (endpoint_id, certificate_id, path, default) values (:endpoint_id, :certificate_id, :path, :default)"
         )
         stmt = stmt.bindparams(
-            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, primary_certificate=True
+            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, default=True
         )
         op.execute(stmt)
 
