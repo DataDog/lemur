@@ -127,7 +127,7 @@ class Endpoint(db.Model):
     def primary_certificate(self):
         """Returns the primary certificate associated with the endpoint."""
         for assoc in self.certificates_assoc:
-            if assoc.primary_certificate:
+            if assoc.primary:
                 return assoc.certificate
         return None
 
@@ -135,11 +135,11 @@ class Endpoint(db.Model):
     def primary_certificate(self, cert):
         """Sets the primary certificate associated with the endpoint."""
         for assoc in self.certificates_assoc:
-            if assoc.primary_certificate:
+            if assoc.primary:
                 assoc.certificate = cert
                 return
         self.certificates_assoc.append(
-            EndpointsCertificates(certificate=cert, endpoint=self, primary_certificate=True, path="")
+            EndpointsCertificates(certificate=cert, endpoint=self, primary=True, path="")
         )
 
     @hybrid_property

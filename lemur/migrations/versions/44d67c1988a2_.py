@@ -23,7 +23,7 @@ def upgrade():
         sa.Column("certificate_id", sa.Integer(), nullable=True),
         sa.Column("endpoint_id", sa.Integer(), nullable=True),
         sa.Column("path", sa.String(length=256), nullable=True),
-        sa.Column("primary_certificate", sa.Boolean(), nullable=False),
+        sa.Column("primary", sa.Boolean(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -49,8 +49,8 @@ def upgrade():
     op.create_index(
         "unique_primary_certificate_endpoint_ix",
         "endpoints_certificates",
-        ["endpoint_id", "primary_certificate"],
-        postgresql_where=text("primary_certificate"),
+        ["endpoint_id", "primary"],
+        postgresql_where=text("primary"),
         unique=True,
     )  # Enforces that only a single primary certificate can be associated with an endpoint.
 
@@ -68,10 +68,10 @@ def upgrade():
             text("select id, certificate_id, certificate_path from endpoints")
     ):
         stmt = text(
-            "insert into endpoints_certificates (endpoint_id, certificate_id, path, primary_certificate) values (:endpoint_id, :certificate_id, :path, :primary_certificate)"
+            "insert into endpoints_certificates (endpoint_id, certificate_id, path, primary) values (:endpoint_id, :certificate_id, :path, :primary)"
         )
         stmt = stmt.bindparams(
-            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, primary_certificate=True
+            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, primary=True
         )
         op.execute(stmt)
 

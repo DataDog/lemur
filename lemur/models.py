@@ -211,23 +211,23 @@ class EndpointsCertificates(db.Model):
     certificate_id = Column(ForeignKey("certificates.id"))
     endpoint_id = Column(ForeignKey("endpoints.id"))
     path = Column(String(256))
-    primary_certificate = Column(Boolean, default=True)
+    primary = Column(Boolean, default=True)
     certificate = relationship("Certificate", back_populates="endpoints_assoc")
     endpoint = relationship("Endpoint", back_populates="certificates_assoc")
 
-    def __init__(self, certificate=None, endpoint=None, primary_certificate=True, path=""):
+    def __init__(self, certificate=None, endpoint=None, primary=True, path=""):
         self.certificate = certificate
         self.endpoint = endpoint
-        self.primary_certificate = primary_certificate
+        self.primary = primary
         self.path = path
 
 
 Index(
     "unique_primary_certificate_endpoint_ix",
     EndpointsCertificates.endpoint_id,
-    EndpointsCertificates.primary_certificate,
+    EndpointsCertificates.primary,
     unique=True,
-    postgresql_where=EndpointsCertificates.primary_certificate,
+    postgresql_where=EndpointsCertificates.primary,
 )
 
 Index(

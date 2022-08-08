@@ -31,7 +31,7 @@ def test_secondary_certificates_assoc(session):
     for crt in additional_certs:
         # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
         expected_endpoint.certificates_assoc.append(
-            EndpointsCertificates(certificate=crt, endpoint=expected_endpoint, primary_certificate=False)
+            EndpointsCertificates(certificate=crt, endpoint=expected_endpoint, primary=False)
         )
 
     actual_endpoint = session.query(Endpoint).filter(Endpoint.name == expected_endpoint.name).scalar()
@@ -47,7 +47,7 @@ def test_primary_certificate_uniqueness(session):
 
     # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
     endpoint.certificates_assoc.append(
-        EndpointsCertificates(certificate=CertificateFactory(), endpoint=endpoint, primary_certificate=True)
+        EndpointsCertificates(certificate=CertificateFactory(), endpoint=endpoint, primary=True)
     )
 
     with pytest.raises(Exception):
@@ -65,7 +65,7 @@ def test_certificate_uniqueness(session):
     for _ in range(0, 2):
         # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
         endpoint.certificates_assoc.append(
-            EndpointsCertificates(certificate=crt, endpoint=endpoint, primary_certificate=False)
+            EndpointsCertificates(certificate=crt, endpoint=endpoint, primary=False)
         )
 
     with pytest.raises(Exception):
