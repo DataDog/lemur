@@ -54,6 +54,16 @@ def test_primary_certificate_uniqueness(session):
         session.commit()
 
 
+def test_certificate_path(session):
+    crt = CertificateFactory()
+    fake_path = "/fake/path"
+    endpoint = EndpointFactory()
+    endpoint.primary_certificate = crt
+    endpoint.certificate_path = fake_path
+
+    assert endpoint.certificate_path == fake_path
+
+
 def test_certificate_uniqueness(session):
     """Ensure that a given certificate can only be associated with an endpoint once."""
     # Create and associate primary certificate with an endpoint
