@@ -14,7 +14,7 @@ LOG_FILE = str(os.environ.get('LOG_FILE', '/home/lemur/.lemur/lemur.log'))
 LOG_JSON = True
 
 CORS = os.environ.get("CORS") == "True"
-debug = os.environ.get("DEBUG") == "True"
+DEBUG = True
 
 
 def get_random_secret(length):

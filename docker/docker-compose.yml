@@ -28,12 +28,15 @@ services:
     ports:
       - 87:80
       - 447:443
-#    volumes:
-#      - ../:/opt/lemur
+      - 5000:5000
+    volumes:
+      - /Users/mitch.cail/dd/lemur:/opt/lemur
     environment:
       SQLALCHEMY_DATABASE_URI: postgresql://lemur:12345@postgres:5432/lemur
       VIRTUAL_ENV: 'true'
       LEMUR_CONF: "/home/lemur/.lemur/lemur.conf.py"
+    stdin_open: true
+    tty: true
 
   redis:
     image: "redis:alpine3.12"
