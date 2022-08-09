@@ -211,7 +211,7 @@ class EndpointsCertificates(db.Model):
     certificate_id = Column(ForeignKey("certificates.id"))
     endpoint_id = Column(ForeignKey("endpoints.id"))
     path = Column(String(256))
-    primary = Column(Boolean, default=True)
+    primary = Column("is_primary", Boolean, default=True)
     certificate = relationship("Certificate", back_populates="endpoints_assoc")
     endpoint = relationship("Endpoint", back_populates="certificates_assoc")
 
