@@ -157,18 +157,25 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
         if not listener_certificates.get("Certificates"):
             continue
 
+        endpoint = dict(
+            name=elb_dict["LoadBalancerName"],
+            dnsname=elb_dict["DNSName"],
+            type="elbv2",
+            port=listener["Port"],
+            certificates=[],
+        )
+
+        endpoint["sni_certificates"] = []
         for certificate in listener_certificates["Certificates"]:
-            if not certificate["IsDefault"]:
-                continue
-            endpoint = dict(
-                name=elb_dict["LoadBalancerName"],
-                dnsname=elb_dict["DNSName"],
-                type="elbv2",
-                port=listener["Port"],
-                certificate_name=iam.get_name_from_arn(certificate["CertificateArn"]),
-                certificate_path=iam.get_path_from_arn(certificate["CertificateArn"]),
+            crt = dict(
+                name=iam.get_name_from_arn(certificate["CertificateArn"]),
+                path=iam.get_path_from_arn(certificate["CertificateArn"]),
                 registry_type=iam.get_registry_type_from_arn(certificate["CertificateArn"]),
             )
+            if certificate.get("IsDefault", True):
+                endpoint["primary_certificate"] = crt
+            else:
+                endpoint["sni_certificates"].append(crt)
 
         if listener["SslPolicy"]:
             policy = elb.describe_ssl_policies_v2(
