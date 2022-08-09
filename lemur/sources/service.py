@@ -105,6 +105,8 @@ def sync_endpoints(source):
             else:
                 raise e
 
+        # TODO(bobs): check and parse endpoint["certificates"]
+
         certificate_name = endpoint.pop("certificate_name")
 
         # TODO(EDGE-1363) - Update source plugin(s) to sync SNI certificates
