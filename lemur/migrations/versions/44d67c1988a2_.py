@@ -19,15 +19,12 @@ def upgrade():
     print("Creating endpoints_certificates table")
     op.create_table(
         "endpoints_certificates",
-        sa.Column("certificate_id", sa.Integer(), nullable=False),
-        sa.Column("endpoint_id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("certificate_id", sa.Integer(), nullable=True),
+        sa.Column("endpoint_id", sa.Integer(), nullable=True),
         sa.Column("path", sa.String(length=256), nullable=True),
-        sa.Column("primary_certificate", sa.Boolean(), nullable=False),
-    )
-    op.create_primary_key(
-        None,
-        "endpoints_certificates",
-        ["certificate_id", "endpoint_id"]
+        sa.Column("primary", sa.Boolean(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
     )
 
     print("Creating certificate_id_fkey foreign key on endpoints_certificates table")
@@ -37,7 +34,6 @@ def upgrade():
         "certificates",
         ["certificate_id"],
         ["id"],
-        ondelete="CASCADE",
     )
 
     print("Creating endpoint_id_fkey foreign key on endpoints_certificates table")
@@ -47,8 +43,24 @@ def upgrade():
         "endpoints",
         ["endpoint_id"],
         ["id"],
-        ondelete="CASCADE",
     )
+
+    print("Creating partial index unique_primary_certificate_ix on endpoints_certificates table")
+    op.create_index(
+        "unique_primary_certificate_endpoint_ix",
+        "endpoints_certificates",
+        ["endpoint_id", "primary"],
+        postgresql_where=text("primary"),
+        unique=True,
+    )  # Enforces that only a single primary certificate can be associated with an endpoint.
+
+    print("Creating partial index unique_certificate_endpoint_ix on endpoints_certificates table")
+    op.create_index(
+        "unique_certificate_endpoint_ix",
+        "endpoints_certificates",
+        ["certificate_id", "endpoint_id"],
+        unique=True,
+    )  # Enforces that a given certificate can be associated with an endpoint only once.
 
     print("Populating endpoints_certificates table")
     conn = op.get_bind()
@@ -56,10 +68,10 @@ def upgrade():
             text("select id, certificate_id, certificate_path from endpoints")
     ):
         stmt = text(
-            "insert into endpoints_certificates (endpoint_id, certificate_id, path, primary_certificate) values (:endpoint_id, :certificate_id, :path, :primary_certificate)"
+            "insert into endpoints_certificates (endpoint_id, certificate_id, path, primary) values (:endpoint_id, :certificate_id, :path, :primary)"
         )
         stmt = stmt.bindparams(
-            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, primary_certificate=True
+            endpoint_id=endpoint_id, certificate_id=certificate_id, path=certificate_path, primary=True
         )
         op.execute(stmt)
 
@@ -72,6 +84,10 @@ def upgrade():
 
 
 def downgrade():
+    print("Restoring certificate_id and certificate_path columns to endpoints table")
+    op.add_column("endpoints", sa.Column("certificate_id", sa.Integer(), nullable=True))
+    op.add_column("endpoints", sa.Column("certificate_path", sa.String(length=256), nullable=True))
+
     print("Restoring endpoints_certificate_id_fkey foreign key to endpoints table")
     op.create_foreign_key(
         "endpoints_certificate_id_fkey",
@@ -81,10 +97,6 @@ def downgrade():
         ["id"],
     )
 
-    print("Restoring certificate_id and certificate_path columns to endpoints table")
-    op.add_column("endpoints", sa.Column("certificate_id", sa.String(length=256), nullable=True))
-    op.add_column("endpoints", sa.Column("certificate_path", sa.String(length=256), nullable=True))
-
     conn = op.get_bind()
     for certificate_id, endpoint_id, path in conn.execute(
         text("select certificate_id, endpoint_id, path from endpoints_certificates")
@@ -93,13 +105,9 @@ def downgrade():
             "update endpoints set certificate_id = :certificate_id, certificate_path = :certificate_path where id = :endpoint_id"
         )
         stmt = stmt.bindparams(
-            certificate_id=certificate_id, endpoint_id = endpoint_id, certificate_path=certificate_path
+            certificate_id=certificate_id, endpoint_id = endpoint_id, certificate_path=path
         )
         op.execute(stmt)
-
-    print("Removing foreign key constraints on endpoints_certificates table")
-    op.drop_constraint("certificate_id_fkey", "endpoints_certificates", type_="foreignkey")
-    op.drop_constraint("endpoint_id_fkey", "endpoints_certificates", type_="foreignkey")
 
     print("Removing endpoints_certificates table")
     op.drop_table("endpoints_certificates")
