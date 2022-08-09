@@ -65,7 +65,7 @@ class Endpoint(db.Model):
     policy_id = Column(Integer, ForeignKey("policy.id"))
     policy = relationship("Policy", backref="endpoint")
     certificates_assoc = relationship(
-        "EndpointsCertificates", back_populates="endpoint"
+        "EndpointsCertificates", back_populates="endpoint", cascade="all, delete-orphan"
     )
     certificates = association_proxy(
         "certificates_assoc", "certificate", creator=lambda cert: EndpointsCertificates(certificate=cert)
@@ -141,6 +141,30 @@ class Endpoint(db.Model):
         self.certificates_assoc.append(
             EndpointsCertificates(certificate=cert, endpoint=self, primary=True, path="")
         )
+
+    def sni_certificates(self):
+        """Returns the SNI certificates associated with the endpoint."""
+        certificates = []
+        for assoc in self.certificates_assoc:
+            if not assoc.primary:
+                certificates.append(assoc.certificate)
+        return certificates
+
+    def add_sni_certificate(self, certificate, path=""):
+        """Associates a SNI certificate with the endpoint."""
+        self.certificates_assoc.append(
+            EndpointsCertificates(certificate=certificate, endpoint=self, primary=False, path=path)
+        )
+
+    def clear_sni_certificates(self):
+        """Removes all SNI certificates associated with the endpoint."""
+        self.certificates_assoc = [assoc for assoc in self.certificates_assoc if assoc.primary]
+
+    def set_certificate_path(self, certificate, path):
+        """Sets the path of the given certificate associated with the endpoint."""
+        for assoc in self.certificates_assoc:
+            if assoc.certificate == certificate:
+                assoc.path = path
 
     @hybrid_property
     @deprecated("The certificate attribute is deprecated and will be removed soon. Use Endpoint.primary_certificate instead.")
