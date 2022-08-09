@@ -148,10 +148,18 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
         LoadBalancerArn=elb_dict["LoadBalancerArn"],
     )
     for listener in listeners["Listeners"]:
-        if not listener.get("Certificates"):
+        listener_certificates = elb.describe_listener_certificates_v2(
+            account_number=account_number,
+            region=region,
+            ListenerArn=listener["ListenerArn"],
+        )
+
+        if not listener_certificates.get("Certificates"):
             continue
 
-        for certificate in listener["Certificates"]:
+        for certificate in listener_certificates["Certificates"]:
+            if not certificate["IsDefault"]:
+                continue
             endpoint = dict(
                 name=elb_dict["LoadBalancerName"],
                 dnsname=elb_dict["DNSName"],
