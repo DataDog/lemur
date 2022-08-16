@@ -34,6 +34,7 @@ def upgrade():
         "certificates",
         ["certificate_id"],
         ["id"],
+        ondelete="cascade"
     )
 
     print("Creating endpoint_id_fkey foreign key on endpoints_certificates table")
@@ -43,6 +44,7 @@ def upgrade():
         "endpoints",
         ["endpoint_id"],
         ["id"],
+        ondelete="cascade"
     )
 
     print("Creating partial index unique_primary_certificate_ix on endpoints_certificates table")
