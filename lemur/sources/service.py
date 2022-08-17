@@ -107,7 +107,7 @@ def sync_endpoints(source):
 
         if "primary_certificate" in endpoint:
             crt_name = endpoint["primary_certificate"]["name"]
-            current_app.logger.info(
+            current_app.logger.debug(
                 "Syncing primary certificate {} attached to endpoint {}".format(crt_name, endpoint["name"])
             )
             crt, updated_by_hash_tmp = get_cert_for_endpoint(source, endpoint, crt_name)
@@ -125,7 +125,7 @@ def sync_endpoints(source):
             synced_sni_certificates = []
             for sni_certificate in endpoint.get("sni_certificates", []):
                 crt_name = sni_certificate["name"]
-                current_app.logger.info(
+                current_app.logger.debug(
                     "Syncing SNI certificate {} attached to endpoint {}".format(crt_name, endpoint["name"])
                 )
                 crt, updated_by_hash_tmp = get_cert_for_endpoint(source, endpoint, crt_name)
