@@ -2,6 +2,7 @@ import pytest
 from lemur.endpoints.models import Endpoint
 from lemur.models import EndpointsCertificates
 from lemur.tests.factories import CertificateFactory, EndpointFactory
+from sqlalchemy.exc import SQLAlchemyError
 
 
 def test_primary_certificate_assoc(session):
@@ -58,3 +59,21 @@ def test_certificate_path(session):
     endpoint.certificate_path = fake_path
 
     assert endpoint.certificate_path == fake_path
+
+
+def test_certificate_uniqueness(session):
+    """Ensure that a given SNI certificate can be associated with an endpoint more than once."""
+    # Create and associate primary certificate with an endpoint
+    endpoint = EndpointFactory()
+    endpoint.primary_certificate = CertificateFactory()
+
+    # Associate a SNI certificate with the endpoint twice
+    try:
+        crt = CertificateFactory()
+        for _ in range(0, 2):
+            # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
+            endpoint.certificates_assoc.append(
+                EndpointsCertificates(certificate=crt, endpoint=endpoint, primary=False)
+            )
+    except SQLAlchemyError:
+        assert False
