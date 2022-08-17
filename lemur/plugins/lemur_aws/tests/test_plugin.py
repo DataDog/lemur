@@ -161,6 +161,14 @@ def test_get_all_elb_and_elbv2s(app, aws_credentials):
         Certificates=[{"CertificateArn": arn2}],
         DefaultActions=[{"Type": "forward", "TargetGroupArn": target_group_arn}],
     )
+    elbv2.add_listener_certificates(
+        ListenerArn=listener.get("Listeners")[0]["ListenerArn"],
+        Certificates=[
+            dict(
+                CertificateArn=arn1,
+            )
+        ]
+    )
 
     aws_source = plugins.get("aws-source")
     options = deepcopy(aws_source.options)
@@ -176,4 +184,6 @@ def test_get_all_elb_and_elbv2s(app, aws_credentials):
     assert elb_map["example-lb"]["port"] == 443
     assert elb_map["test-lbv2"]["primary_certificate"]["name"] == cert_name2
     assert elb_map["test-lbv2"]["primary_certificate"]["registry_type"] == "acm"
+    assert elb_map["test-lbv2"]["sni_certificates"][0]["name"] == cert_name1
+    assert elb_map["test-lbv2"]["sni_certificates"][0]["registry_type"] == "acm"
     assert elb_map["test-lbv2"]["port"] == 1443
