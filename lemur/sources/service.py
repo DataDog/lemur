@@ -147,7 +147,7 @@ def sync_endpoints(source):
             if crt:
                 endpoint["primary_certificate"] = dict(
                     certificate=crt,
-                    path=endpoint.pop("certificate_path")
+                    path=endpoint.pop("certificate_path", "")
                 )
             else:
                 continue
