@@ -116,12 +116,10 @@ def create(**kwargs):
     """
     primary_certificate = kwargs.pop("primary_certificate")
     sni_certificates = kwargs.pop("sni_certificates", [])
-    endpoint = Endpoint(**kwargs)
-
-    aliases = []
     if "aliases" in kwargs:
-        aliases = [EndpointDnsAlias(alias=name) for name in kwargs.get("aliases")]
-    endpoint.aliases = aliases
+        kwargs["aliases"] = [EndpointDnsAlias(alias=name) for name in kwargs.get("aliases")]
+
+    endpoint = Endpoint(**kwargs)
 
     if primary_certificate:
         endpoint.primary_certificate = primary_certificate["certificate"]
