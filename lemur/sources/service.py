@@ -140,6 +140,12 @@ def sync_endpoints(source):
                     continue
             endpoint["sni_certificates"] = synced_sni_certificates
         else:
+            current_app.logger.warn(
+                "Source plugin {} specified certificate for endpoint {} using the certificate_name"
+                "parameter which is deprecated, use the primary_certificate parameter instead.",
+                source.plugin_name,
+                endpoint["name"]
+            )
             certificate_name = endpoint.pop("certificate_name")
             crt, updated_by_hash_tmp = get_cert_for_endpoint(source, endpoint, certificate_name)
             updated_by_hash += updated_by_hash_tmp
