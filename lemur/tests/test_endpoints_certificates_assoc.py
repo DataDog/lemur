@@ -71,9 +71,6 @@ def test_certificate_uniqueness(session):
     try:
         crt = CertificateFactory()
         for _ in range(0, 2):
-            # TODO(EDGE-1363) Expose API for managing secondary certificates associated with an endpoint
-            endpoint.certificates_assoc.append(
-                EndpointsCertificates(certificate=crt, endpoint=endpoint, primary=False)
-            )
+            endpoint.add_sni_certificate(certificate=crt)
     except SQLAlchemyError:
         assert False
