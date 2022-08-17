@@ -171,8 +171,8 @@ def test_get_all_elb_and_elbv2s(app, aws_credentials):
     elb_map = {}
     for elb in elbs:
         elb_map[elb["name"]] = elb
-    assert elb_map["example-lb"]["certificate_name"] == cert_name1
-    assert elb_map["example-lb"]["registry_type"] == "acm"
+    assert elb_map["example-lb"]["primary_certificate"]["name"] == cert_name1
+    assert elb_map["example-lb"]["primary_certificate"]["registry_type"] == "acm"
     assert elb_map["example-lb"]["port"] == 443
     assert elb_map["test-lbv2"]["primary_certificate"]["name"] == cert_name2
     assert elb_map["test-lbv2"]["primary_certificate"]["registry_type"] == "acm"
