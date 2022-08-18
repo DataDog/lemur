@@ -165,7 +165,7 @@ def update(endpoint_id, **kwargs):
 
         if "sni_certificates" in kwargs:
             sni_certificates = kwargs["sni_certificates"]
-            endpoint.clear_sni_certificates()
+            endpoint.sni_certificates = []
             for crt in sni_certificates:
                 endpoint.add_sni_certificate(crt["certificate"], crt["path"])
 

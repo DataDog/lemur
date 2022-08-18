@@ -105,13 +105,13 @@ def test_sync_endpoints(session):
     ep1 = endpoint_service.get_by_name("test-lb-1")
     assert ep1.name == "test-lb-1"
     assert ep1.primary_certificate.name == crt1.name
-    assert len(ep1.sni_certificates()) == 1
-    assert ep1.sni_certificates()[0].name == crt2.name
+    assert len(ep1.sni_certificates) == 1
+    assert ep1.sni_certificates[0].name == crt2.name
 
     ep2 = endpoint_service.get_by_name("test-lb-2")
     assert ep2.name == "test-lb-2"
     assert ep2.primary_certificate.name == crt2.name
-    assert len(ep2.sni_certificates()) == 0
+    assert len(ep2.sni_certificates) == 0
 
 
 @pytest.mark.parametrize(

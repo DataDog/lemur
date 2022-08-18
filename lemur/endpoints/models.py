@@ -142,23 +142,23 @@ class Endpoint(db.Model):
             EndpointsCertificates(certificate=cert, endpoint=self, primary=True, path="")
         )
 
+    @hybrid_property
     def sni_certificates(self):
         """Returns the SNI certificates associated with the endpoint."""
-        certificates = []
-        for assoc in self.certificates_assoc:
-            if not assoc.primary:
-                certificates.append(assoc.certificate)
-        return certificates
+        return [assoc.certificate for assoc in self.certificates_assoc if not assoc.primary]
+
+    @sni_certificates.setter
+    def sni_certificates(self, certs):
+        """Sets the SNI certificates associated with the endpoint."""
+        self.certificates_assoc = [assoc for assoc in self.certificates_assoc if not assoc.primary]
+        for cert in certs:
+            self.add_sni_certificate(cert)
 
     def add_sni_certificate(self, certificate, path=""):
         """Associates a SNI certificate with the endpoint."""
         self.certificates_assoc.append(
             EndpointsCertificates(certificate=certificate, endpoint=self, primary=False, path=path)
         )
-
-    def clear_sni_certificates(self):
-        """Removes all SNI certificates associated with the endpoint."""
-        self.certificates_assoc = [assoc for assoc in self.certificates_assoc if assoc.primary]
 
     def set_certificate_path(self, certificate, path):
         """Sets the path of the given certificate associated with the endpoint."""
