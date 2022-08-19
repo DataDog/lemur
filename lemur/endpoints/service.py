@@ -114,7 +114,7 @@ def create(**kwargs):
     :param kwargs:
     :return:
     """
-    primary_certificate = kwargs.pop("primary_certificate")
+    primary_certificate = kwargs.pop("primary_certificate", None)
     sni_certificates = kwargs.pop("sni_certificates", [])
     if "aliases" in kwargs:
         kwargs["aliases"] = [EndpointDnsAlias(alias=name) for name in kwargs.get("aliases")]
@@ -124,8 +124,8 @@ def create(**kwargs):
     if primary_certificate:
         endpoint.primary_certificate = primary_certificate["certificate"]
         endpoint.set_certificate_path(certificate=endpoint.primary_certificate, path=primary_certificate["path"])
-        for sni_certificate in sni_certificates:
-            endpoint.add_sni_certificate(certificate=sni_certificate["certificate"], path=sni_certificate["path"])
+    for sni_certificate in sni_certificates:
+        endpoint.add_sni_certificate(certificate=sni_certificate["certificate"], path=sni_certificate["path"])
 
     database.create(endpoint)
     metrics.send(
@@ -157,17 +157,15 @@ def get_or_create_cipher(**kwargs):
 
 def update(endpoint_id, **kwargs):
     endpoint = database.get(Endpoint, endpoint_id)
+    primary_certificate = kwargs.pop("primary_certificate", None)
+    sni_certificates = kwargs.pop("sni_certificates", [])
 
-    if "primary_certificate" in kwargs:
-        crt = kwargs["primary_certificate"]
-        endpoint.primary_certificate = crt["certificate"]
-        endpoint.set_certificate_path(certificate=endpoint.primary_certificate, path=crt["path"])
-
-        if "sni_certificates" in kwargs:
-            sni_certificates = kwargs["sni_certificates"]
-            endpoint.sni_certificates = []
-            for crt in sni_certificates:
-                endpoint.add_sni_certificate(crt["certificate"], crt["path"])
+    if primary_certificate:
+        endpoint.primary_certificate = primary_certificate
+        endpoint.set_certificate_path(certificate=endpoint.primary_certificate, path=primary_certificate["path"])
+    for crt in sni_certificates:
+        endpoint.sni_certificates = []
+        endpoint.add_sni_certificate(crt["certificate"], crt["path"])
 
     endpoint.policy = kwargs["policy"]
     endpoint.source = kwargs["source"]

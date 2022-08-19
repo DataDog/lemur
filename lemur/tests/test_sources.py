@@ -93,12 +93,35 @@ def test_sync_endpoints(session):
                 certificate_name=crt2.name,
                 certificate_path="/fakecrt2",
                 registry_type="iam",
+            ),
+            dict(
+                name="test-lb-3",
+                dnsname="test3.example.com",
+                type="elbv2",
+                port=443,
+                policy=dict(
+                    name="none",
+                    ciphers=[],
+                ),
+                sni_certificates=[
+                    dict(
+                        name=crt1.name,
+                        path="/fakecrt1",
+                        registry_type="iam",
+                    ),
+                    dict(
+                        name=crt2.name,
+                        path="/fakecrt2",
+                        registry_type="iam",
+                    )
+                ],
+                registry_type="iam",
             )
         ],
     ):
         new, updated, updated_by_hash = source_service.sync_endpoints(source)
 
-    assert new == 2
+    assert new == 3
     assert updated == 0
     assert updated_by_hash == 0
 
@@ -112,6 +135,13 @@ def test_sync_endpoints(session):
     assert ep2.name == "test-lb-2"
     assert ep2.primary_certificate.name == crt2.name
     assert len(ep2.sni_certificates) == 0
+
+    ep3 = endpoint_service.get_by_name("test-lb-3")
+    assert ep3.name == "test-lb-3"
+    assert ep3.primary_certificate is None
+    assert len(ep3.sni_certificates) == 2
+    assert ep3.sni_certificates[0].name == crt1.name
+    assert ep3.sni_certificates[1].name == crt2.name
 
 
 @pytest.mark.parametrize(

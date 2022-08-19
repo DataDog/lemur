@@ -121,25 +121,7 @@ def sync_endpoints(source):
                 )
             else:
                 continue
-
-            synced_sni_certificates = []
-            for sni_certificate in endpoint.get("sni_certificates", []):
-                crt_name = sni_certificate["name"]
-                current_app.logger.debug(
-                    "Syncing SNI certificate {} attached to endpoint {}".format(crt_name, endpoint["name"])
-                )
-                crt, updated_by_hash_tmp = get_cert_for_endpoint(source, endpoint, crt_name)
-                updated_by_hash += updated_by_hash_tmp
-
-                if crt:
-                    synced_sni_certificates.append(dict(
-                        certificate=crt,
-                        path=sni_certificate["path"]
-                    ))
-                else:
-                    continue
-            endpoint["sni_certificates"] = synced_sni_certificates
-        else:
+        elif "certificate_name" in endpoint:
             current_app.logger.warn(
                 "Source plugin {} specified certificate for endpoint {} using the certificate_name "
                 "parameter which is deprecated, use the primary_certificate parameter instead.".format(
@@ -158,6 +140,27 @@ def sync_endpoints(source):
                 )
             else:
                 continue
+
+        synced_sni_certificates = []
+        for sni_certificate in endpoint.get("sni_certificates", []):
+            crt_name = sni_certificate["name"]
+            current_app.logger.debug(
+                "Syncing SNI certificate {} attached to endpoint {}".format(crt_name, endpoint["name"])
+            )
+            crt, updated_by_hash_tmp = get_cert_for_endpoint(source, endpoint, crt_name)
+            updated_by_hash += updated_by_hash_tmp
+
+            if "primary_certificate" not in endpoint:
+                endpoint["registry_type"] = sni_certificate["registry_type"]
+
+            if crt:
+                synced_sni_certificates.append(dict(
+                    certificate=crt,
+                    path=sni_certificate["path"]
+                ))
+            else:
+                continue
+        endpoint["sni_certificates"] = synced_sni_certificates
 
         policy = endpoint.pop("policy")
         policy_ciphers = []
