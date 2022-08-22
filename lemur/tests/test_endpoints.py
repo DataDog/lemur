@@ -15,9 +15,10 @@ def test_rotate_certificate(client, source_plugin):
     from lemur.deployment.service import rotate_certificate
 
     new_certificate = CertificateFactory()
+    old_certificate = new_certificate.replaces
     endpoint = EndpointFactory()
 
-    rotate_certificate(endpoint, new_certificate)
+    rotate_certificate(endpoint, old_certificate, new_certificate)
     assert endpoint.certificate == new_certificate
 
 

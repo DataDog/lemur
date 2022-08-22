@@ -449,3 +449,45 @@ def attach_certificate_v2(listener_arn, port, certificates, **kwargs):
             current_app.logger.warning("Loadbalancer does not exist.")
         else:
             raise e
+
+
+@sts_client("elbv2")
+@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+def add_listener_certificates_v2(listener_arn, certificates, **kwargs):
+    """
+    Adds the specified certificate to the certificate list for the listener, throws exception
+    if certificate specified does not exist in a particular account.
+
+    :param listener_arn:
+    :param certificates:
+    """
+    try:
+        return kwargs["client"].add_listener_certificates(
+            ListenerArn=listener_arn, Certificates=certificates
+        )
+    except botocore.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] == "LoadBalancerNotFound":
+            current_app.logger.warning("Loadbalancer does not exist.")
+        else:
+            raise e
+
+
+@sts_client("elbv2")
+@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+def remove_listener_certificates_v2(listener_arn, certificates, **kwargs):
+    """
+    Removes the specified certificate from the certificate list for the listener, throws exception
+    if certificate specified does not exist in a particular account.
+
+    :param listener_arn:
+    :param certificates:
+    """
+    try:
+        return kwargs["client"].remove_listener_certificates(
+            ListenerArn=listener_arn, Certificates=certificates
+        )
+    except botocore.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] == "LoadBalancerNotFound":
+            current_app.logger.warning("Loadbalancer does not exist.")
+        else:
+            raise e

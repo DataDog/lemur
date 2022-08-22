@@ -175,7 +175,8 @@ def test_send_rotation_notification(certificate, endpoint, source_plugin):
     from lemur.deployment.service import rotate_certificate
 
     new_certificate = CertificateFactory()
-    rotate_certificate(endpoint, new_certificate)
+    old_certificate = new_certificate.replaces
+    rotate_certificate(endpoint, old_certificate, new_certificate)
     new_certificate.replaces.append(certificate)
     assert endpoint.certificate == new_certificate
 
