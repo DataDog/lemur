@@ -53,8 +53,9 @@ def test_sync_endpoints(session):
 
     crt1 = CertificateFactory()
     crt2 = CertificateFactory()
-    existing_endpoint = EndpointFactory(name="test-lb-4", dnsname="test4.example.com")
+    existing_endpoint = EndpointFactory(name="test-lb-4", dnsname="test4.example.com", port=443)
     existing_endpoint.primary_certificate = crt1
+    existing_endpoint.source = source
     session.commit()
 
     with mock.patch.object(
