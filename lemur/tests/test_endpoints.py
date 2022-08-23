@@ -11,15 +11,30 @@ from .vectors import (
 )
 
 
-def test_rotate_certificate(client, source_plugin):
+def test_rotate_primary_certificate(client, source_plugin):
     from lemur.deployment.service import rotate_certificate
 
     new_certificate = CertificateFactory()
-    old_certificate = new_certificate.replaces
     endpoint = EndpointFactory()
 
-    rotate_certificate(endpoint, old_certificate, new_certificate)
+    rotate_certificate(endpoint, None, new_certificate)
     assert endpoint.certificate == new_certificate
+
+
+def test_rotate_sni_certificate(client, source_plugin):
+    from lemur.deployment.service import rotate_certificate
+
+    old_sni_certificate = CertificateFactory()
+    new_sni_certificate = CertificateFactory()
+    new_sni_certificate.replaces = [old_sni_certificate]
+
+    endpoint = EndpointFactory()
+    primary_certificate = endpoint.primary_certificate
+    endpoint.add_sni_certificate(old_sni_certificate)
+
+    rotate_certificate(endpoint, old_sni_certificate, new_sni_certificate)
+    assert endpoint.primary_certificate == primary_certificate
+    assert endpoint.sni_certificates == [new_sni_certificate]
 
 
 def test_get_by_name_and_source(client, source_plugin):
