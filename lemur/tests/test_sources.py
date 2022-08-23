@@ -53,6 +53,7 @@ def test_sync_endpoints(session):
 
     crt1 = CertificateFactory()
     crt2 = CertificateFactory()
+    crt3 = CertificateFactory()
     existing_endpoint = EndpointFactory(name="test-lb-4", dnsname="test4.example.com", port=443)
     existing_endpoint.primary_certificate = crt1
     existing_endpoint.source = source
@@ -134,7 +135,13 @@ def test_sync_endpoints(session):
                     path="/fakecrt2",
                     registry_type="iam",
                 ),
-                sni_certificates=[],
+                sni_certificates=[
+                    dict(
+                        name=crt3.name,
+                        path="/fakecrt3",
+                        registry_type="iam",
+                    )
+                ],
                 registry_type="iam",
             )
         ],
@@ -165,6 +172,8 @@ def test_sync_endpoints(session):
 
     ep4 = endpoint_service.get_by_name("test-lb-4")
     assert ep4.primary_certificate.name == crt2.name
+    assert len(ep4.sni_certificates) == 1
+    assert ep4.sni_certificates[0].name == crt3.name
 
 
 @pytest.mark.parametrize(
