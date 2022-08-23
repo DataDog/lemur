@@ -317,7 +317,7 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
                     if len(certificate.replaced) > 1:
                         log_data["message"] = f"Multiple replacement certificates found, going with the first one out of " \
                                               f"{len(certificate.replaced)}"
-                    new_cert = certificate.replaced[0].name
+                    new_cert = certificate.replaced[0]
                     old_cert = certificate
                     log_data["endpoint"] = endpoint.dnsname
                     log_data["new_certificate"] = new_cert.name
