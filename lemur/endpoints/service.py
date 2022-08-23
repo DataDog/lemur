@@ -164,8 +164,8 @@ def update(endpoint_id, **kwargs):
     if primary_certificate:
         endpoint.primary_certificate = primary_certificate["certificate"]
         endpoint.set_certificate_path(certificate=endpoint.primary_certificate, path=primary_certificate["path"])
+    endpoint.sni_certificates = []
     for crt in sni_certificates:
-        endpoint.sni_certificates = []
         endpoint.add_sni_certificate(crt["certificate"], crt["path"])
 
     endpoint.policy = kwargs["policy"]
