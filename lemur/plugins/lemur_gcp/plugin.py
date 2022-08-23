@@ -6,7 +6,6 @@ from lemur.plugins.bases import DestinationPlugin
 
 
 class GCPDestinationPlugin(DestinationPlugin):
-    requires_key = False
     title = "GCP"
     slug = "gcp-destination"
     description = "Allow the uploading of certificates to GCP"
