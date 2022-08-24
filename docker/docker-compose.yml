@@ -7,6 +7,8 @@ services:
   postgres:
     image: "postgres:13.1-alpine"
     restart: on-failure
+    ports:
+      - 5432:5432
     volumes:
       - pg_data:/var/lib/postgresql/data
     env_file:
@@ -26,7 +28,17 @@ services:
     ports:
       - 87:80
       - 447:443
+    volumes:
+      - /Users/mitch.cail/dd/lemur:/opt/lemur
+    environment:
+      SQLALCHEMY_DATABASE_URI: postgresql://lemur:lemur@postgres:5432/lemur
+      VIRTUAL_ENV: 'true'
+      LEMUR_CONF: "/home/lemur/.lemur/lemur.conf.py"
+    stdin_open: true
+    tty: true
 
   redis:
     image: "redis:alpine3.12"
     restart: on-failure
+    ports:
+      - 6379:6379

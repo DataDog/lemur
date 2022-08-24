@@ -1,4 +1,4 @@
-from googleapiclient import discovery
+from google.cloud.compute_v1.services import ssl_certificates
 from sentry_sdk import capture_exception
 import os
 
@@ -9,9 +9,11 @@ class GCPDestinationPlugin(DestinationPlugin):
     title = "GCP"
     slug = "gcp-destination"
     description = "Allow the uploading of certificates to GCP"
-
+    version = lemur_gcp.VERSION
     author = "Mitch Cail"
     author_url = "https://github.com/Datadog/lemur"
+
+    options = []
 
     def upload(self, certificate_name, description, private_key, certificate, project_id, **kwargs):
         """
@@ -25,13 +27,11 @@ class GCPDestinationPlugin(DestinationPlugin):
         *NOTE: We are relying on the GOOGLE_APPLICATION_CREDENTIALS env variable to be set to authenticate
         """
         try:
-            service = discovery.build("compute", "v1")
-
             ssl_certificate_body = {
                 "name": certificate_name,
                 "description": description,
                 "certificate": certificate,
-                "privateKey": private_key,
+                "private_key": private_key,
             }
 
             return self._insert_gcp_certificate(project_id, ssl_certificate_body)
@@ -48,10 +48,6 @@ class GCPDestinationPlugin(DestinationPlugin):
         pass
 
     def _insert_gcp_certificate(self, project_id, ssl_certificate_body):
-        service = discovery.build("compute", "v1")
-
-        response = service.sslCertificates().insert(
-            project=project_id, body=ssl_certificate_body
+        return ssl_certificates.SslCertificatesClient().insert(
+            project=project_id, ssl_certificate_resource=ssl_certificate_body
         )
-
-        return response.execute()
