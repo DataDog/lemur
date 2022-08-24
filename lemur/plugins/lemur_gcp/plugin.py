@@ -9,7 +9,6 @@ class GCPDestinationPlugin(DestinationPlugin):
     title = "GCP"
     slug = "gcp-destination"
     description = "Allow the uploading of certificates to GCP"
-    version = lemur_gcp.VERSION
     author = "Mitch Cail"
     author_url = "https://github.com/Datadog/lemur"
 
