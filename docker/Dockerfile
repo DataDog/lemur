@@ -35,7 +35,7 @@ RUN addgroup -S ${group} -g ${gid} && \
                 cyrus-sasl-dev \
                 openldap-dev && \
     mkdir -p /opt/lemur /home/lemur/.lemur/ && \
-    curl -sSL https://github.com/Datadog/lemur/archive/6f7ec1336320f3a3c2e7838258bbbaafea4c9fda.tar.gz | tar xz -C /opt/lemur --strip-components=1 && \
+    curl -sSL https://github.com/Datadog/lemur/archive/270a56c1974b85d48019b591bdf3e1e8fdcda133.tar.gz | tar xz -C /opt/lemur --strip-components=1 && \
     pip3 install --upgrade pip && \
     pip3 install --upgrade setuptools && \
     mkdir -p /run/nginx/ /etc/nginx/ssl/ && \

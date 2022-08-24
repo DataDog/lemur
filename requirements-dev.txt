@@ -114,5 +114,3 @@ webencodings==0.5.1
     # via bleach
 zipp==3.7.0
     # via importlib-metadata
-google-cloud-compute==1.5.1
-    # via -r requirements.in
