@@ -245,6 +245,57 @@ def test_rotate_cli_bulk(session, source_plugin):
     assert ep3.sni_certificates == [new_cert2]
 
 
+def test_rotate_cli_bulk_in_region(session, source_plugin):
+    """
+    Ensure that the CLI command 'lemur certificate rotate --region <region>' correctly rotates
+    all endpoints in the given region which have a certificate attached to it that has been re-issued.
+    """
+    from lemur.certificates.cli import rotate
+
+    old_cert1, new_cert1 = CertificateFactory(), CertificateFactory()
+    old_cert2, new_cert2 = CertificateFactory(), CertificateFactory()
+    ep1, ep2, ep3 = EndpointFactory(), EndpointFactory(), EndpointFactory()
+    ep1.dnsname = "my-loadbalancer1-1234567890.us-east-1.elb.amazonaws.com"
+    ep2.dnsname = "my-loadbalancer2-1234567890.us-east-1.elb.amazonaws.com"
+    ep3.dnsname = "my-loadbalancer3-1234567890.us-west-2.elb.amazonaws.com"
+    session.commit()
+
+    _setup_rotation_eligible_endpoint(
+        endpoint=ep1,
+        old_primary_certificate=old_cert1, new_primary_certificate=new_cert1,
+        old_sni_certificate=old_cert2, new_sni_certificate=new_cert2,
+    )
+    _setup_rotation_eligible_endpoint(
+        endpoint=ep2,
+        old_primary_certificate=old_cert1, new_primary_certificate=new_cert1,
+        old_sni_certificate=old_cert2, new_sni_certificate=new_cert2,
+    )
+    _setup_rotation_eligible_endpoint(
+        endpoint=ep3,
+        old_primary_certificate=old_cert1, new_primary_certificate=new_cert1,
+        old_sni_certificate=old_cert2, new_sni_certificate=new_cert2,
+    )
+
+    rotate(
+        endpoint_name=None,
+        source=None,
+        old_certificate_name=None,
+        new_certificate_name=None,
+        message=None,
+        commit=True,
+        region="us-east-1"
+    )
+
+    assert ep1.primary_certificate == new_cert1
+    assert ep1.sni_certificates == [new_cert2]
+
+    assert ep2.primary_certificate == new_cert1
+    assert ep2.sni_certificates == [new_cert2]
+
+    assert ep3.primary_certificate == old_cert1
+    assert ep3.sni_certificates == [old_cert2]
+
+
 def test_rotate_cli_old_to_new(session, source_plugin):
     """
     Ensure that the CLI command 'lemur rotate -n <new_certificate_name> -o <old_certificate_name>
