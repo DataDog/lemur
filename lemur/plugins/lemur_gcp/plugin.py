@@ -12,7 +12,14 @@ class GCPDestinationPlugin(DestinationPlugin):
     author = "Mitch Cail"
     author_url = "https://github.com/Datadog/lemur"
 
-    options = []
+    options = [
+        {
+            "name": "accountName",
+            "type": "str",
+            "required": True,
+            "helpMessage": "GCP Project Name",
+        }
+    ]
 
     def upload(self, certificate_name, description, private_key, certificate, project_id, **kwargs):
         """
@@ -38,13 +45,6 @@ class GCPDestinationPlugin(DestinationPlugin):
         # TODO: better error handling
         except ClientError:
             capture_exception()
-
-    def deploy(self, elb_name, account, region, certificate):
-        pass
-
-    def clean(self, certificate, options, **kwargs):
-        # This is where the certs will be removed
-        pass
 
     def _insert_gcp_certificate(self, project_id, ssl_certificate_body):
         return ssl_certificates.SslCertificatesClient().insert(
