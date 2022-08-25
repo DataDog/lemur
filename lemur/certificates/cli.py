@@ -283,11 +283,15 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
             print(
                 f"[+] Rotating endpoint: {endpoint.name} to certificate {new_cert.name}"
             )
-            old_cert = new_cert.replaces
+            if not endpoint.primary_certificate:
+                print(f"[!] Endpoint does not have a primary certificate rotate with {new_cert.name}.")
+                log_data["message"] = f"Endpoint does not have a primary certificate to rotate with {new_cert.name}"
+                current_app.logger.info(log_data)
+                raise Exception("Unable to rotate certificate because it does not have a primary certificate")
             log_data["message"] = "Rotating one endpoint"
             log_data["endpoint"] = endpoint.dnsname
             log_data["new_certificate"] = new_cert.name
-            log_data["old_certificate"] = old_cert.name
+            log_data["old_certificate"] = endpoint.primary_certificate.name if endpoint.primary_certificate else "none"
             request_rotation(endpoint, old_cert, new_cert, message, commit)
             current_app.logger.info(log_data)
 
@@ -296,15 +300,12 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
             log_data["new_certificate"] = new_cert.name
             log_data["old_certificate"] = old_cert.name
             log_data["message"] = "Rotating endpoint from old to new cert"
-            for endpoint in old_cert.endpoints:
-                if endpoint.primary_certificate != old_cert:
-                    # TODO(EDGE-1365) Support rotating SNI certificates.
-                    continue
-                print(f"[+] Rotating {endpoint.name}")
-                log_data["endpoint"] = endpoint.dnsname
-                request_rotation(endpoint, old_cert, new_cert, message, commit)
+            rotation_eligible_endpoints = [ep for ep in old_cert.endpoints]
+            for ep in rotation_eligible_endpoints:
+                print(f"[+] Rotating {ep.name}")
+                log_data["endpoint"] = ep.dnsname
+                request_rotation(ep, old_cert, new_cert, message, commit)
                 current_app.logger.info(log_data)
-
         else:
             # No certificate name or endpoint is provided. We will now fetch all endpoints,
             # which are associated with a certificate that has been replaced
@@ -436,7 +437,7 @@ def rotate_region(endpoint_name, new_certificate_name, old_certificate_name, mes
         endpoint = validate_endpoint(endpoint_name)
 
         if endpoint and new_cert:
-            old_cert = new_cert.replaces
+            old_cert = endpoint.primary_certificate
             log_data["endpoint"] = endpoint.dnsname
             log_data["new_certificate"] = new_cert.name
             log_data["old_certificate"] = old_cert.name
@@ -448,12 +449,10 @@ def rotate_region(endpoint_name, new_certificate_name, old_certificate_name, mes
             log_data["message"] = "Rotating endpoint from old to new cert"
             print(log_data)
             current_app.logger.info(log_data)
-            for endpoint in old_cert.endpoints:
-                if endpoint.primary_certificate != old_cert:
-                    # TODO(EDGE-1365) Support rotating SNI certificates.
-                    continue
-                log_data["endpoint"] = endpoint.dnsname
-                request_rotation_region(endpoint, old_cert, new_cert, message, commit, log_data, region)
+            rotation_eligible_endpoints = [ep for ep in old_cert.endpoints]
+            for ep in rotation_eligible_endpoints:
+                log_data["endpoint"] = ep.dnsname
+                request_rotation_region(ep, old_cert, new_cert, message, commit, log_data, region)
 
         else:
             log_data["message"] = "Rotating all endpoints that have new certificates available"

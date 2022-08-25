@@ -18,7 +18,7 @@ def rotate_certificate(endpoint, old_cert, new_cert):
             "and SNI certificate which is likely unnecessary"
         )
         _rotate_primary_certificate(endpoint, new_cert)
-    elif old_cert in endpoint.sni_certificates:
+    elif sni_rotation:
         _rotate_sni_certificate(endpoint, old_cert, new_cert)
     else:
         _rotate_primary_certificate(endpoint, new_cert)
