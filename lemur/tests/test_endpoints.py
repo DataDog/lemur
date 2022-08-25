@@ -231,7 +231,8 @@ def test_rotate_cli_bulk(session, source_plugin):
         old_certificate_name=None,
         new_certificate_name=None,
         message=None,
-        commit=True
+        commit=True,
+        region=None
     )
 
     assert ep1.primary_certificate == new_cert1
@@ -274,7 +275,8 @@ def test_rotate_cli_old_to_new(session, source_plugin):
         old_certificate_name=old_cert1.name,
         new_certificate_name=new_cert1.name,
         message=None,
-        commit=True
+        commit=True,
+        region=None
     )
 
     assert ep1.primary_certificate == new_cert1
@@ -292,7 +294,8 @@ def test_rotate_cli_old_to_new(session, source_plugin):
         old_certificate_name=old_cert2.name,
         new_certificate_name=new_cert2.name,
         message=None,
-        commit=True
+        commit=True,
+        region=None
     )
 
     assert ep3.primary_certificate == new_cert1
@@ -331,7 +334,8 @@ def test_rotate_cli_endpoint(session, source_plugin):
         old_certificate_name=None,
         new_certificate_name=new_cert1.name,
         message=None,
-        commit=True
+        commit=True,
+        region=None
     )
 
     assert ep1.primary_certificate == new_cert1
@@ -349,7 +353,8 @@ def test_rotate_cli_endpoint(session, source_plugin):
         old_certificate_name=None,
         new_certificate_name=new_cert1.name,
         message=None,
-        commit=True
+        commit=True,
+        region=None
     )
 
     assert ep1.primary_certificate == new_cert1
@@ -367,7 +372,8 @@ def test_rotate_cli_endpoint(session, source_plugin):
         old_certificate_name=None,
         new_certificate_name=new_cert1.name,
         message=None,
-        commit=True
+        commit=True,
+        region=None
     )
 
     assert ep1.primary_certificate == new_cert1
