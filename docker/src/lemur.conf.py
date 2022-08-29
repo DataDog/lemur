@@ -25,14 +25,14 @@ def get_random_secret(length):
 
 
 # This is the secret key used by Flask session management
-SECRET_KEY = repr(os.environ.get('SECRET_KEY', b'NEEMTRND((%@^~)(rpxlfitg68005792'))
+SECRET_KEY = repr(os.environ.get('SECRET_KEY', base64.b64encode(get_random_secret(32).encode('utf8'))))
 
 # You should consider storing these separately from your config
 LEMUR_TOKEN_SECRET = repr(os.environ.get('LEMUR_TOKEN_SECRET',
                                          base64.b64encode(get_random_secret(32).encode('utf8'))))
 # This must match the key for whichever DB the container is using - this could be a dump of dev or test, or a unique key
 LEMUR_ENCRYPTION_KEYS = repr(os.environ.get('LEMUR_ENCRYPTION_KEYS',
-                                            base64.b64encode(get_random_secret(32).encode('utf8')).decode('utf8')))
+                                            base64.b64encode(b'SBRHNTIW@%#$)_#+ulahitit47774808').decode('utf8')))
 
 # this is the secret used to generate oauth state tokens
 OAUTH_STATE_TOKEN_SECRET = repr(os.environ.get('OAUTH_STATE_TOKEN_SECRET', base64.b64encode(get_random_secret(32).encode('utf8'))))
@@ -233,4 +233,7 @@ ACME_DNS_PROVIDER_TYPES = {"items": [
 # Authority plugins which support revocation
 SUPPORTED_REVOCATION_AUTHORITY_PLUGINS = ['acme-issuer']
 
-GOOGLE_APPLICATION_CREDENTIALS = 'authentication.json'
+with open('/tmp/authentication.json') as creds:
+    gcp_creds = creds
+
+GOOGLE_APPLICATION_CREDENTIALS = gcp_creds

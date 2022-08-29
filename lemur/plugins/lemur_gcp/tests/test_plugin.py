@@ -15,6 +15,7 @@ SUCCESS_INSERT_RESPONSE = {
     'startTime': '2022-08-22T16:44:32.231-07:00',
 }
 
+
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate", return_value=SUCCESS_INSERT_RESPONSE)
 def test_upload(mock_sslCertificates):
     assert GCPDestinationPlugin().upload(
@@ -23,5 +24,3 @@ def test_upload(mock_sslCertificates):
         "private_key",
         "certificate",
         "12345") == SUCCESS_INSERT_RESPONSE
-
-
