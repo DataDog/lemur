@@ -290,8 +290,9 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
                 f"[+] Rotating endpoint: {endpoint.name} to certificate {new_cert.name}"
             )
             if not endpoint.primary_certificate:
-                print(f"[!] Endpoint does not have a primary certificate rotate with {new_cert.name}.")
-                log_data["message"] = f"Endpoint does not have a primary certificate to rotate with {new_cert.name}"
+                msg = f"[!] Endpoint does not have a primary certificate rotate with {new_cert.name}."
+                print(msg)
+                log_data["message"] = msg
                 current_app.logger.info(log_data)
                 raise Exception("Unable to rotate certificate because it does not have a primary certificate")
             log_data["message"] = "Rotating one endpoint"
@@ -325,7 +326,7 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
             for endpoint in endpoint_service.get_all_pending_rotation():
                 for certificate in endpoint.certificates:
                     log_data["message"] = "Rotating endpoint from old to new cert"
-                    if len(certificate.replaced) == 0:
+                    if not certificate.replaced:
                         continue
                     if len(certificate.replaced) > 1:
                         log_data["message"] = f"Multiple replacement certificates found, going with the first one out of " \
