@@ -1,23 +1,30 @@
 from google.cloud.compute_v1.services import ssl_certificates
 from google.oauth2 import service_account
-from sentry_sdk import capture_exception
 from flask import current_app
 
 from lemur.plugins.bases import DestinationPlugin
+from lemur.plugins import lemur_gcp as gcp
 
 
 class GCPDestinationPlugin(DestinationPlugin):
     title = "GCP"
     slug = "gcp-destination"
+    version = gcp.VERSION
     description = "Allow the uploading of certificates to GCP"
     author = "Mitch Cail"
     author_url = "https://github.com/Datadog/lemur"
 
     options = [
         {
-            "name": "accountName",
+            "name": "Account ID",
             "type": "str",
             "required": True,
+            "helpMessage": "GCP Project ID",
+        },
+        {
+            "name": "Vault URL",
+            "type": "str",
+            "required": False,
             "helpMessage": "GCP Project Name",
         }
     ]
@@ -36,6 +43,7 @@ class GCPDestinationPlugin(DestinationPlugin):
             ssl_certificate_body = {
                 "name": name,
                 "certificate": body,
+                "description": "",
                 "private_key": private_key,
             }
 
@@ -44,9 +52,9 @@ class GCPDestinationPlugin(DestinationPlugin):
         # TODO: better error handling
         except Exception as e:
             current_app.logger.warn(
-                f"Issue with uploading a {name} to GCP. Action failed with the following log: {e}", exc_info=True
+                f"Issue with uploading {name} to GCP. Action failed with the following log: {e}", exc_info=True
             )
-            capture_exception()
+            raise Exception(f"Issue uploading certificate to GCP: {e}")
 
     def _insert_gcp_certificate(self, project_id, ssl_certificate_body):
 
