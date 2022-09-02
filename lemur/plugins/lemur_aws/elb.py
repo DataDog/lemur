@@ -465,11 +465,21 @@ def add_listener_certificates_v2(listener_arn, certificates, **kwargs):
         return kwargs["client"].add_listener_certificates(
             ListenerArn=listener_arn, Certificates=certificates
         )
-    except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] == "LoadBalancerNotFound":
-            current_app.logger.warning("Loadbalancer does not exist.")
-        else:
-            raise e
+    except Exception as e:  # noqa
+        metrics.send(
+            "add_listener_certificates_v2_error",
+            "counter",
+            1,
+            metric_tags={
+                "listener_arn": listener_arn,
+            },
+        )
+        capture_exception(
+            extra={
+                "listener_arn": listener_arn,
+            }
+        )
+        raise
 
 
 @sts_client("elbv2")
@@ -486,8 +496,18 @@ def remove_listener_certificates_v2(listener_arn, certificates, **kwargs):
         return kwargs["client"].remove_listener_certificates(
             ListenerArn=listener_arn, Certificates=certificates
         )
-    except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] == "LoadBalancerNotFound":
-            current_app.logger.warning("Loadbalancer does not exist.")
-        else:
-            raise e
+    except Exception as e:  # noqa
+        metrics.send(
+            "remove_listener_certificates_v2_error",
+            "counter",
+            1,
+            metric_tags={
+                "listener_arn": listener_arn,
+            },
+        )
+        capture_exception(
+            extra={
+                "listener_arn": listener_arn,
+            }
+        )
+        raise
