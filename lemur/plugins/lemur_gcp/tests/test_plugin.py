@@ -65,6 +65,7 @@ options = [{
     'value': 'lemur-test'
 }]
 
+
 @pytest.mark.skip(
     reason="mock not currently working"
 )
@@ -77,6 +78,7 @@ def test_upload(mock_sslCertificates):
         private_key,
         cert_chain,
         options) == SUCCESS_INSERT_RESPONSE
+
 
 @pytest.mark.skip(
     reason="mock not currently working"
