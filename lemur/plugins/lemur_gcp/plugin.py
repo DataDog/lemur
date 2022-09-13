@@ -75,15 +75,13 @@ class GCPDestinationPlugin(DestinationPlugin):
         )
 
     def _get_gcp_credentials(self, options):
-        import pdb; pdb.set_trace()
 
         if self.get_option('Vault Path', options) != "":
-            # make a request to vault
+            # make a request to vault for GCP token
             return self._get_gcp_credentials_from_vault(options)
 
-        #TODO put authentication.json as a env variable
+        # TODO put authentication.json as a env variable
         return service_account.Credentials.from_service_account_file('/tmp/authentication.json')
-
 
     def _get_gcp_credentials_from_vault(self, options):
         service_token = hvac.Client(os.environ['VAULT_ADDR']) \

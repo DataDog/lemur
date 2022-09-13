@@ -64,6 +64,7 @@ options = [{
     'value': 'lemur-test'
 }]
 
+
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate", return_value=SUCCESS_INSERT_RESPONSE)
 def test_upload(mock_sslCertificates):
 
@@ -84,6 +85,5 @@ def test_get_gcp_credentials(mock__get_gcp_credentials_from_vault):
         'required': True,
         'value': '/secret'
     }]
-    import pdb; pdb.set_trace()
 
-    assert GCPDestinationPlugin()._get_gcp_credentials(options) == None
+    assert GCPDestinationPlugin()._get_gcp_credentials(options) is None
