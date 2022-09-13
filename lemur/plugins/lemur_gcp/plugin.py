@@ -1,5 +1,4 @@
 from google.cloud.compute_v1.services import ssl_certificates
-from google.oauth2 import service_account
 import google.auth
 from flask import current_app
 import hvac
@@ -79,9 +78,6 @@ class GCPDestinationPlugin(DestinationPlugin):
         if self.get_option('Vault Path', options) != "":
             # make a request to vault for GCP token
             return self._get_gcp_credentials_from_vault(options)
-
-        # TODO put authentication.json as a env variable
-        return service_account.Credentials.from_service_account_file('/tmp/authentication.json')
 
     def _get_gcp_credentials_from_vault(self, options):
         service_token = hvac.Client(os.environ['VAULT_ADDR']) \
