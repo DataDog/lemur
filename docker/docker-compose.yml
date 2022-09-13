@@ -28,8 +28,6 @@ services:
     ports:
       - 87:80
       - 447:443
-    volumes:
-      - /Users/mitch.cail/dd/lemur:/opt/lemur
     environment:
       SQLALCHEMY_DATABASE_URI: postgresql://lemur:lemur@postgres:5432/lemur
       VIRTUAL_ENV: 'true'
