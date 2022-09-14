@@ -15,6 +15,7 @@ from sqlalchemy.orm import joinedload
 
 from lemur import database
 from lemur.common.utils import truthiness
+from lemur.certificates.models import Certificate
 from lemur.endpoints.models import Endpoint, EndpointDnsAlias, Policy, Cipher
 from lemur.sources.models import Source
 from lemur.extensions import metrics
@@ -105,7 +106,7 @@ def get_all_pending_rotation():
     that have been replaced.
     :return:
     """
-    return Endpoint.query.filter(Endpoint.certificate.replaced.any()).all()
+    return Endpoint.query.filter(Endpoint.certificates.any(Certificate.replaced.any())).all()
 
 
 def create(**kwargs):
@@ -114,14 +115,19 @@ def create(**kwargs):
     :param kwargs:
     :return:
     """
-    aliases = []
+    primary_certificate = kwargs.pop("primary_certificate", None)
+    sni_certificates = kwargs.pop("sni_certificates", [])
     if "aliases" in kwargs:
-        aliases = [EndpointDnsAlias(alias=name) for name in kwargs.pop("aliases")]
-    if "certificate" in kwargs:
-        certificate = kwargs.pop("certificate")
+        kwargs["aliases"] = [EndpointDnsAlias(alias=name) for name in kwargs.get("aliases")]
+
     endpoint = Endpoint(**kwargs)
-    endpoint.aliases = aliases
-    endpoint.primary_certificate = certificate
+
+    if primary_certificate:
+        endpoint.primary_certificate = primary_certificate["certificate"]
+        endpoint.set_certificate_path(certificate=endpoint.primary_certificate, path=primary_certificate["path"])
+    for sni_certificate in sni_certificates:
+        endpoint.add_sni_certificate(certificate=sni_certificate["certificate"], path=sni_certificate["path"])
+
     database.create(endpoint)
     metrics.send(
         "endpoint_added", "counter", 1,
@@ -152,12 +158,20 @@ def get_or_create_cipher(**kwargs):
 
 def update(endpoint_id, **kwargs):
     endpoint = database.get(Endpoint, endpoint_id)
+    primary_certificate = kwargs.pop("primary_certificate", None)
+    sni_certificates = kwargs.pop("sni_certificates", [])
+
+    if primary_certificate:
+        endpoint.primary_certificate = primary_certificate["certificate"]
+        endpoint.set_certificate_path(certificate=endpoint.primary_certificate, path=primary_certificate["path"])
+    endpoint.sni_certificates = []
+    for crt in sni_certificates:
+        endpoint.add_sni_certificate(crt["certificate"], crt["path"])
 
     endpoint.policy = kwargs["policy"]
-    endpoint.primary_certificate = kwargs["certificate"]
     endpoint.source = kwargs["source"]
-    endpoint.primary_certificate.path = kwargs.get("certificate_path")
-    endpoint.registry_type = kwargs.get("registry_type")
+    endpoint.registry_type = kwargs["registry_type"]
+
     existing_alias = {}
     for e in endpoint.aliases:
         existing_alias[e.alias] = e
@@ -168,11 +182,13 @@ def update(endpoint_id, **kwargs):
                 endpoint.aliases.append(existing_alias[name])
             else:
                 endpoint.aliases.append(EndpointDnsAlias(alias=name))
+
     endpoint.last_updated = arrow.utcnow()
     metrics.send(
         "endpoint_updated", "counter", 1,
         metric_tags={"source": endpoint.source.label, "type": endpoint.type}
     )
+
     database.update(endpoint)
     return endpoint
 
