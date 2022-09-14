@@ -26,7 +26,7 @@ class GCPDestinationPlugin(DestinationPlugin):
             "helpMessage": "GCP Project ID",
         },
         {
-            "name": "serviceAccountName",
+            "name": "Service Account Name",
             "type": "str",
             "required": True,
             "helpMessage": "GCP Service Account Name",

@@ -22,8 +22,9 @@ RUN mkdir -p /opt/lemur && \
 WORKDIR /opt/lemur
 
 # Disable unused Lemur plugins
-COPY ./files/disable_plugins.patch /opt/lemur
-RUN patch -p0 -i disable_plugins.patch && rm -rf disable_plugins.patch
+## Commenting out this section of the Dockerfile for now
+# COPY ./files/disable_plugins.patch /opt/lemur
+# RUN patch -p0 -i disable_plugins.patch && rm -rf disable_plugins.patch
 
 RUN npm config set registry http://registry.npmjs.org/ && \
     npm install npm -g && \
