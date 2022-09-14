@@ -62,6 +62,7 @@ options = [{
     'value': 'lemur-test'
 }]
 
+
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin.get_option", return_value="test-account")
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials", return_value=token)
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate", return_value=SUCCESS_INSERT_RESPONSE)
