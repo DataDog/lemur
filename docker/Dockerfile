@@ -12,7 +12,7 @@ ENV group lemur
 
 RUN addgroup -S ${group} -g ${gid} && \
     adduser -D -S ${user} -G ${group} -u ${uid} && \
-    apk add --no-cache --update python3 py-pip libldap postgresql-client nginx supervisor curl tzdata openssl bash build-base libstdc++ libc6-compat && \
+    apk add --no-cache --update python3 py-pip libldap postgresql-client nginx supervisor curl tzdata openssl bash && \
     apk --update add --virtual build-dependencies \
                 git \
                 tar \
@@ -21,7 +21,6 @@ RUN addgroup -S ${group} -g ${gid} && \
                 npm \
                 bash \
                 musl-dev \
-                cargo \
                 gcc \
                 autoconf \
                 automake \
@@ -35,7 +34,7 @@ RUN addgroup -S ${group} -g ${gid} && \
                 cyrus-sasl-dev \
                 openldap-dev && \
     mkdir -p /opt/lemur /home/lemur/.lemur/ && \
-    curl -sSL https://github.com/Datadog/lemur/archive/2325b495801c46d616d150d7f7c6da9b0285b45b.tar.gz | tar xz -C /opt/lemur --strip-components=1 && \
+    curl -sSL https://github.com/Netflix/lemur/archive/$VERSION.tar.gz | tar xz -C /opt/lemur --strip-components=1 && \
     pip3 install --upgrade pip && \
     pip3 install --upgrade setuptools && \
     mkdir -p /run/nginx/ /etc/nginx/ssl/ && \
@@ -60,7 +59,7 @@ COPY nginx/default-ssl.conf /etc/nginx/conf.d/
 RUN chmod +x /entrypoint
 WORKDIR /
 
-HEALTHCHECK --interval=12s --timeout=12s --start-period=30s \  
+HEALTHCHECK --interval=12s --timeout=12s --start-period=30s \
  CMD curl --fail http://localhost:80/api/1/healthcheck | grep -q ok || exit 1
 
 USER root
