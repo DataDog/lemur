@@ -25,7 +25,7 @@ def get_random_secret(length):
 
 
 # This is the secret key used by Flask session management
-SECRET_KEY = repr(os.environ.get('SECRET_KEY', base64.b64encode(get_random_secret(32).encode('utf8'))))
+SECRET_KEY = repr(os.environ.get('SECRET_KEY', get_random_secret(32).encode('utf8')))
 
 # You should consider storing these separately from your config
 LEMUR_TOKEN_SECRET = repr(os.environ.get('LEMUR_TOKEN_SECRET',
