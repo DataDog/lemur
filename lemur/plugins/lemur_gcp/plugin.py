@@ -91,7 +91,7 @@ class GCPDestinationPlugin(DestinationPlugin):
             .secrets.gcp \
             .generate_oauth2_access_token(
             roleset="",
-            mount_point=f"cloud-iam/gcp/{self.get_option('Account Id', options)}/impersonated-account/{self.get_option('serviceAccountName', options)}"
+            mount_point=f"cloud-iam/gcp/{self.get_option('Account Id', options)}/impersonated-account/{self.get_option('Service Account Name', options)}"
         )["data"]["token"].rstrip(".")
         credentials, _ = google.auth.default()  # Fetch the default credentials from Emissary Native IAM
         credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault
