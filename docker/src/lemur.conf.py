@@ -233,7 +233,4 @@ ACME_DNS_PROVIDER_TYPES = {"items": [
 # Authority plugins which support revocation
 SUPPORTED_REVOCATION_AUTHORITY_PLUGINS = ['acme-issuer']
 
-with open('/tmp/authentication.json') as creds:
-    gcp_creds = creds
-
-GOOGLE_APPLICATION_CREDENTIALS = gcp_creds
+# PATH_TO_GOOGLE_APPLICATION_CREDENTIALS = '/tmp/authentication.json'

@@ -1,3 +1,4 @@
+from flask import current_app
 from google.cloud.compute_v1.services import ssl_certificates
 from google.oauth2 import service_account
 import google.auth
@@ -19,7 +20,7 @@ class GCPDestinationPlugin(DestinationPlugin):
 
     options = [
         {
-            "name": "GCP accountID",
+            "name": "Account Id",
             "type": "str",
             "required": True,
             "helpMessage": "GCP Project ID",
@@ -31,11 +32,11 @@ class GCPDestinationPlugin(DestinationPlugin):
             "helpMessage": "GCP Service Account Name",
         },
         {
-            "name": "Vault Path",
-            "type": "str",
-            "required": False,
-            "helpMessage": "Path to you GCP token",
-            "default": None,
+            "name": "Use Vault",
+            "type": "bool",
+            "required": True,
+            "helpMessage": "using vault for authentication?",
+            "default": False,
         },
     ]
 
@@ -76,19 +77,22 @@ class GCPDestinationPlugin(DestinationPlugin):
 
     def _get_gcp_credentials(self, options):
 
-        if self.get_option('Vault Path', options) != "":
+        if self.get_option('Use Vault', options) is True:
             # make a request to vault for GCP token
             return self._get_gcp_credentials_from_vault(options)
-
-        # TODO put authentication.json as a env variable
-        return service_account.Credentials.from_service_account_file('/tmp/authentication.json')
+        elif current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS") is not None:
+            return service_account.Credentials.from_service_account_file(
+                current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS")
+            )
+        else:
+            raise Exception("No supported way to authenticate with GCP")
 
     def _get_gcp_credentials_from_vault(self, options):
         service_token = hvac.Client(os.environ['VAULT_ADDR']) \
             .secrets.gcp \
             .generate_oauth2_access_token(
             roleset="",
-            mount_point=f"cloud-iam/gcp/{self.get_option('accountName', options)}/impersonated-account/{self.get_option('serviceAccountName', options)}"
+            mount_point=f"cloud-iam/gcp/{self.get_option('Account Id', options)}/impersonated-account/{self.get_option('serviceAccountName', options)}"
         )["data"]["token"].rstrip(".")
         credentials, _ = google.auth.default()  # Fetch the default credentials from Emissary Native IAM
         credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault

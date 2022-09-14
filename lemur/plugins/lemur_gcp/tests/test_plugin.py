@@ -2,7 +2,7 @@ from unittest import mock
 from lemur.plugins.lemur_gcp.plugin import GCPDestinationPlugin
 
 name = "blah-localhost.com-localhost-20220830-20230830"
-
+token = "ya29.c.b0AXv0zTN36HtXN2cJolg9tAj0vGAOT29FF-WNxQzvPu"
 body = """
 -----BEGIN CERTIFICATE-----
 MIIB8TCCAZagAwIBAgIRAKyLS3e0aky5ru4i8k/fWC8wCgYIKoZIzj0EAwIwYjES
@@ -18,7 +18,6 @@ IQDLz0FkXEkKyGXfkO0XQ6HwF0Tw+QirLNQDgrErZWmzbQIhAOiNDLODpdPzf+Aj
 fQ6tr8edUIDueTN/LEqoDMlUX9up
 -----END CERTIFICATE-----
 """
-
 private_key = """
 -----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIH/TlH1MLEwUgPpZqd1EP3+9q792r7GsmecRQe6CknV4oAoGCCqGSM49
@@ -26,7 +25,6 @@ AwEHoUQDQgAEVHkf6rYbpV1M7bPMFSbNxC6iHWm0HdvLbaHIjh6FD9O4asxa5TOs
 8Z8Lbg3hTUgFamznF34J3oYfEjgTxEO40Q==
 -----END EC PRIVATE KEY-----
 """
-
 cert_chain = """
 -----BEGIN CERTIFICATE-----
 MIIB7TCCAZSgAwIBAgIQBm3vFdgxR8e2GOGwpR+XTDAKBggqhkjOPQQDAjBiMRIw
@@ -64,9 +62,10 @@ options = [{
     'value': 'lemur-test'
 }]
 
-
+@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin.get_option", return_value="test-account")
+@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials", return_value=token)
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate", return_value=SUCCESS_INSERT_RESPONSE)
-def test_upload(mock_sslCertificates):
+def test_upload(mock_sslCertificates, mock_credentials, mock_gcp_acount_id):
 
     assert GCPDestinationPlugin().upload(
         name,
@@ -76,14 +75,14 @@ def test_upload(mock_sslCertificates):
         options) == SUCCESS_INSERT_RESPONSE
 
 
-@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials_from_vault", return_value="None")
-def test_get_gcp_credentials(mock__get_gcp_credentials_from_vault):
+@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials_from_vault", return_value="ya29.c.b0AXv0zTN36HtXN2cJolg9tAj0vGAOT29FF-WNxQzvPu")
+def test_get_gcp_credentials__from_vault(mock__get_gcp_credentials_from_vault):
 
     options = [{
-        'name': 'Vault Path',
+        'name': 'Use Vault',
         'type': 'str',
         'required': True,
-        'value': '/secret'
+        'value': True,
     }]
 
-    assert GCPDestinationPlugin()._get_gcp_credentials(options) is None
+    assert GCPDestinationPlugin()._get_gcp_credentials(options) == token
