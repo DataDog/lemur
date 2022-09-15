@@ -80,10 +80,10 @@ def test_upload(mock_sslCertificates, mock_credentials, mock_gcp_acount_id):
 def test_get_gcp_credentials__from_vault(mock__get_gcp_credentials_from_vault):
 
     options = [{
-        'name': 'Use Vault',
+        'name': 'authenticationMethod',
         'type': 'str',
         'required': True,
-        'value': True,
+        'value': 'vault',
     }]
 
     assert GCPDestinationPlugin()._get_gcp_credentials(options) == token

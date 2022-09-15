@@ -19,24 +19,31 @@ class GCPDestinationPlugin(DestinationPlugin):
 
     options = [
         {
-            "name": "Account Id",
+            "name": "accountId",
             "type": "str",
             "required": True,
             "helpMessage": "GCP Project ID",
         },
         {
-            "name": "Service Account Name",
-            "type": "str",
+            "name": "authenticationMethod",
+            "type": "select",
             "required": True,
-            "helpMessage": "GCP Service Account Name",
-        },
-        {
-            "name": "Use Vault",
-            "type": "bool",
-            "required": True,
-            "helpMessage": "using vault for authentication?",
+            "available": ["vault", "serviceAccountToken"],
+            "helpMessage": "Authentication method to use",
             "default": False,
         },
+        {
+            "name": "vaultMountPoint",
+            "type": "str",
+            "required": False,
+            "helpMessage": "Path to vault secret",
+        },
+        {
+            "name": "serviceAccountTokenPath",
+            "type": "str",
+            "required": False,
+            "helpMessage": "Path to vault secret",
+        }
     ]
 
     def upload(self, name, body, private_key, cert_chain, options, **kwargs):
@@ -57,7 +64,7 @@ class GCPDestinationPlugin(DestinationPlugin):
             }
             credentials = self._get_gcp_credentials(options)
             return self._insert_gcp_certificate(
-                self.get_option("accountName", options),
+                self.get_option("AccountId", options),
                 ssl_certificate_body,
                 credentials,
             )
@@ -76,22 +83,23 @@ class GCPDestinationPlugin(DestinationPlugin):
 
     def _get_gcp_credentials(self, options):
 
-        if self.get_option('Use Vault', options) is True:
+        if self.get_option('authenticationMethod', options) == "vault":
             # make a request to vault for GCP token
             return self._get_gcp_credentials_from_vault(options)
-        elif current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS") is not None:
-            return service_account.Credentials.from_service_account_file(
-                current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS")
-            )
-        else:
-            raise Exception("No supported way to authenticate with GCP")
+        elif self.get_option('authenticationMethod', options) == "serviceAccountToken":
+            if current_app.config.get(f"{self.get_option('serviceAccountTokenPath', options)}") is not None:
+                return service_account.Credentials.from_service_account_file(
+                    current_app.config.get(f"{self.get_option('serviceAccountTokenPath', options)}")
+                )
+
+        raise Exception("No supported way to authenticate with GCP")
 
     def _get_gcp_credentials_from_vault(self, options):
         service_token = hvac.Client(os.environ['VAULT_ADDR']) \
             .secrets.gcp \
             .generate_oauth2_access_token(
             roleset="",
-            mount_point=f"cloud-iam/gcp/{self.get_option('Account Id', options)}/impersonated-account/{self.get_option('Service Account Name', options)}"
+            mount_point=f"{self.get_option('vaultMountPoint', options)}"
         )["data"]["token"].rstrip(".")
         credentials, _ = google.auth.default()  # Fetch the default credentials from Emissary Native IAM
         credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault
