@@ -55,15 +55,22 @@ SUCCESS_INSERT_RESPONSE = {
     'startTime': '2022-08-22T16:44:32.231-07:00',
 }
 
-options = [{
-    'name': 'projectID',
-    'type': 'str',
-    'required': True,
-    'value': 'lemur-test'
-}]
+options = [
+    {
+        'name': 'projectID',
+        'type': 'str',
+        'required': True,
+        'value': 'lemur-test'
+    },
+    {
+        'name': 'authenticationMethod',
+        'type': 'str',
+        'required': True,
+        'value': 'vault',
+    }]
 
 
-@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin.get_option", return_value="test-account")
+@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin.get_option", return_value="lemur-test")
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials", return_value=token)
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate", return_value=SUCCESS_INSERT_RESPONSE)
 def test_upload(mock_sslCertificates, mock_credentials, mock_gcp_acount_id):
@@ -75,15 +82,22 @@ def test_upload(mock_sslCertificates, mock_credentials, mock_gcp_acount_id):
         cert_chain,
         options) == SUCCESS_INSERT_RESPONSE
 
+    ssl_certificate_body = {
+        "name": name,
+        "certificate": body,
+        "description": "",
+        "private_key": private_key,
+    }
+
+    # assert our mocks are being called with the params we expect
+    mock_sslCertificates.assert_called_with('lemur-test', ssl_certificate_body, token)
+    mock_credentials.assert_called_with(options)
+    mock_gcp_acount_id.get_option(options)
+
 
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials_from_vault", return_value="ya29.c.b0AXv0zTN36HtXN2cJolg9tAj0vGAOT29FF-WNxQzvPu")
 def test_get_gcp_credentials(mock_get_gcp_credentials_from_vault):
 
-    options = [{
-        'name': 'authenticationMethod',
-        'type': 'str',
-        'required': True,
-        'value': 'vault',
-    }]
-
     assert GCPDestinationPlugin()._get_gcp_credentials(options) == token
+
+    mock_get_gcp_credentials_from_vault.assert_called_with(options)
