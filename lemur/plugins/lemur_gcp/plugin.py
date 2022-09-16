@@ -19,7 +19,7 @@ class GCPDestinationPlugin(DestinationPlugin):
 
     options = [
         {
-            "name": "accountId",
+            "name": "projectID",
             "type": "str",
             "required": True,
             "helpMessage": "GCP Project ID",
@@ -30,7 +30,6 @@ class GCPDestinationPlugin(DestinationPlugin):
             "required": True,
             "available": ["vault", "serviceAccountToken"],
             "helpMessage": "Authentication method to use",
-            "default": False,
         },
         {
             "name": "vaultMountPoint",
@@ -64,7 +63,7 @@ class GCPDestinationPlugin(DestinationPlugin):
             }
             credentials = self._get_gcp_credentials(options)
             return self._insert_gcp_certificate(
-                self.get_option("AccountId", options),
+                self.get_option("projectID", options),
                 ssl_certificate_body,
                 credentials,
             )

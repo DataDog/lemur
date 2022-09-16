@@ -56,7 +56,7 @@ SUCCESS_INSERT_RESPONSE = {
 }
 
 options = [{
-    'name': 'accountName',
+    'name': 'projectID',
     'type': 'str',
     'required': True,
     'value': 'lemur-test'
@@ -77,7 +77,7 @@ def test_upload(mock_sslCertificates, mock_credentials, mock_gcp_acount_id):
 
 
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials_from_vault", return_value="ya29.c.b0AXv0zTN36HtXN2cJolg9tAj0vGAOT29FF-WNxQzvPu")
-def test_get_gcp_credentials__from_vault(mock__get_gcp_credentials_from_vault):
+def test_get_gcp_credentials(mock_get_gcp_credentials_from_vault):
 
     options = [{
         'name': 'authenticationMethod',
