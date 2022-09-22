@@ -81,14 +81,13 @@ class GCPDestinationPlugin(DestinationPlugin):
         )
 
     def _get_gcp_credentials(self, options):
-
         if self.get_option('authenticationMethod', options) == "vault":
             # make a request to vault for GCP token
             return self._get_gcp_credentials_from_vault(options)
         elif self.get_option('authenticationMethod', options) == "serviceAccountToken":
-            if current_app.config.get(f"{self.get_option('serviceAccountTokenPath', options)}") is not None:
+            if self.get_option('serviceAccountTokenPath', options) is not None:
                 return service_account.Credentials.from_service_account_file(
-                    current_app.config.get(f"{self.get_option('serviceAccountTokenPath', options)}")
+                    self.get_option('serviceAccountTokenPath', options)
                 )
 
         raise Exception("No supported way to authenticate with GCP")
