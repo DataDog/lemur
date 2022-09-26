@@ -5,9 +5,9 @@ from google.oauth2.credentials import Credentials
 import hvac
 import os
 
-from lemur.common.utils import parse_certificate
+from lemur.common.utils import parse_certificate, split_pem
 from lemur.common.defaults import common_name, issuer, not_before
-from lemur.plugins.bases import DestinationPlugin
+from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
 
 
@@ -126,3 +126,102 @@ class GCPDestinationPlugin(DestinationPlugin):
     def _full_ca(self, body, cert_chain):
         # in GCP you need to assemble the cert body and the cert chain in the same parameter
         return f"{body}\n{cert_chain}"
+
+
+class GCPSourcePlugin(SourcePlugin):
+    title = "GCP"
+    slug = "gcp-source"
+    description = "Discovers all SSL certificates and global external HTTPs loadbalancers (classic)"
+    version = gcp.VERSION
+
+    author = "Henry Wang"
+    author_url = "https://github.com/Datadog/lemur"
+
+    options = [
+        {
+            "name": "projectID",
+            "type": "str",
+            "required": True,
+            "helpMessage": "GCP Project ID",
+        },
+        {
+            "name": "authenticationMethod",
+            "type": "select",
+            "required": True,
+            "available": ["vault", "serviceAccountToken"],
+            "helpMessage": "Authentication method to use",
+        },
+        {
+            "name": "vaultMountPoint",
+            "type": "str",
+            "required": False,
+            "helpMessage": "Path to vault secret",
+        },
+        {
+            "name": "serviceAccountTokenPath",
+            "type": "str",
+            "required": False,
+            "helpMessage": "Path to vault secret",
+        }
+    ]
+
+    def get_certificates(self, options, **kwargs):
+        try:
+            credentials = self._get_gcp_credentials(options)
+            projectID = self.get_option("projectID", options)
+            client = ssl_certificates.SslCertificatesClient(credentials=credentials)
+            pager = client.list(project=projectID)
+            certs = []
+            for i, certMeta in enumerate(pager):
+                try:
+                    chain = [cert for cert in split_pem(certMeta.certificate) if cert]
+                    if len(chain) == 0:
+                        continue
+                    certs.append(dict(
+                        body=chain[0],
+                        chain=chain[1:],
+                        name=certMeta.name,
+                    ))
+                except Exception as e:
+                    current_app.logger.error(
+                        f"Issue with fetching certificate {certMeta.name} from GCP. Action failed with the following "
+                        f"log: {e}",
+                        exc_info=True,
+                    )
+            return certs
+        except Exception as e:
+            current_app.logger.error(
+                f"Issue with fetching certificates from GCP. Action failed with the following log: {e}",
+                exc_info=True,
+            )
+            raise Exception(f"Issue fetching certificates from GCP: {e}")
+
+    def get_endpoints(self, options, **kwargs):
+        raise NotImplementedError
+
+    def clean(self, certificate, options, **kwargs):
+        raise NotImplementedError
+
+    def _get_gcp_credentials(self, options):
+        if self.get_option('authenticationMethod', options) == "vault":
+            # make a request to vault for GCP token
+            return self._get_gcp_credentials_from_vault(options)
+        elif self.get_option('authenticationMethod', options) == "serviceAccountToken":
+            if self.get_option('serviceAccountTokenPath', options) is not None:
+                return service_account.Credentials.from_service_account_file(
+                    self.get_option('serviceAccountTokenPath', options)
+                )
+
+        raise Exception("No supported way to authenticate with GCP")
+
+    def _get_gcp_credentials_from_vault(self, options):
+        service_token = hvac.Client(os.environ['VAULT_ADDR']) \
+            .secrets.gcp \
+            .generate_oauth2_access_token(
+            roleset="",
+            mount_point=f"{self.get_option('vaultMountPoint', options)}"
+        )["data"]["token"].rstrip(".")
+        credentials, _ = google.auth.default()  # Fetch the default credentials from Emissary Native IAM
+        credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault
+
+        return credentials
