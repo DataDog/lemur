@@ -10,9 +10,13 @@ When setting up the new destination in the lemur console set the "using vault" v
 Then enter the path to your secret credentials. Lemur will use this token to authenticate API requests.
 
 #### Authentication by Service Account Credentials
-In the GCP console generate a new set of Service Account Credentials. Store those on your server and then
-set the `PATH_TO_GOOGLE_APPLICATION_CREDENTIALS` env variable in the lemur.conf file to point to where that key is stored.
-ex:
-```commandline
-PATH_TO_GOOGLE_APPLICATION_CREDENTIALS = '/tmp/authentication.json'
-```
+In the GCP console generate a new set of Service Account Credentials. Store the json token on your server. Go to ADMIN > DESTINATIONS > CREATE, choose GCP as the plugin and "Service Account Token" for the "Authentication Method".
+In the field labeled "Service Account Token Path" enter in the path to where you copied your auth json. eg: `/tmp/authentication.json`.
+
+
+#### Testing Destination plugin locally
+1. In the GCP console create a [service account](https://cloud.google.com/iam/docs/service-accounts) with the proper permissions for uploading a certificate. 
+2. Create a key associated with the account that was created from step 1. Save the JSON key file locally and copy it into your local Lemur Dockerfile.
+   1. ```COPY {path to key}/authentication.json /tmp/authentication.json```
+3. Start your docker container and login to the lemur console. Go to ADMIN > DESTINATIONS > CREATE, choose GCP as the plugin and "Service Account Token" for the "Authentication Method".
+In the field labeled "Service Account Token Path" enter in the path to where you copied your auth json. eg: `/tmp/authentication.json`.
