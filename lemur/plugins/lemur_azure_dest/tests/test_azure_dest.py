@@ -126,8 +126,13 @@ class TestAzureDestination(unittest.TestCase):
         body = test_server_cert
         private_key = test_server_key
         cert_chain = test_ca_cert
-        options = [{'name': 'vaultUrl', 'value': 'https://couldbeanyvalue.com'}, {'name': 'azureTenant', 'value': 'mockedTenant'},
-                {'name': 'appID', 'value': 'mockedAPPid'}, {'name': 'azurePassword', 'value': 'norealPW'}]
+        options = [
+            {'name': 'azureKeyVaultUrl', 'value': 'https://couldbeanyvalue.com'},
+            {'name': 'azureTenant', 'value': 'mockedTenant'},
+            {'name': 'azureAppID', 'value': 'mockedAPPid'},
+            {'name': 'azurePassword', 'value': 'norealPW'},
+            {'name': 'authenticationMethod', 'value': 'azureApp'}
+        ]
 
         # commented lines: another unsuccessful try
         # return value for HTTP post - we won't access Azure
