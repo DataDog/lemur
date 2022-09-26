@@ -99,7 +99,7 @@ class GCPDestinationPlugin(DestinationPlugin):
             roleset="",
             mount_point=f"{self.get_option('vaultMountPoint', options)}"
         )["data"]["token"].rstrip(".")
-        credentials, _ = google.auth.default()  # Fetch the default credentials from Emissary Native IAM
+        credentials, _ = google.auth.default()  #Fetch credentials from Vault GCP secrets engine
         credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault
 
         return credentials
