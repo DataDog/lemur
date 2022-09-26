@@ -73,7 +73,7 @@ options = [
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin.get_option", return_value="lemur-test")
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials", return_value=token)
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate", return_value=SUCCESS_INSERT_RESPONSE)
-def test_upload(mock_sslCertificates, mock_credentials, mock_gcp_acount_id):
+def test_upload(mock_ssl_certificates, mock_credentials, mock_gcp_account_id):
 
     assert GCPDestinationPlugin().upload(
         name,
@@ -90,9 +90,9 @@ def test_upload(mock_sslCertificates, mock_credentials, mock_gcp_acount_id):
     }
 
     # assert our mocks are being called with the params we expect
-    mock_sslCertificates.assert_called_with('lemur-test', ssl_certificate_body, token)
+    mock_ssl_certificates.assert_called_with('lemur-test', ssl_certificate_body, token)
     mock_credentials.assert_called_with(options)
-    mock_gcp_acount_id.get_option(options)
+    mock_gcp_account_id.get_option(options)
 
 
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials_from_vault", return_value="ya29.c.b0AXv0zTN36HtXN2cJolg9tAj0vGAOT29FF-WNxQzvPu")
