@@ -175,8 +175,10 @@ class GCPSourcePlugin(SourcePlugin):
             certs = []
             for i, certMeta in enumerate(pager):
                 try:
+                    if certMeta.type_ != "SELF_MANAGED":
+                        continue
                     chain = [cert for cert in split_pem(certMeta.certificate) if cert]
-                    if len(chain) == 0:
+                    if len(chain) <= 1:
                         continue
                     certs.append(dict(
                         body=chain[0],
@@ -241,7 +243,6 @@ class GCPSourcePlugin(SourcePlugin):
                         ssl_policy=get_name_from_self_link(target_proxy.ssl_policy))
                     endpoint["policy"] = format_ssl_policy(policy)
                 endpoints.append(endpoint)
-            print('endpoints=', endpoints)
             return endpoints
         except Exception as e:
             current_app.logger.error(
