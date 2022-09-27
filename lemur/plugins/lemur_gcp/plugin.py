@@ -5,6 +5,8 @@ import google.auth
 import hvac
 import os
 
+from lemur.common.utils import parse_certificate
+from lemur.common.defaults import common_name, issuer, not_before
 from lemur.plugins.bases import DestinationPlugin
 from lemur.plugins import lemur_gcp as gcp
 
@@ -56,7 +58,7 @@ class GCPDestinationPlugin(DestinationPlugin):
 
         try:
             ssl_certificate_body = {
-                "name": name,
+                "name": self._gcp_name(body),
                 "certificate": body,
                 "description": "",
                 "private_key": private_key,
@@ -103,3 +105,13 @@ class GCPDestinationPlugin(DestinationPlugin):
         credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault
 
         return credentials
+
+    def _gcp_name(self, body):
+        cert = parse_certificate(body)
+        cn = common_name(cert)
+        authority = issuer(cert)
+        issued_on = not_before(cert).date()
+        # we need to replace any '.' or '*' chars to comply with GCP naming
+        gcp_name = f"ssl-{cn}-{authority}-{issued_on}".replace('.', '-').replace('*', "star")
+
+        return gcp_name

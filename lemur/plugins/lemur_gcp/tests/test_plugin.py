@@ -1,21 +1,21 @@
 from unittest import mock
 from lemur.plugins.lemur_gcp.plugin import GCPDestinationPlugin
 
-name = "blah-localhost.com-localhost-20220830-20230830"
+name = "ssl-test-localhost-com-localhost-2022-08-30"
 token = "ya29.c.b0AXv0zTN36HtXN2cJolg9tAj0vGAOT29FF-WNxQzvPu"
 body = """
 -----BEGIN CERTIFICATE-----
-MIIB8TCCAZagAwIBAgIRAKyLS3e0aky5ru4i8k/fWC8wCgYIKoZIzj0EAwIwYjES
+MIIB7zCCAZagAwIBAgIRAILPQ22P50KYnufSOcyC3xgwCgYIKoZIzj0EAwIwYjES
 MBAGA1UEAwwJbG9jYWxob3N0MRYwFAYDVQQKDA1FeGFtcGxlLCBJbmMuMQswCQYD
 VQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTESMBAGA1UEBwwJTG9zIEdhdG9z
-MB4XDTIyMDgzMDE5MzM0MloXDTIzMDgzMDE5MzM0MlowazEbMBkGA1UEAwwSYmxh
-aEBsb2NhbGhvc3QuY29tMRYwFAYDVQQKDA1FeGFtcGxlLCBJbmMuMQswCQYDVQQG
+MB4XDTIyMDgzMDE2MzkwN1oXDTIzMDgzMDE2MzkwN1owazEbMBkGA1UEAwwSdGVz
+dC5sb2NhbGhvc3QuY29tMRYwFAYDVQQKDA1FeGFtcGxlLCBJbmMuMQswCQYDVQQG
 EwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTESMBAGA1UEBwwJTG9zIEdhdG9zMFkw
-EwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEVHkf6rYbpV1M7bPMFSbNxC6iHWm0HdvL
-baHIjh6FD9O4asxa5TOs8Z8Lbg3hTUgFamznF34J3oYfEjgTxEO40aMkMCIwIAYD
-VR0RAQH/BBYwFIISYmxhaEBsb2NhbGhvc3QuY29tMAoGCCqGSM49BAMCA0kAMEYC
-IQDLz0FkXEkKyGXfkO0XQ6HwF0Tw+QirLNQDgrErZWmzbQIhAOiNDLODpdPzf+Aj
-fQ6tr8edUIDueTN/LEqoDMlUX9up
+EwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4FP/xJlvy7jDFRbElv7opDMFF0Tw7jSr
+S03Nyh8//spXeNPIvu49uknYsJiMtC19OW8GsH4FXxAMarmLsuUaraMkMCIwIAYD
+VR0RAQH/BBYwFIISdGVzdC5sb2NhbGhvc3QuY29tMAoGCCqGSM49BAMCA0cAMEQC
+IHDfzhvpCm37SjMbJUY0hbAs+hXYIayNjCZaOvl5gQUEAiAuZ93rbdEZ69Tzd/iN
+I/Wm13nhSNDgVeEWbr3BP1ZacQ==
 -----END CERTIFICATE-----
 """
 private_key = """
@@ -101,3 +101,7 @@ def test_get_gcp_credentials(mock_get_gcp_credentials_from_vault):
     assert GCPDestinationPlugin()._get_gcp_credentials(options) == token
 
     mock_get_gcp_credentials_from_vault.assert_called_with(options)
+
+
+def test_gcp_name():
+    assert GCPDestinationPlugin()._gcp_name(body) == 'ssl-test-localhost-com-localhost-2022-08-30'
