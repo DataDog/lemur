@@ -98,8 +98,8 @@ def get_oauth_credentials_from_hashicorp_vault(mount_point, role_name):
         - client_id - OAuth client ID
         - client_secret - OAuth client secret
     """
-    client = hvac.Client(os.environ["VAULT_ADDR"])
-    creds = client.secrets.azure.secret.generate_credentials(
+    client = hvac.Client(url=os.environ["VAULT_ADDR"])
+    creds = client.secrets.azure.generate_credentials(
         mount_point=mount_point,
         name=role_name,
     )
