@@ -48,13 +48,6 @@ class GCPDestinationPlugin(DestinationPlugin):
     ]
 
     def upload(self, name, body, private_key, cert_chain, options, **kwargs):
-        """
-        Args:
-        certificate_file: path to the file with the certificate you want to create in your project.
-        private_key_file: path to the private key you used to sign the certificate with.
-        certificate_name: name for the certificate once it's created in your project.
-
-        """
 
         try:
             ssl_certificate_body = {
@@ -107,6 +100,10 @@ class GCPDestinationPlugin(DestinationPlugin):
         return credentials
 
     def _gcp_name(self, body):
+        """
+        We need to change the name of the certificate that we are uploading to comply with GCP naming standards.
+        The cert name will follow the convention "ssl-{Cert CN}-{Date Issued}-{Issuer}"
+        """
         cert = parse_certificate(body)
         cn = common_name(cert)
         authority = issuer(cert)
