@@ -1,5 +1,6 @@
 from flask import current_app
-from google.cloud.compute_v1.services import ssl_certificates
+from google.cloud.compute_v1.services import ssl_certificates, target_https_proxies, global_forwarding_rules, \
+    ssl_policies
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 import hvac
@@ -131,7 +132,7 @@ class GCPDestinationPlugin(DestinationPlugin):
 class GCPSourcePlugin(SourcePlugin):
     title = "GCP"
     slug = "gcp-source"
-    description = "Discovers all SSL certificates and global external HTTPs loadbalancers (classic)"
+    description = "Discovers all SSL certificates and HTTPs target proxies (global)"
     version = gcp.VERSION
 
     author = "Henry Wang"
@@ -197,7 +198,57 @@ class GCPSourcePlugin(SourcePlugin):
             raise Exception(f"Issue fetching certificates from GCP: {e}")
 
     def get_endpoints(self, options, **kwargs):
-        raise NotImplementedError
+        try:
+            credentials = self._get_gcp_credentials(options)
+            projectID = self.get_option("projectID", options)
+            forwarding_rules_client = global_forwarding_rules.GlobalForwardingRulesClient(credentials=credentials)
+            forwarding_rules_map = {}
+            for rule in forwarding_rules_client.list(project=projectID):
+                forwarding_rules_map[rule.target] = rule
+            proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
+            ssl_policies_client = ssl_policies.SslPoliciesClient(credentials=credentials)
+            ssl_client = ssl_certificates.SslCertificatesClient(credentials=credentials)
+            pager = proxies_client.list(project=projectID)
+            endpoints = []
+            for i, target_proxy in enumerate(pager):
+                if len(target_proxy.ssl_certificates) == 0:
+                    continue
+                fw_rule = forwarding_rules_map.get(target_proxy.self_link, None)
+                if not fw_rule:
+                    continue
+                # The first certificate is the primary
+                ssl_cert_name = get_name_from_self_link(target_proxy.ssl_certificates[0])
+                cert = ssl_client.get(project=projectID, ssl_certificate=ssl_cert_name)
+                primary_certificate = dict(
+                    name=cert.name,
+                    registry_type="targethttpsproxy",
+                    path="",
+                )
+                endpoint = dict(
+                    name=target_proxy.name,
+                    type="targethttpsproxy",
+                    primary_certificate=primary_certificate,
+                    dnsname=fw_rule.I_p_address,
+                    port=443,
+                    policy=dict(
+                        name="",
+                        ciphers=[],
+                    ),
+                )
+                if target_proxy.ssl_policy:
+                    policy = ssl_policies_client.get(
+                        project=projectID,
+                        ssl_policy=get_name_from_self_link(target_proxy.ssl_policy))
+                    endpoint["policy"] = format_ssl_policy(policy)
+                endpoints.append(endpoint)
+            print('endpoints=', endpoints)
+            return endpoints
+        except Exception as e:
+            current_app.logger.error(
+                f"Issue with fetching endpoints from GCP. Action failed with the following log: {e}",
+                exc_info=True,
+            )
+            raise Exception(f"Issue fetching endpoints from GCP: {e}")
 
     def clean(self, certificate, options, **kwargs):
         raise NotImplementedError
@@ -225,3 +276,18 @@ class GCPSourcePlugin(SourcePlugin):
         credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault
 
         return credentials
+
+
+def get_name_from_self_link(self_link):
+    return self_link.split('/')[-1]
+
+
+def format_ssl_policy(policy):
+    """
+    Format cipher policy information for an HTTPs target proxy into a common format.
+    :param policy:
+    :return:
+    """
+    if not policy:
+        return dict(name='', ciphers=[])
+    return dict(name=policy.name, ciphers=[cipher for cipher in policy.enabled_features])
