@@ -358,6 +358,7 @@ class AWSSourcePlugin(SourcePlugin):
                 except Exception as e:  # noqa
                     capture_exception()
                     continue
+        current_app.logger.info(endpoints)
         return endpoints
 
     def get_distributions(self, options, **kwargs):
