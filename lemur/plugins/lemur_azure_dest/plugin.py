@@ -17,6 +17,7 @@ from lemur.plugins.bases import DestinationPlugin
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
+from retrying import retry
 import requests
 import json
 import sys
@@ -60,6 +61,7 @@ def handle_response(my_response):
         return data
 
 
+@retry(wait_fixed=1000, stop_max_delay=600000)
 def get_access_token(tenant, client_id, client_secret, self):
     """
     Gets the access token for the client_id and the client_secret and returns it
@@ -198,6 +200,10 @@ class AzureDestinationPlugin(DestinationPlugin):
             mount_point = self.get_option("hashicorpVaultMountPoint", options)
             role_name = self.get_option("hashicorpVaultRoleName", options)
             client_id, client_secret = get_oauth_credentials_from_hashicorp_vault(mount_point, role_name)
+
+            # It may take up-to 10 minutes for the generated OAuth credentials to become usable due
+            # to AD replication delay. To account for this, the call to get_access_token is continuously
+            # re-tried until it succeeds or 10 minutes elapse.
             access_token = get_access_token(tenant, client_id, client_secret, self)
         elif auth_method == "azureApp":
             access_token = get_access_token(tenant, app_id, password, self)
