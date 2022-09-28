@@ -170,20 +170,24 @@ class GCPSourcePlugin(SourcePlugin):
     def get_certificates(self, options, **kwargs):
         try:
             credentials = self._get_gcp_credentials(options)
-            projectID = self.get_option("projectID", options)
+            project_id = self.get_option("projectID", options)
             client = ssl_certificates.SslCertificatesClient(credentials=credentials)
-            pager = client.list(project=projectID)
+            pager = client.list(project=project_id)
             certs = []
             for i, certMeta in enumerate(pager):
                 try:
                     if certMeta.type_ != "SELF_MANAGED":
                         continue
-                    chain = [cert for cert in split_pem(certMeta.certificate) if cert]
-                    if len(chain) <= 1:
+                    chain = []
+                    # Skip CSR if it's part of the certificate returned by the GCP API.
+                    for cert in split_pem(certMeta.certificate):
+                        if '-----BEGIN CERTIFICATE-----' in cert:
+                            chain.append(cert)
+                    if not chain:
                         continue
                     certs.append(dict(
                         body=chain[0],
-                        chain=chain[1:],
+                        chain="\n".join(chain[1:]),
                         name=certMeta.name,
                     ))
                 except Exception as e:
@@ -203,15 +207,15 @@ class GCPSourcePlugin(SourcePlugin):
     def get_endpoints(self, options, **kwargs):
         try:
             credentials = self._get_gcp_credentials(options)
-            projectID = self.get_option("projectID", options)
+            project_id = self.get_option("projectID", options)
             forwarding_rules_client = global_forwarding_rules.GlobalForwardingRulesClient(credentials=credentials)
             forwarding_rules_map = {}
-            for rule in forwarding_rules_client.list(project=projectID):
+            for rule in forwarding_rules_client.list(project=project_id):
                 forwarding_rules_map[rule.target] = rule
             proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
             ssl_policies_client = ssl_policies.SslPoliciesClient(credentials=credentials)
             ssl_client = ssl_certificates.SslCertificatesClient(credentials=credentials)
-            pager = proxies_client.list(project=projectID)
+            pager = proxies_client.list(project=project_id)
             endpoints = []
             for i, target_proxy in enumerate(pager):
                 if len(target_proxy.ssl_certificates) == 0:
@@ -221,7 +225,7 @@ class GCPSourcePlugin(SourcePlugin):
                     continue
                 # The first certificate is the primary
                 ssl_cert_name = get_name_from_self_link(target_proxy.ssl_certificates[0])
-                cert = ssl_client.get(project=projectID, ssl_certificate=ssl_cert_name)
+                cert = ssl_client.get(project=project_id, ssl_certificate=ssl_cert_name)
                 primary_certificate = dict(
                     name=cert.name,
                     registry_type="targethttpsproxy",
@@ -240,7 +244,7 @@ class GCPSourcePlugin(SourcePlugin):
                 )
                 if target_proxy.ssl_policy:
                     policy = ssl_policies_client.get(
-                        project=projectID,
+                        project=project_id,
                         ssl_policy=get_name_from_self_link(target_proxy.ssl_policy))
                     endpoint["policy"] = format_ssl_policy(policy)
                 endpoints.append(endpoint)
@@ -257,10 +261,10 @@ class GCPSourcePlugin(SourcePlugin):
         print('certificate=', certificate)
         options = endpoint.source.options
         credentials = self._get_gcp_credentials(options)
-        projectID = self.get_option("projectID", options)
+        project_id = self.get_option("projectID", options)
         proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
         proxy = proxies_client.get(
-            project=projectID,
+            project=project_id,
             target_https_proxy=endpoint.source.name,
         )
         if len(proxy.ssl_certificates) > 1:
@@ -268,8 +272,10 @@ class GCPSourcePlugin(SourcePlugin):
             return
         ssl_certs = proxy.ssl_certificates
         print('ssl_certs=', ssl_certs)
+        if ssl_certs:
+            return
         proxies_client.set_ssl_certificates(
-            project=projectID,
+            project=project_id,
             target_https_proxy=proxy.name,
             target_https_proxies_set_ssl_certificates_request_resource=TargetHttpsProxiesSetSslCertificatesRequest(
                 ssl_certificates=[certificate]
