@@ -119,5 +119,6 @@ class GCPDestinationPlugin(DestinationPlugin):
         gcp_name = gcp_name.replace('*', "star")
         gcp_name = gcp_name.lower()
         gcp_name = gcp_name[:63]
+        gcp_name = gcp_name.rstrip('.*-')
 
         return gcp_name
