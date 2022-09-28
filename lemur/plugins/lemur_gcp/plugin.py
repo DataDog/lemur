@@ -1,6 +1,7 @@
 from flask import current_app
 from google.cloud.compute_v1.services import ssl_certificates, target_https_proxies, global_forwarding_rules, \
     ssl_policies
+from google.cloud.compute_v1 import TargetHttpsProxiesSetSslCertificatesRequest
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 import hvac
@@ -250,6 +251,30 @@ class GCPSourcePlugin(SourcePlugin):
                 exc_info=True,
             )
             raise Exception(f"Issue fetching endpoints from GCP: {e}")
+
+    def update_endpoint(self, endpoint, certificate):
+        print('endpoint=', endpoint)
+        print('certificate=', certificate)
+        options = endpoint.source.options
+        credentials = self._get_gcp_credentials(options)
+        projectID = self.get_option("projectID", options)
+        proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
+        proxy = proxies_client.get(
+            project=projectID,
+            target_https_proxy=endpoint.source.name,
+        )
+        if len(proxy.ssl_certificates) > 1:
+            current_app.logger.warning("Skipping endpoint which has multiple SSL certificates")
+            return
+        ssl_certs = proxy.ssl_certificates
+        print('ssl_certs=', ssl_certs)
+        proxies_client.set_ssl_certificates(
+            project=projectID,
+            target_https_proxy=proxy.name,
+            target_https_proxies_set_ssl_certificates_request_resource=TargetHttpsProxiesSetSslCertificatesRequest(
+                ssl_certificates=[certificate]
+            ),
+        )
 
     def clean(self, certificate, options, **kwargs):
         raise NotImplementedError
