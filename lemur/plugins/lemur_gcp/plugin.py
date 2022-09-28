@@ -174,13 +174,13 @@ class GCPSourcePlugin(SourcePlugin):
             client = ssl_certificates.SslCertificatesClient(credentials=credentials)
             pager = client.list(project=project_id)
             certs = []
-            for i, certMeta in enumerate(pager):
+            for cert_meta in pager:
                 try:
-                    if certMeta.type_ != "SELF_MANAGED":
+                    if cert_meta.type_ != "SELF_MANAGED":
                         continue
                     chain = []
                     # Skip CSR if it's part of the certificate returned by the GCP API.
-                    for cert in split_pem(certMeta.certificate):
+                    for cert in split_pem(cert_meta.certificate):
                         if '-----BEGIN CERTIFICATE-----' in cert:
                             chain.append(cert)
                     if not chain:
@@ -188,11 +188,11 @@ class GCPSourcePlugin(SourcePlugin):
                     certs.append(dict(
                         body=chain[0],
                         chain="\n".join(chain[1:]),
-                        name=certMeta.name,
+                        name=cert_meta.name,
                     ))
                 except Exception as e:
                     current_app.logger.error(
-                        f"Issue with fetching certificate {certMeta.name} from GCP. Action failed with the following "
+                        f"Issue with fetching certificate {cert_meta.name} from GCP. Action failed with the following "
                         f"log: {e}",
                         exc_info=True,
                     )
@@ -204,14 +204,42 @@ class GCPSourcePlugin(SourcePlugin):
             )
             raise Exception(f"Issue fetching certificates from GCP: {e}")
 
+    def get_certificate_by_name(self, certificate_name, options):
+        try:
+            credentials = self._get_gcp_credentials(options)
+            project_id = self.get_option("projectID", options)
+            client = ssl_certificates.SslCertificatesClient(credentials=credentials)
+            cert_meta = client.get(project=project_id, ssl_certificate=certificate_name)
+            if cert_meta:
+                chain = []
+                # Skip CSR if it's part of the certificate returned by the GCP API.
+                for cert in split_pem(cert_meta.certificate):
+                    if '-----BEGIN CERTIFICATE-----' in cert:
+                        chain.append(cert)
+                return dict(
+                    body=chain[0],
+                    chain="\n".join(chain[1:]),
+                    name=cert_meta.name,
+                )
+            return None
+        except Exception as e:
+            current_app.logger.error(
+                f"Issue with fetching certificate by name from GCP. Action failed with the following log: {e}",
+                exc_info=True,
+            )
+            raise Exception(f"Issue fetching certificate from GCP: {e}")
+
     def get_endpoints(self, options, **kwargs):
         try:
             credentials = self._get_gcp_credentials(options)
             project_id = self.get_option("projectID", options)
             forwarding_rules_client = global_forwarding_rules.GlobalForwardingRulesClient(credentials=credentials)
-            forwarding_rules_map = {}
+            forwarding_rules_map = defaultdict(list)
+            # Multiple forwarding rules can reference the same target proxy
+            # Construct a mapping of targets -> list of forwarding rules that use the target
             for rule in forwarding_rules_client.list(project=project_id):
-                forwarding_rules_map[rule.target] = rule
+                forwarding_rules_map[rule.target].append(rule)
+            print('map=', forwarding_rules_map)
             proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
             ssl_policies_client = ssl_policies.SslPoliciesClient(credentials=credentials)
             ssl_client = ssl_certificates.SslCertificatesClient(credentials=credentials)
@@ -220,10 +248,11 @@ class GCPSourcePlugin(SourcePlugin):
             for i, target_proxy in enumerate(pager):
                 if len(target_proxy.ssl_certificates) == 0:
                     continue
-                fw_rule = forwarding_rules_map.get(target_proxy.self_link, None)
-                if not fw_rule:
+                fw_rules = forwarding_rules_map.get(target_proxy.self_link, None)
+                if not fw_rules:
                     continue
-                # The first certificate is the primary
+                # The first certificate is the primary.
+                # See https://cloud.google.com/sdk/gcloud/reference/compute/target-https-proxies/update
                 ssl_cert_name = get_name_from_self_link(target_proxy.ssl_certificates[0])
                 cert = ssl_client.get(project=project_id, ssl_certificate=ssl_cert_name)
                 primary_certificate = dict(
@@ -231,17 +260,20 @@ class GCPSourcePlugin(SourcePlugin):
                     registry_type="targethttpsproxy",
                     path="",
                 )
+                fw_rule_ips = sorted([fw_rule.I_p_address for fw_rule in fw_rules])
                 endpoint = dict(
                     name=target_proxy.name,
                     type="targethttpsproxy",
                     primary_certificate=primary_certificate,
-                    dnsname=fw_rule.I_p_address,
+                    dnsname=fw_rule_ips[0],
                     port=443,
                     policy=dict(
                         name="",
                         ciphers=[],
                     ),
                 )
+                if len(fw_rule_ips) > 1:
+                    endpoint["aliases"] = fw_rule_ips[1:]
                 if target_proxy.ssl_policy:
                     policy = ssl_policies_client.get(
                         project=project_id,
@@ -304,11 +336,10 @@ class GCPSourcePlugin(SourcePlugin):
             roleset="",
             mount_point=f"{self.get_option('vaultMountPoint', options)}"
         )["data"]["token"].rstrip(".")
-        credentials, _ = google.auth.default()  # Fetch the default credentials from Emissary Native IAM
-        credentials.token = service_token  # replace the token from Native IAM with the Dataproc token fetched from Vault
+
+        credentials = Credentials(service_token)
 
         return credentials
-
 
 def get_name_from_self_link(self_link):
     return self_link.split('/')[-1]
