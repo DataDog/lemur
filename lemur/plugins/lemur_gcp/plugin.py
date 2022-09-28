@@ -51,7 +51,7 @@ class GCPDestinationPlugin(DestinationPlugin):
 
         try:
             ssl_certificate_body = {
-                "name": self._gcp_name(body),
+                "name": self._certificate_name(body),
                 "certificate": body,
                 "description": "",
                 "private_key": private_key,
@@ -99,7 +99,7 @@ class GCPDestinationPlugin(DestinationPlugin):
 
         return credentials
 
-    def _gcp_name(self, body):
+    def _certificate_name(self, body):
         """
         We need to change the name of the certificate that we are uploading to comply with GCP naming standards.
         The cert name will follow the convention "ssl-{Cert CN}-{Date Issued}-{Issuer}"
@@ -108,7 +108,16 @@ class GCPDestinationPlugin(DestinationPlugin):
         cn = common_name(cert)
         authority = issuer(cert)
         issued_on = not_before(cert).date()
-        # we need to replace any '.' or '*' chars to comply with GCP naming
-        gcp_name = f"ssl-{cn}-{authority}-{issued_on}".replace('.', '-').replace('*', "star")
+
+        cert_name = f"ssl-{cn}-{authority}-{issued_on}"
+
+        return self._modify_cert_name_for_gcp(cert_name)
+
+    def _modify_cert_name_for_gcp(self, cert_name):
+        # Modify the cert name to comply with GCP naming convention
+        gcp_name = cert_name.replace('.', '-')
+        gcp_name = gcp_name.replace('*', "star")
+        gcp_name = gcp_name.lower()
+        gcp_name = gcp_name[:63]
 
         return gcp_name
