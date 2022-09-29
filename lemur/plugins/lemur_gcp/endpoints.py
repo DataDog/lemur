@@ -94,14 +94,16 @@ def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
         proxy = client.get(project=project_id, target_https_proxy=endpoint.name)
         if len(proxy.ssl_certificates) > 1:
             raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
-        req = TargetHttpsProxiesSetSslCertificatesRequest(ssl_certificates=[certificate.name])
+        req = TargetHttpsProxiesSetSslCertificatesRequest()
+        req.ssl_certificates = [certificate.name]
         print("req=", req)
     elif kind == "targetsslproxy":
         client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_ssl_proxy=endpoint.name)
         if len(proxy.ssl_certificates) > 1:
             raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
-        req = TargetSslProxiesSetSslCertificatesRequest(ssl_certificates=[certificate.name])
+        req = TargetSslProxiesSetSslCertificatesRequest()
+        req.ssl_certificates = [certificate.name]
         print("req=", req)
         print('endpoint=', endpoint)
         print('endpoint dict=', endpoint.__dict__)
