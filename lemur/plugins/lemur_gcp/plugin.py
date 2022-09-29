@@ -245,10 +245,16 @@ class GCPSourcePlugin(SourcePlugin):
 
     def update_endpoint(self, endpoint, certificate):
         print('endpoint=', endpoint)
+        print('endpoint dict=', endpoint.__dict__)
         print('certificate=', certificate)
+        print('type of endpoint=', type(endpoint))
+        print('type of cert=', type(certificate))
         options = endpoint.source.options
+        print('options=', options)
         credentials = self._get_gcp_credentials(options)
         project_id = self.get_option("projectID", options)
+        if endpoint:
+            return
         proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
         proxy = proxies_client.get(
             project=project_id,
