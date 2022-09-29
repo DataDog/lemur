@@ -1,6 +1,5 @@
 from flask import current_app
-from google.cloud.compute_v1.services import ssl_certificates, target_https_proxies, global_forwarding_rules, \
-    ssl_policies
+from google.cloud.compute_v1.services import ssl_certificates, target_https_proxies
 from google.cloud.compute_v1 import TargetHttpsProxiesSetSslCertificatesRequest
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
