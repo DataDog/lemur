@@ -341,6 +341,7 @@ class GCPSourcePlugin(SourcePlugin):
 
         return credentials
 
+
 def get_name_from_self_link(self_link):
     return self_link.split('/')[-1]
 
