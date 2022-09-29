@@ -97,6 +97,12 @@ def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
         req = TargetHttpsProxiesSetSslCertificatesRequest()
         req.ssl_certificates = [certificate.name]
         print("req=", req)
+        operation = client.set_ssl_certificates(
+            project=project_id,
+            target_https_proxy=endpoint.name,
+            target_https_proxies_set_ssl_certificates_request_resource=req,
+        )
+        print("result=", operation.result())
     elif kind == "targetsslproxy":
         client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_ssl_proxy=endpoint.name)
@@ -104,33 +110,12 @@ def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
             raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
         req = TargetSslProxiesSetSslCertificatesRequest()
         req.ssl_certificates = [certificate.name]
-        print("req=", req)
-        print('endpoint=', endpoint)
-        print('endpoint dict=', endpoint.__dict__)
-        print('certificate=', certificate)
-        print('type of endpoint=', type(endpoint))
-        print('type of cert=', type(certificate))
-        if endpoint:
-            return
-        proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
-        proxy = proxies_client.get(
+        operation = client.set_ssl_certificates(
             project=project_id,
-            target_https_proxy=endpoint.source.name,
+            target_ssl_proxy=endpoint.name,
+            target_ssl_proxies_set_ssl_certificates_request_resource=req,
         )
-        if len(proxy.ssl_certificates) > 1:
-            # current_app.logger.warning("Skipping endpoint which has multiple SSL certificates")
-            return
-        ssl_certs = proxy.ssl_certificates
-        print('ssl_certs=', ssl_certs)
-        if ssl_certs:
-            return
-        proxies_client.set_ssl_certificates(
-            project=project_id,
-            target_https_proxy=proxy.name,
-            target_https_proxies_set_ssl_certificates_request_resource=TargetHttpsProxiesSetSslCertificatesRequest(
-                ssl_certificates=[certificate]
-            ),
-        )
+        print("result=", operation.result())
 
 
 def fetch_global_forwarding_rules_map(project_id, credentials):
