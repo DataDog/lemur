@@ -9,7 +9,11 @@ from lemur.common.utils import parse_certificate, split_pem
 from lemur.common.defaults import common_name, issuer, not_before
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
+<<<<<<< HEAD
 from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies, update_target_proxy_cert
+=======
+from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies
+>>>>>>> f249e9c6 (Support fetching target ssl proxies as another type of GCP endpoint)
 
 
 class GCPDestinationPlugin(DestinationPlugin):
