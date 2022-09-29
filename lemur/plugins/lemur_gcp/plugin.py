@@ -1,6 +1,5 @@
 from flask import current_app
-from google.cloud.compute_v1.services import ssl_certificates, target_https_proxies
-from google.cloud.compute_v1 import TargetHttpsProxiesSetSslCertificatesRequest
+from google.cloud.compute_v1.services import ssl_certificates
 from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 import hvac
@@ -10,7 +9,7 @@ from lemur.common.utils import parse_certificate, split_pem
 from lemur.common.defaults import common_name, issuer, not_before
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
-from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies
+from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies, update_target_proxy_cert
 
 
 class GCPDestinationPlugin(DestinationPlugin):
@@ -181,7 +180,7 @@ class GCPSourcePlugin(SourcePlugin):
                     chain = []
                     # Skip CSR if it's part of the certificate returned by the GCP API.
                     for cert in split_pem(cert_meta.certificate):
-                        if '-----BEGIN CERTIFICATE-----' in cert:
+                        if "-----BEGIN CERTIFICATE-----" in cert:
                             chain.append(cert)
                     if not chain:
                         continue
@@ -214,7 +213,7 @@ class GCPSourcePlugin(SourcePlugin):
                 chain = []
                 # Skip CSR if it's part of the certificate returned by the GCP API.
                 for cert in split_pem(cert_meta.certificate):
-                    if '-----BEGIN CERTIFICATE-----' in cert:
+                    if "-----BEGIN CERTIFICATE-----" in cert:
                         chain.append(cert)
                 return dict(
                     body=chain[0],
@@ -243,36 +242,10 @@ class GCPSourcePlugin(SourcePlugin):
             raise Exception(f"Issue fetching endpoints from GCP: {e}")
 
     def update_endpoint(self, endpoint, certificate):
-        print('endpoint=', endpoint)
-        print('endpoint dict=', endpoint.__dict__)
-        print('certificate=', certificate)
-        print('type of endpoint=', type(endpoint))
-        print('type of cert=', type(certificate))
         options = endpoint.source.options
-        print('options=', options)
         credentials = self._get_gcp_credentials(options)
         project_id = self.get_option("projectID", options)
-        if endpoint:
-            return
-        proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
-        proxy = proxies_client.get(
-            project=project_id,
-            target_https_proxy=endpoint.source.name,
-        )
-        if len(proxy.ssl_certificates) > 1:
-            current_app.logger.warning("Skipping endpoint which has multiple SSL certificates")
-            return
-        ssl_certs = proxy.ssl_certificates
-        print('ssl_certs=', ssl_certs)
-        if ssl_certs:
-            return
-        proxies_client.set_ssl_certificates(
-            project=project_id,
-            target_https_proxy=proxy.name,
-            target_https_proxies_set_ssl_certificates_request_resource=TargetHttpsProxiesSetSslCertificatesRequest(
-                ssl_certificates=[certificate]
-            ),
-        )
+        update_target_proxy_cert(project_id, credentials, endpoint, certificate)
 
     def clean(self, certificate, options, **kwargs):
         raise NotImplementedError

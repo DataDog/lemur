@@ -1,6 +1,8 @@
 from collections import defaultdict
 from google.cloud.compute_v1.services import ssl_certificates, target_https_proxies, global_forwarding_rules, \
     ssl_policies, target_ssl_proxies
+from google.cloud.compute_v1 import TargetHttpsProxiesSetSslCertificatesRequest, \
+    TargetSslProxiesSetSslCertificatesRequest
 
 
 def fetch_target_proxies(project_id, credentials):
@@ -38,6 +40,9 @@ def get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, 
     :param forwarding_rules_map:
     :return:
     """
+    kind = proxy.kind.split("#")[-1].lower()
+    if kind not in ("targethttpsproxy", "targetsslproxy"):
+        return None
     if len(proxy.ssl_certificates) == 0:
         return None
     fw_rules = forwarding_rules_map.get(proxy.self_link, None)
@@ -47,18 +52,15 @@ def get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, 
     # See https://cloud.google.com/sdk/gcloud/reference/compute/target-https-proxies/update
     ssl_cert_name = get_name_from_self_link(proxy.ssl_certificates[0])
     cert = ssl_client.get(project=project_id, ssl_certificate=ssl_cert_name)
-    kind = proxy.kind.split('#')[-1].lower()
-    if kind not in ('targethttpsproxy', 'targetsslproxy'):
-        return None
     primary_certificate = dict(
         name=cert.name,
-        registry_type=kind,
+        registry_type="gcp",
         path="",
     )
     fw_rule_ingresses = []
     for rule in fw_rules:
         ip = rule.I_p_address
-        port = rule.port_range.split('-')[0]
+        port = rule.port_range.split("-")[0]
         fw_rule_ingresses.append((ip, port))
     fw_rule_ingresses.sort()
     primary_ip, primary_port = fw_rule_ingresses[0][0], fw_rule_ingresses[0][1]
@@ -83,6 +85,52 @@ def get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, 
     return endpoint
 
 
+def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
+    kind = endpoint.type
+    if kind not in ("targethttpsproxy", "targetsslproxy") or endpoint.registry_type != "gcp":
+        raise NotImplementedError()
+    if kind == "targethttpsproxy":
+        client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
+        proxy = client.get(project=project_id, target_https_proxy=endpoint.name)
+        if len(proxy.ssl_certificates) > 1:
+            raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
+        req = TargetHttpsProxiesSetSslCertificatesRequest(ssl_certificates=[certificate.name])
+        print("req=", req)
+    elif kind == "targetsslproxy":
+        client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
+        proxy = client.get(project=project_id, target_ssl_proxy=endpoint.name)
+        if len(proxy.ssl_certificates) > 1:
+            raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
+        req = TargetSslProxiesSetSslCertificatesRequest(ssl_certificates=[certificate.name])
+        print("req=", req)
+        print('endpoint=', endpoint)
+        print('endpoint dict=', endpoint.__dict__)
+        print('certificate=', certificate)
+        print('type of endpoint=', type(endpoint))
+        print('type of cert=', type(certificate))
+        if endpoint:
+            return
+        proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
+        proxy = proxies_client.get(
+            project=project_id,
+            target_https_proxy=endpoint.source.name,
+        )
+        if len(proxy.ssl_certificates) > 1:
+            # current_app.logger.warning("Skipping endpoint which has multiple SSL certificates")
+            return
+        ssl_certs = proxy.ssl_certificates
+        print('ssl_certs=', ssl_certs)
+        if ssl_certs:
+            return
+        proxies_client.set_ssl_certificates(
+            project=project_id,
+            target_https_proxy=proxy.name,
+            target_https_proxies_set_ssl_certificates_request_resource=TargetHttpsProxiesSetSslCertificatesRequest(
+                ssl_certificates=[certificate]
+            ),
+        )
+
+
 def fetch_global_forwarding_rules_map(project_id, credentials):
     """
     Gets the global forwarding rules for the project, keyed by target name.
@@ -105,7 +153,7 @@ def get_name_from_self_link(self_link):
     :param self_link:
     :return:
     """
-    return self_link.split('/')[-1]
+    return self_link.split("/")[-1]
 
 
 def format_ssl_policy(policy):
@@ -115,5 +163,5 @@ def format_ssl_policy(policy):
     :return:
     """
     if not policy:
-        return dict(name='', ciphers=[])
+        return dict(name="", ciphers=[])
     return dict(name=policy.name, ciphers=[cipher for cipher in policy.enabled_features])
