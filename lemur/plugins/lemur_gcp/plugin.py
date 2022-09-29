@@ -1,5 +1,6 @@
 from flask import current_app
 from google.cloud.compute_v1.services import ssl_certificates
+from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
 import hvac
 import os
