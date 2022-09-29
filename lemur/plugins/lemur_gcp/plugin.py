@@ -11,6 +11,7 @@ from lemur.common.utils import parse_certificate, split_pem
 from lemur.common.defaults import common_name, issuer, not_before
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
+from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies
 
 
 class GCPDestinationPlugin(DestinationPlugin):
@@ -133,7 +134,7 @@ class GCPDestinationPlugin(DestinationPlugin):
 class GCPSourcePlugin(SourcePlugin):
     title = "GCP"
     slug = "gcp-source"
-    description = "Discovers all SSL certificates and HTTPs target proxies (global)"
+    description = "Discovers all SSL certificates and HTTPs target proxies (global) / L7 and SSL target proxies / L4"
     version = gcp.VERSION
 
     author = "Henry Wang"
@@ -233,53 +234,7 @@ class GCPSourcePlugin(SourcePlugin):
         try:
             credentials = self._get_gcp_credentials(options)
             project_id = self.get_option("projectID", options)
-            forwarding_rules_client = global_forwarding_rules.GlobalForwardingRulesClient(credentials=credentials)
-            forwarding_rules_map = defaultdict(list)
-            # Multiple forwarding rules can reference the same target proxy
-            # Construct a mapping of targets -> list of forwarding rules that use the target
-            for rule in forwarding_rules_client.list(project=project_id):
-                forwarding_rules_map[rule.target].append(rule)
-            print('map=', forwarding_rules_map)
-            proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
-            ssl_policies_client = ssl_policies.SslPoliciesClient(credentials=credentials)
-            ssl_client = ssl_certificates.SslCertificatesClient(credentials=credentials)
-            pager = proxies_client.list(project=project_id)
-            endpoints = []
-            for i, target_proxy in enumerate(pager):
-                if len(target_proxy.ssl_certificates) == 0:
-                    continue
-                fw_rules = forwarding_rules_map.get(target_proxy.self_link, None)
-                if not fw_rules:
-                    continue
-                # The first certificate is the primary.
-                # See https://cloud.google.com/sdk/gcloud/reference/compute/target-https-proxies/update
-                ssl_cert_name = get_name_from_self_link(target_proxy.ssl_certificates[0])
-                cert = ssl_client.get(project=project_id, ssl_certificate=ssl_cert_name)
-                primary_certificate = dict(
-                    name=cert.name,
-                    registry_type="targethttpsproxy",
-                    path="",
-                )
-                fw_rule_ips = sorted([fw_rule.I_p_address for fw_rule in fw_rules])
-                endpoint = dict(
-                    name=target_proxy.name,
-                    type="targethttpsproxy",
-                    primary_certificate=primary_certificate,
-                    dnsname=fw_rule_ips[0],
-                    port=443,
-                    policy=dict(
-                        name="",
-                        ciphers=[],
-                    ),
-                )
-                if len(fw_rule_ips) > 1:
-                    endpoint["aliases"] = fw_rule_ips[1:]
-                if target_proxy.ssl_policy:
-                    policy = ssl_policies_client.get(
-                        project=project_id,
-                        ssl_policy=get_name_from_self_link(target_proxy.ssl_policy))
-                    endpoint["policy"] = format_ssl_policy(policy)
-                endpoints.append(endpoint)
+            endpoints = fetch_target_proxies(project_id, credentials)
             return endpoints
         except Exception as e:
             current_app.logger.error(
@@ -340,18 +295,3 @@ class GCPSourcePlugin(SourcePlugin):
         credentials = Credentials(service_token)
 
         return credentials
-
-
-def get_name_from_self_link(self_link):
-    return self_link.split('/')[-1]
-
-
-def format_ssl_policy(policy):
-    """
-    Format cipher policy information for an HTTPs target proxy into a common format.
-    :param policy:
-    :return:
-    """
-    if not policy:
-        return dict(name='', ciphers=[])
-    return dict(name=policy.name, ciphers=[cipher for cipher in policy.enabled_features])
