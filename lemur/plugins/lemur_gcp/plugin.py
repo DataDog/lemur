@@ -171,9 +171,8 @@ class GCPSourcePlugin(SourcePlugin):
             credentials = self._get_gcp_credentials(options)
             project_id = self.get_option("projectID", options)
             client = ssl_certificates.SslCertificatesClient(credentials=credentials)
-            pager = client.list(project=project_id)
             certs = []
-            for cert_meta in pager:
+            for cert_meta in client.list(project=project_id):
                 try:
                     if cert_meta.type_ != "SELF_MANAGED":
                         continue

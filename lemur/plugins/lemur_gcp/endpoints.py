@@ -1,6 +1,6 @@
 from collections import defaultdict
-from google.cloud.compute_v1.services import ssl_certificates, target_https_proxies, global_forwarding_rules, \
-    ssl_policies, target_ssl_proxies
+from google.cloud.compute_v1.services import ssl_certificates, ssl_policies, \
+    global_forwarding_rules, target_https_proxies, target_ssl_proxies
 from google.cloud.compute_v1 import TargetHttpsProxiesSetSslCertificatesRequest, \
     TargetSslProxiesSetSslCertificatesRequest
 
