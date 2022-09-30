@@ -1,11 +1,10 @@
 from flask import current_app
 from google.cloud.compute_v1.services import ssl_certificates
 
-from lemur.common.utils import parse_certificate, split_pem
-from lemur.common.defaults import common_name, issuer, not_before
+from lemur.common.utils import split_pem
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
-from lemur.plugins.lemur_gcp import auth
+from lemur.plugins.lemur_gcp import auth, certificates
 from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies, update_target_proxy_cert
 
 
@@ -48,7 +47,7 @@ class GCPDestinationPlugin(DestinationPlugin):
     def upload(self, name, body, private_key, cert_chain, options, **kwargs):
         try:
             ssl_certificate_body = {
-                "name": self._certificate_name(body),
+                "name": certificates.get_name(body),
                 "certificate": self._full_ca(body, cert_chain),
                 "description": "",
                 "private_key": private_key,
@@ -73,30 +72,6 @@ class GCPDestinationPlugin(DestinationPlugin):
         return ssl_certificates.SslCertificatesClient(credentials=credentials).insert(
             project=project_id, ssl_certificate_resource=ssl_certificate_body
         )
-
-    def _certificate_name(self, body):
-        """
-        We need to change the name of the certificate that we are uploading to comply with GCP naming standards.
-        The cert name will follow the convention "ssl-{Cert CN}-{Date Issued}-{Issuer}"
-        """
-        cert = parse_certificate(body)
-        cn = common_name(cert)
-        authority = issuer(cert)
-        issued_on = not_before(cert).date()
-
-        cert_name = f"ssl-{cn}-{authority}-{issued_on}"
-
-        return self._modify_cert_name_for_gcp(cert_name)
-
-    def _modify_cert_name_for_gcp(self, cert_name):
-        # Modify the cert name to comply with GCP naming convention
-        gcp_name = cert_name.replace('.', '-')
-        gcp_name = gcp_name.replace('*', "star")
-        gcp_name = gcp_name.lower()
-        gcp_name = gcp_name[:63]
-        gcp_name = gcp_name.rstrip('.*-')
-
-        return gcp_name
 
     def _full_ca(self, body, cert_chain):
         # in GCP you need to assemble the cert body and the cert chain in the same parameter

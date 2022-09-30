@@ -4,6 +4,8 @@ from google.cloud.compute_v1.services import ssl_certificates, ssl_policies, \
 from google.cloud.compute_v1 import TargetHttpsProxiesSetSslCertificatesRequest, \
     TargetSslProxiesSetSslCertificatesRequest
 
+from lemur.plugins.lemur_gcp import certificates
+
 
 def fetch_target_proxies(project_id, credentials):
     """
@@ -91,13 +93,17 @@ def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
     print('endpoint.registry_type=', endpoint.registry_type)
     if kind not in ("targethttpsproxy", "targetsslproxy") or endpoint.registry_type != "gcp":
         raise NotImplementedError()
+    ssl_client = ssl_certificates.SslCertificatesClient(credentials=credentials)
+    cert_name = certificates.get_name(certificate.body)
+    print('cert_name=', cert_name)
+    cert_meta = ssl_client.get(project=project_id, ssl_certificate=cert_name)
     if kind == "targethttpsproxy":
         client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_https_proxy=endpoint.name)
         if len(proxy.ssl_certificates) > 1:
             raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
         req = TargetHttpsProxiesSetSslCertificatesRequest()
-        req.ssl_certificates = [certificate.name]
+        req.ssl_certificates = [cert_meta.self_link]
         print("req=", req)
         operation = client.set_ssl_certificates(
             project=project_id,
@@ -111,7 +117,7 @@ def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
         if len(proxy.ssl_certificates) > 1:
             raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
         req = TargetSslProxiesSetSslCertificatesRequest()
-        req.ssl_certificates = [certificate.name]
+        req.ssl_certificates = [cert_meta.self_link]
         operation = client.set_ssl_certificates(
             project=project_id,
             target_ssl_proxy=endpoint.name,
