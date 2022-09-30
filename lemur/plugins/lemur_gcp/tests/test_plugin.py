@@ -85,7 +85,7 @@ def test_upload(mock_ssl_certificates, mock_credentials, mock_gcp_account_id):
 
     ssl_certificate_body = {
         "name": name,
-        "certificate":  GCPDestinationPlugin()._full_ca(body, cert_chain),
+        "certificate": GCPDestinationPlugin()._full_ca(body, cert_chain),
         "description": "",
         "private_key": private_key,
     }
