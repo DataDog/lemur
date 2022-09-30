@@ -1,5 +1,7 @@
 import pytest
 from unittest import mock
+
+from lemur.plugins.lemur_gcp.auth import get_gcp_credentials
 from lemur.plugins.lemur_gcp.plugin import GCPDestinationPlugin
 from google.cloud.compute_v1 import types
 
@@ -72,12 +74,12 @@ options = [
     }]
 
 
-@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin.get_option", return_value="lemur-test")
-@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials", return_value=token)
+@mock.patch("lemur.plugins.lemur_gcp.auth.get_gcp_credentials", return_value=token)
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate",
             return_value=SUCCESS_INSERT_RESPONSE)
-def test_upload(mock_ssl_certificates, mock_credentials, mock_gcp_account_id):
-    assert GCPDestinationPlugin().upload(
+def test_upload(mock_ssl_certificates, mock_credentials):
+    plugin = GCPDestinationPlugin()
+    assert plugin.upload(
         name,
         body,
         private_key,
@@ -93,8 +95,7 @@ def test_upload(mock_ssl_certificates, mock_credentials, mock_gcp_account_id):
 
     # assert our mocks are being called with the params we expect
     mock_ssl_certificates.assert_called_with('lemur-test', ssl_certificate_body, token)
-    mock_credentials.assert_called_with(options)
-    mock_gcp_account_id.get_option(options)
+    mock_credentials.assert_called_with(plugin, options)
 
 
 cert1 = types.SslCertificate()
@@ -256,7 +257,7 @@ mock_ssl_client.list.return_value = [
 
 
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPSourcePlugin.get_option", return_value="lemur-test")
-@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPSourcePlugin._get_gcp_credentials", return_value=token)
+@mock.patch("lemur.plugins.lemur_gcp.auth.get_gcp_credentials", return_value=token)
 @mock.patch("google.cloud.compute_v1.services.ssl_certificates.SslCertificatesClient", return_value=mock_ssl_client)
 def test_get_certificates(ssl_client, mock_credentials, mock_gcp_project_id):
     from lemur.plugins.lemur_gcp.plugin import GCPSourcePlugin
@@ -391,12 +392,13 @@ BQRXuZ5ZZxT2fkCSFswAy/c7zkcpLtYgc5BvCzAEXYVDMB2CKbjvIYAwPhfOpOxg
     }
 
 
-@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._get_gcp_credentials_from_vault",
+@mock.patch("lemur.plugins.lemur_gcp.auth.get_gcp_credentials_from_vault",
             return_value="ya29.c.b0AXv0zTN36HtXN2cJolg9tAj0vGAOT29FF-WNxQzvPu")
 def test_get_gcp_credentials(mock_get_gcp_credentials_from_vault):
-    assert GCPDestinationPlugin()._get_gcp_credentials(options) == token
+    plugin = GCPDestinationPlugin()
+    assert get_gcp_credentials(plugin, options) == token
 
-    mock_get_gcp_credentials_from_vault.assert_called_with(options)
+    mock_get_gcp_credentials_from_vault.assert_called_with(plugin, options)
 
 
 def test_certificate_name():
