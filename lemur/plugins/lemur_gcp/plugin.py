@@ -1,5 +1,6 @@
 from flask import current_app
 from google.cloud.compute_v1.services import ssl_certificates
+from google.api_core import exceptions
 
 from lemur.common.utils import split_pem
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
@@ -58,10 +59,9 @@ class GCPDestinationPlugin(DestinationPlugin):
                 ssl_certificate_body,
                 credentials,
             )
-
+        except exceptions.AlreadyExists:
+            pass
         except Exception as e:
-            if "already exists" in str(e):
-                return
             current_app.logger.error(
                 f"Issue with uploading {name} to GCP. Action failed with the following log: {e}",
                 exc_info=True,
