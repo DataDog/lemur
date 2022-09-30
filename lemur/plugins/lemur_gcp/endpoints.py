@@ -88,14 +88,21 @@ def get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, 
 
 
 def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
+    """
+    Sets the certificate for targethttpsproxy or targetsslproxy
+    :param project_id:
+    :param credentials:
+    :param endpoint:
+    :param certificate:
+    :return:
+    """
     kind = endpoint.type
-    print('kind=', kind)
-    print('endpoint.registry_type=', endpoint.registry_type)
     if kind not in ("targethttpsproxy", "targetsslproxy") or endpoint.registry_type != "gcp":
         raise NotImplementedError()
     ssl_client = ssl_certificates.SslCertificatesClient(credentials=credentials)
+    # Parses the API name from the certificate body. This is because the certificate's name
+    # is different from the name of the certificate that finally gets uploaded to GCP.
     cert_name = certificates.get_name(certificate.body)
-    print('cert_name=', cert_name)
     cert_meta = ssl_client.get(project=project_id, ssl_certificate=cert_name)
     if kind == "targethttpsproxy":
         client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
@@ -104,13 +111,12 @@ def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
             raise NotImplementedError("GCP endpoints with multiple certificates for SNI are not supported currently.")
         req = TargetHttpsProxiesSetSslCertificatesRequest()
         req.ssl_certificates = [cert_meta.self_link]
-        print("req=", req)
         operation = client.set_ssl_certificates(
             project=project_id,
             target_https_proxy=endpoint.name,
             target_https_proxies_set_ssl_certificates_request_resource=req,
         )
-        print("result=", operation.result())
+        operation.result()
     elif kind == "targetsslproxy":
         client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_ssl_proxy=endpoint.name)
@@ -123,7 +129,7 @@ def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
             target_ssl_proxy=endpoint.name,
             target_ssl_proxies_set_ssl_certificates_request_resource=req,
         )
-        print("result=", operation.result())
+        operation.result()
 
 
 def fetch_global_forwarding_rules_map(project_id, credentials):
