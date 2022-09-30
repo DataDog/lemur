@@ -1,4 +1,3 @@
-import pytest
 from unittest import mock
 
 from lemur.plugins.lemur_gcp.auth import get_gcp_credentials
@@ -399,26 +398,6 @@ def test_get_gcp_credentials(mock_get_gcp_credentials_from_vault):
     assert get_gcp_credentials(plugin, options) == token
 
     mock_get_gcp_credentials_from_vault.assert_called_with(plugin, options)
-
-
-def test_certificate_name():
-    assert GCPDestinationPlugin()._certificate_name(body) == 'ssl-test-localhost-com-localhost-2022-08-30'
-
-
-@pytest.mark.parametrize(
-    ('original_cert_name', 'gcp_cert_name'),
-    [
-        ("*.test.com", "star-test-com"),
-        ("CAPITALIZED.TEST.COM", "capitalized-test-com"),
-        ("ssl-lemur-sandbox-datad0g-com-digicerttlsrsasha2562020ca1-2022-", "ssl-lemur-sandbox-datad0g-com-digicerttlsrsasha2562020ca1-2022"),
-        (
-            "this.is.a.long.certificate.name.that.should.get.cut.off.after.63.characters.test.com",
-            "this-is-a-long-certificate-name-that-should-get-cut-off-after-6"
-        )
-    ]
-)
-def test_modify_cert_name_for_gcp(original_cert_name, gcp_cert_name):
-    assert GCPDestinationPlugin()._modify_cert_name_for_gcp(original_cert_name) == gcp_cert_name
 
 
 def test_full_ca():
