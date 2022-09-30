@@ -51,4 +51,3 @@ def test_get_endpoint_from_proxy():
     assert endpoint["aliases"] == ["1.2.3.5"]
     assert endpoint["policy"] == {"name": "policy1", "ciphers": ["TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"]}
     assert endpoint["primary_certificate"] == {"name": "cert1", "registry_type": "gcp", "path": ""}
-
