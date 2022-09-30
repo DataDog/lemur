@@ -31,8 +31,8 @@ def test_get_name():
         ("ssl-lemur-sandbox-datad0g-com-digicerttlsrsasha2562020ca1-2022-",
          "ssl-lemur-sandbox-datad0g-com-digicerttlsrsasha2562020ca1-2022"),
         (
-                "this.is.a.long.certificate.name.that.should.get.cut.off.after.63.characters.test.com",
-                "this-is-a-long-certificate-name-that-should-get-cut-off-after-6"
+            "this.is.a.long.certificate.name.that.should.get.cut.off.after.63.characters.test.com",
+            "this-is-a-long-certificate-name-that-should-get-cut-off-after-6"
         )
     ]
 )
