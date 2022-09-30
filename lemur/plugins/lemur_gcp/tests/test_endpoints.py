@@ -15,10 +15,7 @@ fw_rule_2.target = target1_self_link
 fw_rule_2.port_range = "443-443"
 
 forwarding_rules = defaultdict(list)
-forwarding_rules[target1_self_link] = [
-    fw_rule_1,
-    fw_rule_2,
-]
+forwarding_rules[target1_self_link] = [fw_rule_1, fw_rule_2]
 
 
 def test_get_endpoint_from_proxy():

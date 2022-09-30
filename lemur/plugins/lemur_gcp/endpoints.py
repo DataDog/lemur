@@ -87,6 +87,8 @@ def get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, 
 
 def update_target_proxy_cert(project_id, credentials, endpoint, certificate):
     kind = endpoint.type
+    print('kind=', kind)
+    print('endpoint.registry_type=', endpoint.registry_type)
     if kind not in ("targethttpsproxy", "targetsslproxy") or endpoint.registry_type != "gcp":
         raise NotImplementedError()
     if kind == "targethttpsproxy":

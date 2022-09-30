@@ -14,7 +14,7 @@ def get_gcp_credentials(self, options):
             return service_account.Credentials.from_service_account_file(
                 self.get_option('serviceAccountTokenPath', options)
             )
-    print('method=',self.get_option('authenticationMethod'))
+    print('method=', self.get_option('authenticationMethod'))
     raise Exception("No supported way to authenticate with GCP")
 
 
