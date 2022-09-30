@@ -61,6 +61,8 @@ class GCPDestinationPlugin(DestinationPlugin):
             )
 
         except Exception as e:
+            if "already exists" in str(e):
+                return
             current_app.logger.error(
                 f"Issue with uploading {name} to GCP. Action failed with the following log: {e}",
                 exc_info=True,
