@@ -1,5 +1,6 @@
 from unittest import mock
 
+from lemur.plugins.lemur_gcp import certificates
 from lemur.plugins.lemur_gcp.auth import get_gcp_credentials
 from lemur.plugins.lemur_gcp.plugin import GCPDestinationPlugin
 from google.cloud.compute_v1 import types
@@ -74,7 +75,7 @@ options = [
 
 
 @mock.patch("lemur.plugins.lemur_gcp.auth.get_gcp_credentials", return_value=token)
-@mock.patch("lemur.plugins.lemur_gcp.plugin.GCPDestinationPlugin._insert_gcp_certificate",
+@mock.patch("lemur.plugins.lemur_gcp.plugin.certificates.insert_certificate",
             return_value=SUCCESS_INSERT_RESPONSE)
 def test_upload(mock_ssl_certificates, mock_credentials):
     plugin = GCPDestinationPlugin()
@@ -87,7 +88,7 @@ def test_upload(mock_ssl_certificates, mock_credentials):
 
     ssl_certificate_body = {
         "name": name,
-        "certificate": GCPDestinationPlugin()._full_ca(body, cert_chain),
+        "certificate": certificates.full_ca(body, cert_chain),
         "description": "",
         "private_key": private_key,
     }
@@ -398,7 +399,3 @@ def test_get_gcp_credentials(mock_get_gcp_credentials_from_vault):
     assert get_gcp_credentials(plugin, options) == token
 
     mock_get_gcp_credentials_from_vault.assert_called_with(plugin, options)
-
-
-def test_full_ca():
-    assert GCPDestinationPlugin()._full_ca(body, cert_chain) == f"{body}\n{cert_chain}"

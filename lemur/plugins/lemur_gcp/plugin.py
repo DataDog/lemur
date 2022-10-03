@@ -1,8 +1,6 @@
 from flask import current_app
-from google.cloud.compute_v1.services import ssl_certificates
 from google.api_core import exceptions
 
-from lemur.common.utils import split_pem
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
 from lemur.plugins.lemur_gcp import auth, certificates
@@ -49,12 +47,12 @@ class GCPDestinationPlugin(DestinationPlugin):
         try:
             ssl_certificate_body = {
                 "name": certificates.get_name(body),
-                "certificate": self._full_ca(body, cert_chain),
+                "certificate": certificates.full_ca(body, cert_chain),
                 "description": "",
                 "private_key": private_key,
             }
             credentials = auth.get_gcp_credentials(self, options)
-            return self._insert_gcp_certificate(
+            return certificates.insert_certificate(
                 self.get_option("projectID", options),
                 ssl_certificate_body,
                 credentials,
@@ -67,15 +65,6 @@ class GCPDestinationPlugin(DestinationPlugin):
                 exc_info=True,
             )
             raise Exception(f"Issue uploading certificate to GCP: {e}")
-
-    def _insert_gcp_certificate(self, project_id, ssl_certificate_body, credentials):
-        return ssl_certificates.SslCertificatesClient(credentials=credentials).insert(
-            project=project_id, ssl_certificate_resource=ssl_certificate_body
-        )
-
-    def _full_ca(self, body, cert_chain):
-        # in GCP you need to assemble the cert body and the cert chain in the same parameter
-        return f"{body}\n{cert_chain}"
 
 
 class GCPSourcePlugin(SourcePlugin):
@@ -119,22 +108,7 @@ class GCPSourcePlugin(SourcePlugin):
         try:
             credentials = auth.get_gcp_credentials(self, options)
             project_id = self.get_option("projectID", options)
-            client = ssl_certificates.SslCertificatesClient(credentials=credentials)
-            certs = []
-            for cert_meta in client.list(project=project_id):
-                try:
-                    if cert_meta.type_ != "SELF_MANAGED":
-                        continue
-                    cert = self.parse_certificate_meta(cert_meta)
-                    if cert:
-                        certs.append(cert)
-                except Exception as e:
-                    current_app.logger.error(
-                        f"Issue with fetching certificate {cert_meta.name} from GCP. Action failed with the following "
-                        f"log: {e}",
-                        exc_info=True,
-                    )
-            return certs
+            return certificates.fetch_all(project_id, credentials)
         except Exception as e:
             current_app.logger.error(
                 f"Issue with fetching certificates from GCP. Action failed with the following log: {e}",
@@ -146,38 +120,13 @@ class GCPSourcePlugin(SourcePlugin):
         try:
             credentials = auth.get_gcp_credentials(self, options)
             project_id = self.get_option("projectID", options)
-            client = ssl_certificates.SslCertificatesClient(credentials=credentials)
-            cert_meta = client.get(project=project_id, ssl_certificate=certificate_name)
-            if cert_meta:
-                cert = self.parse_certificate_meta(cert_meta)
-                if cert:
-                    return cert
-            return None
+            return certificates.fetch_by_name(project_id, credentials, certificate_name)
         except Exception as e:
             current_app.logger.error(
                 f"Issue with fetching certificate by name from GCP. Action failed with the following log: {e}",
                 exc_info=True,
             )
             raise Exception(f"Issue fetching certificate from GCP: {e}")
-
-    @staticmethod
-    def parse_certificate_meta(certificate_meta):
-        """
-        Returns a body and a chain.
-        :param certificate_meta:
-        """
-        chain = []
-        # Skip CSR if it's part of the certificate returned by the GCP API.
-        for cert in split_pem(certificate_meta.certificate):
-            if "-----BEGIN CERTIFICATE-----" in cert:
-                chain.append(cert)
-        if not chain:
-            return None
-        return dict(
-            body=chain[0],
-            chain="\n".join(chain[1:]),
-            name=certificate_meta.name,
-        )
 
     def get_endpoints(self, options, **kwargs):
         try:
