@@ -13,7 +13,7 @@ def get_name(body):
     """
     cert = parse_certificate(body)
     # SHA1 is 160 bits => 40 hex digits
-    fingerprint = cert.fingerprint(hashes.SHA1()).hex() # nosec B303
+    fingerprint = cert.fingerprint(hashes.SHA1()).hex()  # nosec B303
     cert_name = f"ssl-{fingerprint}".lower()
     # This should never happen
     if len(cert_name) > 63:

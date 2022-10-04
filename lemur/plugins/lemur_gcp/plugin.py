@@ -43,6 +43,9 @@ class GCPDestinationPlugin(DestinationPlugin):
         }
     ]
 
+    def __init__(self, *args, **kwargs):
+        super(GCPDestinationPlugin, self).__init__(*args, **kwargs)
+
     def upload(self, name, body, private_key, cert_chain, options, **kwargs):
         try:
             ssl_certificate_body = {
@@ -104,6 +107,9 @@ class GCPSourcePlugin(SourcePlugin):
         }
     ]
 
+    def __init__(self, *args, **kwargs):
+        super(GCPSourcePlugin, self).__init__(*args, **kwargs)
+
     def get_certificates(self, options, **kwargs):
         try:
             credentials = auth.get_gcp_credentials(self, options)
@@ -146,6 +152,3 @@ class GCPSourcePlugin(SourcePlugin):
         credentials = auth.get_gcp_credentials(self, options)
         project_id = self.get_option("projectID", options)
         update_target_proxy_cert(project_id, credentials, endpoint, certificate)
-
-    def clean(self, certificate, options, **kwargs):
-        raise NotImplementedError
