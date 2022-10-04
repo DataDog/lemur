@@ -1,33 +1,24 @@
 from flask import current_app
 from google.cloud.compute_v1.services import ssl_certificates
 
-from lemur.common.defaults import common_name, issuer, not_before
 from lemur.common.utils import parse_certificate, split_pem
+from cryptography.hazmat.primitives import hashes
 
 
 def get_name(body):
     """
     We need to change the name of the certificate that we are uploading to comply with GCP naming standards.
-    The cert name will follow the convention "ssl-{Cert CN}-{Date Issued}-{Issuer}"
+    The cert name will follow the convention "ssl-{SHA1 fingerprint}". This is guaranteed to be unique
+    across CAs and complies with naming restrictions from the GCP API.
     """
     cert = parse_certificate(body)
-    cn = common_name(cert)
-    authority = issuer(cert)
-    issued_on = not_before(cert).date()
-
-    cert_name = f"ssl-{cn}-{authority}-{issued_on}"
-
-    return modify_cert_name_for_gcp(cert_name)
-
-
-def modify_cert_name_for_gcp(cert_name):
-    # Modify the cert name to comply with GCP naming convention
-    gcp_name = cert_name.replace('.', '-')
-    gcp_name = gcp_name.replace('*', "star")
-    gcp_name = gcp_name.lower()
-    gcp_name = gcp_name[:63]
-    gcp_name = gcp_name.rstrip('.*-')
-    return gcp_name
+    # SHA1 is 160 bits => 40 hex digits
+    fingerprint = cert.fingerprint(hashes.SHA1()).hex() # nosec B303
+    cert_name = f"ssl-{fingerprint}".lower()
+    # This should never happen
+    if len(cert_name) > 63:
+        raise Exception(f"Could not create certificate name for certificate: {body}")
+    return cert_name
 
 
 def full_ca(body, cert_chain):

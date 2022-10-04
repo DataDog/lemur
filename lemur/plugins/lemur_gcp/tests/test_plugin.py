@@ -87,7 +87,7 @@ def test_upload(mock_ssl_certificates, mock_credentials):
         options) == SUCCESS_INSERT_RESPONSE
 
     ssl_certificate_body = {
-        "name": name,
+        "name": certificates.get_name(body),
         "certificate": certificates.full_ca(body, cert_chain),
         "description": "",
         "private_key": private_key,
