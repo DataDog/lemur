@@ -1,24 +1,49 @@
+from cryptography import x509
 from flask import current_app
 from google.cloud.compute_v1.services import ssl_certificates
 
+from lemur.common.defaults import common_name, text_to_slug
 from lemur.common.utils import parse_certificate, split_pem
-from cryptography.hazmat.primitives import hashes
 
 
 def get_name(body):
     """
     We need to change the name of the certificate that we are uploading to comply with GCP naming standards.
-    The cert name will follow the convention "ssl-{SHA1 fingerprint}". This is guaranteed to be unique
-    across CAs and complies with naming restrictions from the GCP API.
+    The cert name will follow the convention "{cn}-{authority}-{serial}". This is guaranteed to be unique
+    across CAs and complies with naming restrictions from the GCP API. If the combined authority and serial
+    number of certificate is longer than 63 characters, an exception is raised. This assumes the CA conforms
+    to https://www.rfc-editor.org/rfc/rfc3280#section-4.1.2.2 and the serial number is a positive integer.
     """
     cert = parse_certificate(body)
-    # SHA1 is 160 bits => 40 hex digits
-    fingerprint = cert.fingerprint(hashes.SHA1()).hex()  # nosec B303
-    cert_name = f"ssl-{fingerprint}".lower()
-    # This should never happen
-    if len(cert_name) > 63:
-        raise Exception(f"Could not create certificate name for certificate: {body}")
+    authority = modify_for_gcp(get_issuer(cert))
+    serial = modify_for_gcp(hex(cert.serial_number))
+    suffix = f"-{authority}-{serial}"
+    if len(suffix) > 63:
+        raise Exception(f"Could not create certificate due to naming restrictions: {cert.serial_number}")
+    cn = modify_for_gcp(common_name(cert))
+    available_chars = 63 - len(suffix)
+    cn = cn[:available_chars]
+    cert_name = f"{cn}{suffix}"
     return cert_name
+
+
+def get_issuer(cert):
+    authority = cert.issuer.get_attributes_for_oid(x509.OID_ORGANIZATION_NAME)
+    if not authority:
+        current_app.logger.error(
+            "Unable to get issuer! Cert serial {:x}".format(cert.serial_number)
+        )
+        return "<unknown>"
+    return text_to_slug(authority[0].value, "")
+
+
+def modify_for_gcp(name):
+    # Modify the name to comply with GCP naming convention
+    gcp_name = name.replace('.', '-')
+    gcp_name = gcp_name.replace("*", "star")
+    gcp_name = gcp_name.lower()
+    gcp_name = gcp_name.rstrip('.*-')
+    return gcp_name
 
 
 def full_ca(body, cert_chain):

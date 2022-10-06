@@ -19,26 +19,25 @@ def fetch_target_proxies(project_id, credentials):
     forwarding_rules_map = fetch_global_forwarding_rules_map(project_id, credentials)
     http_proxies_client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
     ssl_policies_client = ssl_policies.SslPoliciesClient(credentials=credentials)
-    ssl_client = ssl_certificates.SslCertificatesClient(credentials=credentials)
     for proxy in http_proxies_client.list(project=project_id):
-        endpoint = get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, forwarding_rules_map)
+        endpoint = get_endpoint_from_proxy(project_id, credentials, proxy, ssl_policies_client, forwarding_rules_map)
         if endpoint:
             endpoints.append(endpoint)
     ssl_proxies_client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
     for proxy in ssl_proxies_client.list(project=project_id):
-        endpoint = get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, forwarding_rules_map)
+        endpoint = get_endpoint_from_proxy(project_id, credentials, proxy, ssl_policies_client, forwarding_rules_map)
         if endpoint:
             endpoints.append(endpoint)
     return endpoints
 
 
-def get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, forwarding_rules_map):
+def get_endpoint_from_proxy(project_id, credentials, proxy, ssl_policies_client, forwarding_rules_map):
     """
     Converts a proxy (either HTTPs or SSL) into a Lemur endpoint.
     :param project_id:
+    :param credentials:
     :param proxy:
     :param ssl_policies_client:
-    :param ssl_client:
     :param forwarding_rules_map:
     :return:
     """
@@ -53,9 +52,11 @@ def get_endpoint_from_proxy(project_id, proxy, ssl_policies_client, ssl_client, 
     # The first certificate is the primary.
     # See https://cloud.google.com/sdk/gcloud/reference/compute/target-https-proxies/update
     ssl_cert_name = get_name_from_self_link(proxy.ssl_certificates[0])
-    cert = ssl_client.get(project=project_id, ssl_certificate=ssl_cert_name)
+    cert = certificates.fetch_by_name(project_id, credentials, ssl_cert_name)
+    if not cert:
+        return None
     primary_certificate = dict(
-        name=cert.name,
+        name=cert["name"],
         registry_type="gcp",
         path="",
     )

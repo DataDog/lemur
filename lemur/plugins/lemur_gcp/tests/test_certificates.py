@@ -1,5 +1,7 @@
+import pytest
+
 from lemur.plugins.lemur_gcp import certificates
-from lemur.plugins.lemur_gcp.certificates import get_name
+from lemur.plugins.lemur_gcp.certificates import get_name, modify_for_gcp
 
 body = """
 -----BEGIN CERTIFICATE-----
@@ -34,7 +36,20 @@ aNVFrNhMcvbKB0eqb5VHL90=
 
 
 def test_get_name():
-    assert get_name(body) == 'ssl-6ff7e4d0c1978f6d7c315b97d20ece8829ee7449'
+    assert get_name(body) == 'test-localhost-co-exampleinc-0x82cf436d8fe742989ee7d239cc82df18'
+
+
+@pytest.mark.parametrize(
+    ('original_cert_name', 'gcp_cert_name'),
+    [
+        ("*.test.com", "star-test-com"),
+        ("CAPITALIZED.TEST.COM", "capitalized-test-com"),
+        ("ssl-lemur-sandbox-datad0g-com-digicerttlsrsasha2562020ca1-2022-",
+         "ssl-lemur-sandbox-datad0g-com-digicerttlsrsasha2562020ca1-2022"),
+    ]
+)
+def test_modify_for_gcp(original_cert_name, gcp_cert_name):
+    assert modify_for_gcp(original_cert_name) == gcp_cert_name
 
 
 def test_full_ca():
