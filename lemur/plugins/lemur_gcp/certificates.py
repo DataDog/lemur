@@ -104,3 +104,26 @@ def parse_certificate_meta(certificate_meta):
         chain="\n".join(chain[1:]),
         name=certificate_meta.name,
     )
+
+
+def get_self_link(project, name):
+    return f"https://www.googleapis.com/compute/v1/projects/{project}/global/sslCertificates/{name}"
+
+
+def calc_diff(certs, new_cert, old_cert):
+    """
+    Produces a list of certificate self-links where new_cert is added and old_cert is removed, if it exists.
+    :param certs:
+    :param new_cert:
+    :param old_cert:
+    :return:
+    """
+    result = []
+    for self_link in certs:
+        if self_link != old_cert:
+            result.append(self_link)
+        if self_link == new_cert:
+            continue
+    if new_cert not in result:
+        result.append(new_cert)
+    return result

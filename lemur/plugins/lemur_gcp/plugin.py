@@ -4,7 +4,8 @@ from google.api_core import exceptions
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
 from lemur.plugins.lemur_gcp import auth, certificates
-from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies, update_target_proxy_cert
+from lemur.plugins.lemur_gcp.endpoints import fetch_target_proxies, update_target_proxy_default_cert, \
+    update_target_proxy_sni_certs
 
 
 class GCPDestinationPlugin(DestinationPlugin):
@@ -151,4 +152,24 @@ class GCPSourcePlugin(SourcePlugin):
         options = endpoint.source.options
         credentials = auth.get_gcp_credentials(self, options)
         project_id = self.get_option("projectID", options)
-        update_target_proxy_cert(project_id, credentials, endpoint, certificate)
+        try:
+            update_target_proxy_default_cert(project_id, credentials, endpoint, certificate)
+        except Exception as e:
+            current_app.logger.error(
+                f"Issue with updating endpoint in GCP. Action failed with the following log: {e}",
+                exc_info=True,
+            )
+            raise Exception(f"Issue updating endpoint in GCP: {e}")
+
+    def replace_sni_certificate(self, endpoint, old_cert, new_cert):
+        options = endpoint.source.options
+        credentials = auth.get_gcp_credentials(self, options)
+        project_id = self.get_option("projectID", options)
+        try:
+            update_target_proxy_sni_certs(project_id, credentials, endpoint, old_cert, new_cert)
+        except Exception as e:
+            current_app.logger.error(
+                f"Issue with updating endpoint in GCP. Action failed with the following log: {e}",
+                exc_info=True,
+            )
+            raise Exception(f"Issue updating endpoint in GCP: {e}")

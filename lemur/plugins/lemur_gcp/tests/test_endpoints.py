@@ -1,7 +1,5 @@
-import unittest.mock
 from unittest import mock
 from collections import defaultdict
-from unittest.mock import MagicMock
 from google.cloud.compute_v1 import types
 
 target1_self_link = "https://www.googleapis.com/compute/v1/projects/staging/global/targetHttpsProxies/target1"
@@ -20,10 +18,7 @@ forwarding_rules = defaultdict(list)
 forwarding_rules[target1_self_link] = [fw_rule_1, fw_rule_2]
 
 
-@unittest.mock.patch("lemur.plugins.lemur_gcp.certificates.fetch_by_name", return_value=dict(
-    body="", chain="", name="cert1"
-))
-def test_get_endpoint_from_proxy(mock_cert):
+def test_get_endpoint_from_proxy():
     from lemur.plugins.lemur_gcp.endpoints import get_endpoint_from_proxy
     proxy = types.TargetHttpsProxy()
     proxy.name = "test-https-proxy"
@@ -38,8 +33,7 @@ def test_get_endpoint_from_proxy(mock_cert):
     ssl_policies_client = mock.Mock()
     ssl_policies_client.get.return_value = policy
 
-    credentials = MagicMock()
-    endpoint = get_endpoint_from_proxy("123", credentials, proxy, ssl_policies_client, forwarding_rules)
+    endpoint = get_endpoint_from_proxy("123", proxy, ssl_policies_client, forwarding_rules)
     assert endpoint is not None
     ssl_policies_client.get.assert_called_once_with(project="123", ssl_policy="policy1")
     assert endpoint["name"] == "test-https-proxy"
@@ -48,4 +42,4 @@ def test_get_endpoint_from_proxy(mock_cert):
     assert endpoint["port"] == "443"
     assert endpoint["aliases"] == ["1.2.3.5"]
     assert endpoint["policy"] == {"name": "policy1", "ciphers": ["TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"]}
-    assert endpoint["primary_certificate"] == {"name": "cert1", "registry_type": "gcp", "path": ""}
+    assert endpoint["primary_certificate"] == {"name": "auth", "registry_type": "gcp", "path": ""}
