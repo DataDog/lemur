@@ -118,12 +118,15 @@ def calc_diff(certs, new_cert, old_cert):
     :param old_cert:
     :return:
     """
-    result = []
-    for self_link in certs:
-        if self_link != old_cert:
-            result.append(self_link)
-        if self_link == new_cert:
-            continue
-    if new_cert not in result:
+    # Shallow copy the list of self-links (strings)
+    result = list(certs)
+    new_cert_idx = -1
+    for idx, self_link in enumerate(certs):
+        if self_link == old_cert:
+            new_cert_idx = idx
+            break
+    if new_cert_idx != -1:
+        result[new_cert_idx] = new_cert
+    else:
         result.append(new_cert)
     return result

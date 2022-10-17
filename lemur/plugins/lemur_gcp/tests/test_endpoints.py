@@ -23,7 +23,7 @@ def test_get_endpoint_from_proxy():
     proxy = types.TargetHttpsProxy()
     proxy.name = "test-https-proxy"
     proxy.kind = "compute#targetHttpsProxy"
-    proxy.ssl_certificates = ["https://www.googleapis.com/compute/v1/projects/staging/global/sslCertificates/auth"]
+    proxy.ssl_certificates = ["https://www.googleapis.com/compute/v1/projects/staging/global/sslCertificates/cert1"]
     proxy.self_link = target1_self_link
     proxy.ssl_policy = "https://www.googleapis.com/compute/v1/projects/staging/global/sslPolicies/policy1"
 
@@ -42,4 +42,4 @@ def test_get_endpoint_from_proxy():
     assert endpoint["port"] == "443"
     assert endpoint["aliases"] == ["1.2.3.5"]
     assert endpoint["policy"] == {"name": "policy1", "ciphers": ["TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"]}
-    assert endpoint["primary_certificate"] == {"name": "auth", "registry_type": "gcp", "path": ""}
+    assert endpoint["primary_certificate"] == {"name": "cert1", "registry_type": "gcp", "path": ""}

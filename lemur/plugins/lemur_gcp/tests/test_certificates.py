@@ -66,7 +66,8 @@ def test_get_self_link():
     [
         (["a", "b"], "c", "b", ["a", "c"]),
         (["a"], "c", "b", ["a", "c"]),
-        (["a", "b"], "b", "b", ["a", "b"])
+        (["a", "b"], "b", "b", ["a", "b"]),
+        (["a", "b"], "c", "a", ["c", "b"])
     ]
 )
 def test_calc_certs(certs, new_cert, old_cert, expected):

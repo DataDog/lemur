@@ -152,24 +152,10 @@ class GCPSourcePlugin(SourcePlugin):
         options = endpoint.source.options
         credentials = auth.get_gcp_credentials(self, options)
         project_id = self.get_option("projectID", options)
-        try:
-            update_target_proxy_default_cert(project_id, credentials, endpoint, certificate)
-        except Exception as e:
-            current_app.logger.error(
-                f"Issue with updating endpoint in GCP. Action failed with the following log: {e}",
-                exc_info=True,
-            )
-            raise Exception(f"Issue updating endpoint in GCP: {e}")
+        update_target_proxy_default_cert(project_id, credentials, endpoint, certificate)
 
     def replace_sni_certificate(self, endpoint, old_cert, new_cert):
         options = endpoint.source.options
         credentials = auth.get_gcp_credentials(self, options)
         project_id = self.get_option("projectID", options)
-        try:
-            update_target_proxy_sni_certs(project_id, credentials, endpoint, old_cert, new_cert)
-        except Exception as e:
-            current_app.logger.error(
-                f"Issue with updating endpoint in GCP. Action failed with the following log: {e}",
-                exc_info=True,
-            )
-            raise Exception(f"Issue updating endpoint in GCP: {e}")
+        update_target_proxy_sni_certs(project_id, credentials, endpoint, old_cert, new_cert)
