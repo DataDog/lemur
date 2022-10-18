@@ -102,6 +102,7 @@ def update_target_proxy_default_cert(project_id, credentials, endpoint, certific
     kind = endpoint.type
     if kind not in ("targethttpsproxy", "targetsslproxy") or endpoint.registry_type != "gcp":
         raise NotImplementedError()
+    current_app.logger.info(f"Rotating default cert for endpoint {endpoint.name}")
     # Parses the API name from the certificate body. This is because the certificate's name
     # is different from the name of the certificate that finally gets uploaded to GCP.
     cert_name = certificates.get_name(certificate.body)
@@ -109,15 +110,18 @@ def update_target_proxy_default_cert(project_id, credentials, endpoint, certific
     if kind == "targethttpsproxy":
         client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_https_proxy=endpoint.name)
-        set_target_https_proxy_certs(project_id, client, endpoint, [cert_self_link] + proxy.ssl_certificates)
+        set_target_https_proxy_certs(
+            project_id, client, endpoint, [cert_self_link] + proxy.ssl_certificates[1:], proxy.ssl_certificates)
     elif kind == "targetsslproxy":
         client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_ssl_proxy=endpoint.name)
-        set_target_ssl_proxy_certs(project_id, client, endpoint, [cert_self_link] + proxy.ssl_certificates)
+        set_target_ssl_proxy_certs(
+            project_id, client, endpoint, [cert_self_link] + proxy.ssl_certificates[1:], proxy.ssl_certificates)
 
 
-def set_target_https_proxy_certs(project_id, client, endpoint, certificate_self_links):
-    current_app.logger.debug(f"Setting certificates to {certificate_self_links} for endpoint {endpoint.name}")
+def set_target_https_proxy_certs(project_id, client, endpoint, certificate_self_links, existing_self_links):
+    current_app.logger.debug(f"Setting certificates from {existing_self_links} to {certificate_self_links} for "
+                             f"endpoint {endpoint.name}")
     req = TargetHttpsProxiesSetSslCertificatesRequest()
     req.ssl_certificates = certificate_self_links
     operation = client.set_ssl_certificates(
@@ -128,8 +132,9 @@ def set_target_https_proxy_certs(project_id, client, endpoint, certificate_self_
     operation.result()
 
 
-def set_target_ssl_proxy_certs(project_id, client, endpoint, certificate_self_links):
-    current_app.logger.debug(f"Setting certificates to {certificate_self_links} for endpoint {endpoint.name}")
+def set_target_ssl_proxy_certs(project_id, client, endpoint, certificate_self_links, existing_self_links):
+    current_app.logger.debug(f"Setting certificates from {existing_self_links} to {certificate_self_links} for "
+                             f"endpoint {endpoint.name}")
     req = TargetSslProxiesSetSslCertificatesRequest()
     req.ssl_certificates = certificate_self_links
     operation = client.set_ssl_certificates(
@@ -144,6 +149,7 @@ def update_target_proxy_sni_certs(project_id, credentials, endpoint, old_cert, n
     kind = endpoint.type
     if kind not in ("targethttpsproxy", "targetsslproxy") or endpoint.registry_type != "gcp":
         raise NotImplementedError()
+    current_app.logger.info(f"Rotating SNI cert for endpoint {endpoint.name}")
     old_cert_name = certificates.get_name(old_cert.body)
     old_cert_self_link = certificates.get_self_link(project_id, old_cert_name)
     new_cert_name = certificates.get_name(new_cert.body)
@@ -151,13 +157,19 @@ def update_target_proxy_sni_certs(project_id, credentials, endpoint, old_cert, n
     if kind == "targethttpsproxy":
         client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_https_proxy=endpoint.name)
+        if old_cert_self_link not in proxy.ssl_certificates:
+            current_app.logger.warning(f"Old cert {old_cert} found by Lemur but not in GCP - proceeding with "
+                                       "rotation anyway as detaching a non-existent cert is a no-op.")
         certs = certificates.calc_diff(proxy.ssl_certificates, new_cert_self_link, old_cert_self_link)
-        set_target_https_proxy_certs(project_id, client, endpoint, certs)
+        set_target_https_proxy_certs(project_id, client, endpoint, certs, proxy.ssl_certificates)
     elif kind == "targetsslproxy":
         client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_ssl_proxy=endpoint.name)
+        if old_cert_self_link not in proxy.ssl_certificates:
+            current_app.logger.warning(f"Old cert {old_cert} found by Lemur but not in GCP - proceeding with "
+                                       "rotation anyway as detaching a non-existent cert is a no-op.")
         certs = certificates.calc_diff(proxy.ssl_certificates, new_cert_self_link, old_cert_self_link)
-        set_target_ssl_proxy_certs(project_id, client, endpoint, certs)
+        set_target_ssl_proxy_certs(project_id, client, endpoint, certs, proxy.ssl_certificates)
 
 
 def fetch_global_forwarding_rules_map(project_id, credentials):

@@ -64,13 +64,16 @@ def test_get_self_link():
 @pytest.mark.parametrize(
     ("certs", "new_cert", "old_cert", "expected"),
     [
+        # new cert does not exist, old cert exists at end
         (["a", "b"], "c", "b", ["a", "c"]),
+        # new cert does not exist, old cert does not exist
         (["a"], "c", "b", ["a", "c"]),
+        # new cert matches old cert
         (["a", "b"], "b", "b", ["a", "b"]),
-        (["a", "b"], "c", "a", ["c", "b"]),
-        (["a", "b", "c"], "d", "e", ["a", "b", "c", "d"]),
+        # new cert does exist, old cert does not exist
         (["a", "b", "c"], "c", "d", ["a", "b", "c"]),
-        (["a", "b"], "a", "b", ["a"])
+        # new cert exists, old cert exists
+        (["a", "b"], "a", "b", ["a"]),
     ]
 )
 def test_calc_certs(certs, new_cert, old_cert, expected):

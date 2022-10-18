@@ -116,6 +116,7 @@ def calc_diff(certs, new_cert, old_cert):
     The given certs are assumed to be unique and this is a no-op if new_cert and old_cert are the same.
     If new_cert already exists in certs, it will not be added.
     If old_cert already does not exist in certs, this is a no-op.
+    certs[0] is assumed to be the default cert and is never modified.
     :param certs:
     :param new_cert:
     :param old_cert:
@@ -123,20 +124,25 @@ def calc_diff(certs, new_cert, old_cert):
     """
     # Shallow copy the list of self-links (strings)
     result = list(certs)
-    if len(result) != len(set(result)):
-        raise Exception("expected given certs to be unique")
+    if len(certs) != len(set(result)):
+        raise Exception(f"expected given certs {certs} to be unique but were not")
     if new_cert == old_cert:
         return result
+    elif len(result) == 0:
+        return result
+    elif certs[0] == old_cert:
+        raise Exception("cannot use SNI rotation when old_cert is the default")
     old_cert_idx = -1
     for idx, self_link in enumerate(result):
         if self_link == old_cert:
             old_cert_idx = idx
             break
     if new_cert not in result:
-        if old_cert_idx != -1:
+        if old_cert_idx > 0:
             result[old_cert_idx] = new_cert
         else:
             result.append(new_cert)
+    # Old cert can only exist at idx > 0 and removing an SNI cert is safe to do.
     if old_cert in result:
         result.remove(old_cert)
     return result
