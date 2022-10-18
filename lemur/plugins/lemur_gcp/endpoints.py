@@ -109,13 +109,11 @@ def update_target_proxy_default_cert(project_id, credentials, endpoint, certific
     if kind == "targethttpsproxy":
         client = target_https_proxies.TargetHttpsProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_https_proxy=endpoint.name)
-        existing_certs = proxy.ssl_certificates if len(proxy.ssl_certificates) > 0 else []
-        set_target_ssl_proxy_certs(project_id, client, endpoint, [cert_self_link] + existing_certs)
+        set_target_https_proxy_certs(project_id, client, endpoint, [cert_self_link] + proxy.ssl_certificates)
     elif kind == "targetsslproxy":
         client = target_ssl_proxies.TargetSslProxiesClient(credentials=credentials)
         proxy = client.get(project=project_id, target_ssl_proxy=endpoint.name)
-        existing_certs = proxy.ssl_certificates if len(proxy.ssl_certificates) > 0 else []
-        set_target_ssl_proxy_certs(project_id, client, endpoint, [cert_self_link] + existing_certs)
+        set_target_ssl_proxy_certs(project_id, client, endpoint, [cert_self_link] + proxy.ssl_certificates)
 
 
 def set_target_https_proxy_certs(project_id, client, endpoint, certificate_self_links):

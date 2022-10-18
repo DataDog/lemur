@@ -113,6 +113,9 @@ def get_self_link(project, name):
 def calc_diff(certs, new_cert, old_cert):
     """
     Produces a list of certificate self-links where new_cert is added and old_cert is removed, if it exists.
+    The given certs are assumed to be unique and this is a no-op if new_cert and old_cert are the same.
+    If new_cert already exists in certs, it will not be added.
+    If old_cert already does not exist in certs, this is a no-op.
     :param certs:
     :param new_cert:
     :param old_cert:
@@ -120,13 +123,20 @@ def calc_diff(certs, new_cert, old_cert):
     """
     # Shallow copy the list of self-links (strings)
     result = list(certs)
-    new_cert_idx = -1
-    for idx, self_link in enumerate(certs):
+    if len(result) != len(set(result)):
+        raise Exception("expected given certs to be unique")
+    if new_cert == old_cert:
+        return result
+    old_cert_idx = -1
+    for idx, self_link in enumerate(result):
         if self_link == old_cert:
-            new_cert_idx = idx
+            old_cert_idx = idx
             break
-    if new_cert_idx != -1:
-        result[new_cert_idx] = new_cert
-    else:
-        result.append(new_cert)
+    if new_cert not in result:
+        if old_cert_idx != -1:
+            result[old_cert_idx] = new_cert
+        else:
+            result.append(new_cert)
+    if old_cert in result:
+        result.remove(old_cert)
     return result
