@@ -105,7 +105,6 @@ def get_oauth_credentials_from_hashicorp_vault(mount_point, role_name):
         mount_point=mount_point,
         name=role_name,
     )
-    print(f"got creds {creds}")
     return creds["client_id"], creds["client_secret"]
 
 
