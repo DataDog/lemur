@@ -1,5 +1,5 @@
 """
-.. module: lemur.plugins.lemur_azure_dest.plugin
+.. module: lemur.plugins.lemur_azure.plugin
     :platform: Unix
     :copyright: (c) 2019
     :license: Apache, see LICENCE for more details.
