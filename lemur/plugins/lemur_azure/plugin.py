@@ -188,6 +188,52 @@ class AzureSourcePlugin(SourcePlugin):
     author = "Bob Shannon"
     author_url = "https://github.com/datadog/lemur"
 
+    options = [
+        {
+            "name": "authenticationMethod",
+            "type": "select",
+            "value": "azureApp",
+            "required": True,
+            "available": ["hashicorpVault", "azureApp"],
+            "helpMessage": "Authentication method to use",
+        },
+        {
+            "name": "azureTenant",
+            "type": "str",
+            "required": True,
+            "validation": check_validation("^([a-zA-Z0-9-?])+$"),
+            "helpMessage": "Tenant to discover Azure resources from.",
+        },
+        {
+            "name": "azureAppID",
+            "type": "str",
+            "required": False,
+            "validation": check_validation("^([a-zA-Z0-9-?]?)+$"),
+            "helpMessage": "AppID for the Azure Key Vault. Required if authentication method is 'azureApp'.",
+        },
+        {
+            "name": "azurePassword",
+            "type": "str",
+            "required": False,
+            "validation": check_validation("([0-9a-zA-Z.:_-~]?)+"),
+            "helpMessage": "Tenant password for the Azure Key Vault. Required if authentication method is 'azureApp'.",
+        },
+        {
+            "name": "hashicorpVaultMountPoint",
+            "type": "str",
+            "required": False,
+            "helpMessage": "Path the Azure secrets engine was mounted on. Required if authentication "
+                           "method is 'hashicorpVault'.",
+        },
+        {
+            "name": "hashicorpVaultRoleName",
+            "type": "str",
+            "required": False,
+            "helpMessage": "Name of the role to fetch credentials for. Required if authentication "
+                           "method is 'hashicorpVault'.",
+        },
+    ]
+
     def __init__(self, *args, **kwargs):
         super(AzureSourcePlugin, self).__init__(*args, **kwargs)
 
