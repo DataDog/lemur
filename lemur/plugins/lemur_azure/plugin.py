@@ -14,16 +14,13 @@ from flask import current_app
 from lemur.common.defaults import common_name, issuer, bitstrength
 from lemur.common.utils import parse_certificate, parse_private_key, check_validation
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
-
+from lemur.plugins.lemur_azure.auth import get_azure_credentials
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
-from retrying import retry
 import requests
 import json
 import sys
 import base64
-import os
-import hvac
 
 
 def handle_response(my_response):
@@ -59,53 +56,6 @@ def handle_response(my_response):
     else:
         #  return data from the response
         return data
-
-
-@retry(wait_fixed=1000, stop_max_delay=600000)
-def get_access_token(tenant, client_id, client_secret, self):
-    """
-    Gets the access token for the client_id and the client_secret and returns it
-
-    Improvement option: we can try to save it and renew it only when necessary
-
-    :param tenant: Tenant used
-    :param client_id: Client ID to use for fetching an access token
-    :param client_secret: Client Secret to use for fetching an access token
-    :return: Access token to post to the keyvault
-    """
-    # prepare the call for the access_token
-    auth_url = f"https://login.microsoftonline.com/{tenant}/oauth2/token"
-    post_data = {
-        'grant_type': 'client_credentials',
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'resource': 'https://vault.azure.net'
-    }
-    try:
-        response = self.session.post(auth_url, data=post_data)
-    except requests.exceptions.RequestException as e:
-        current_app.logger.exception(f"AZURE: Error for POST {e}")
-
-    access_token = json.loads(response.content)["access_token"]
-    return access_token
-
-
-def get_oauth_credentials_from_hashicorp_vault(mount_point, role_name):
-    """
-    Retrieves OAuth credentials from Hashicorp Vault's Azure secrets engine.
-
-    :param mount_point: Path the Azure secrets engine is mounted on
-    :param role_name: Name of the role to fetch credentials for
-    :returns:
-        - client_id - OAuth client ID
-        - client_secret - OAuth client secret
-    """
-    client = hvac.Client(url=os.environ["VAULT_ADDR"])
-    creds = client.secrets.azure.generate_credentials(
-        mount_point=mount_point,
-        name=role_name,
-    )
-    return creds["client_id"], creds["client_secret"]
 
 
 class AzureDestinationPlugin(DestinationPlugin):
@@ -190,26 +140,8 @@ class AzureDestinationPlugin(DestinationPlugin):
         ca_certs = parse_certificate(cert_chain)
         certificate_name = f"{common_name(cert).replace('.', '-')}-{issuer(cert)}"
 
+        access_token = get_azure_credentials(self, options)
         vault_URI = self.get_option("azureKeyVaultUrl", options)
-        tenant = self.get_option("azureTenant", options)
-        app_id = self.get_option("azureAppID", options)
-        password = self.get_option("azurePassword", options)
-        auth_method = self.get_option("authenticationMethod", options)
-
-        if auth_method == "hashicorpVault":
-            mount_point = self.get_option("hashicorpVaultMountPoint", options)
-            role_name = self.get_option("hashicorpVaultRoleName", options)
-            client_id, client_secret = get_oauth_credentials_from_hashicorp_vault(mount_point, role_name)
-
-            # It may take up-to 10 minutes for the generated OAuth credentials to become usable due
-            # to AD replication delay. To account for this, the call to get_access_token is continuously
-            # re-tried until it succeeds or 10 minutes elapse.
-            access_token = get_access_token(tenant, client_id, client_secret, self)
-        elif auth_method == "azureApp":
-            access_token = get_access_token(tenant, app_id, password, self)
-        else:
-            raise Exception("No supported way to authenticate with Azure")
-
         cert_url = f"{vault_URI}/certificates/{certificate_name}/import?api-version=7.1"
         post_header = {
             "Authorization": f"Bearer {access_token}"
@@ -264,4 +196,6 @@ class AzureSourcePlugin(SourcePlugin):
 
     def get_endpoints(self, options, **kwargs):
         # TODO(EDGE-1725) Support discovering endpoints and certificates in Azure source plugin
+        # Fetch application gateways for each subscription.
+        # access_token = get_azure_credentials(self, options)
         pass
