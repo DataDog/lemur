@@ -200,3 +200,24 @@ class AzureSourcePlugin(SourcePlugin):
         # Fetch application gateways for each subscription.
         # access_token = get_azure_credentials(self, options)
         pass
+
+    @staticmethod
+    def update_endpoint(endpoint, certificate):
+        current_app.logger.info({
+            "message": "No explicit action required to rotate endpoint, Azure will automatically perform the rotation "
+                       "after the new certificate is uploaded to its Key Vault",
+            "endpoint": endpoint.name,
+            "certificate": certificate.name,
+
+        })
+        return
+
+    @staticmethod
+    def replace_sni_certificate(endpoint, old_cert, new_cert):
+        current_app.logger.info({
+            "message": "No explicit action required to rotate endpoint, Azure will automatically perform the rotation "
+                       "after the new certificate is uploaded to its Key Vault",
+            "endpoint": endpoint.name,
+            "old_certificate": old_cert.name,
+            "new_certificate": new_cert.name,
+        })
