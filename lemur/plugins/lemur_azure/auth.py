@@ -8,7 +8,15 @@ import json
 from retrying import retry
 
 
-def get_azure_credentials(plugin, options):
+class AccessTokenCredential:
+    def __init__(self, access_token):
+        self.access_token = access_token
+
+    def get_token(self, *scopes, **kwargs):  # pylint:disable=unused-argument
+        return self.access_token
+
+
+def get_azure_access_token(plugin, options):
     tenant = plugin.get_option("azureTenant", options)
     auth_method = plugin.get_option("authenticationMethod", options)
 
@@ -20,11 +28,11 @@ def get_azure_credentials(plugin, options):
         # It may take up-to 10 minutes for the generated OAuth credentials to become usable due
         # to AD replication delay. To account for this, the call to get_access_token is continuously
         # re-tried until it succeeds or 10 minutes elapse.
-        access_token = get_access_token(plugin, tenant, client_id, client_secret)
+        access_token = _get_access_token(plugin, tenant, client_id, client_secret)
     elif auth_method == "azureApp":
         app_id = plugin.get_option("azureAppID", options)
         password = plugin.get_option("azurePassword", options)
-        access_token = get_access_token(plugin, tenant, app_id, password)
+        access_token = _get_access_token(plugin, tenant, app_id, password)
     else:
         raise Exception("No supported way to authenticate with Azure")
 
@@ -50,7 +58,7 @@ def get_oauth_credentials_from_hashicorp_vault(mount_point, role_name):
 
 
 @retry(wait_fixed=1000, stop_max_delay=600000)
-def get_access_token(plugin, tenant, client_id, client_secret):
+def _get_access_token(plugin, tenant, client_id, client_secret):
     """
     Gets the access token for the client_id and the client_secret and returns it
 
