@@ -22,43 +22,24 @@ from lemur.plugins.lemur_azure.auth import get_azure_credential
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 import requests
-import json
-import sys
 
 
-def handle_response(my_response):
-    """
-    Helper function for parsing responses from the Entrust API.
-    :param my_response:
-    :return: :raise Exception:
-    """
-    msg = {
-        200: "The request was successful.",
-        400: "Keyvault Error"
-    }
+def certificate_from_id(appgw, certificate_id):
+    for cert in appgw.ssl_certificates:
+        if cert.id == certificate_id:
+            return dict(
+                name=cert.name,
+                path="",
+                registry_type="keyvault",
+            )
+    raise Exception(f"No certificate with ID {certificate_id} associated with {appgw.name}")
 
-    try:
-        data = json.loads(my_response.content)
-    except ValueError:
-        # catch an empty jason object here
-        data = {'response': 'No detailed message'}
-    status_code = my_response.status_code
-    if status_code > 399:
-        raise Exception(f"AZURE error: {msg.get(status_code, status_code)}\n{data}")
 
-    log_data = {
-        "function": f"{__name__}.{sys._getframe().f_code.co_name}",
-        "message": "Response",
-        "status": status_code,
-        "response": data
-    }
-    current_app.logger.info(log_data)
-    if data == {'response': 'No detailed message'}:
-        # status if no data
-        return status_code
-    else:
-        #  return data from the response
-        return data
+def port_from_id(appgw, port_id):
+    for fp in appgw.frontend_ports:
+        if fp.id == port_id:
+            return fp.port
+    raise Exception(f"No port with ID {port_id} associated with {appgw.name}")
 
 
 class AzureDestinationPlugin(DestinationPlugin):
@@ -236,25 +217,18 @@ class AzureSourcePlugin(SourcePlugin):
         for subscription in SubscriptionClient(credential=credential).subscriptions.list():
             network_client = NetworkManagementClient(credential=credential, subscription_id=subscription.subscription_id)
             for appgw in network_client.application_gateways.list_all():
-                ep = dict(
-                    name=appgw.name,
-                    type="applicationgateway",
-                    port=appgw.frontend_ports[0].port,
-                    sni_certificates=[],
-                )
-                certs = []
-                for crt in appgw.ssl_certificates:
-                    certs.append(
-                        dict(
-                            name=crt.name,
-                            path="",
-                            registry_type="keyvault",
+                for listener in appgw.http_listeners:
+                    if listener.protocol == "Https":
+                        frontend_port_id = listener.frontend_port.id
+                        ssl_certificate_id = listener.ssl_certificate.id
+                        ep = dict(
+                            name=appgw.name,
+                            port=port_from_id(appgw, frontend_port_id),
+                            type="applicationgateway",
+                            primary_certificate=certificate_from_id(appgw, ssl_certificate_id),
+                            sni_certificates=[],
                         )
-                    )
-                if certs:
-                    ep["primary_certificate"] = certs[0]
-                    ep["sni_certificates"] = certs[1:]
-                endpoints.append(ep)
+                        endpoints.append(ep)
 
         return endpoints
 
