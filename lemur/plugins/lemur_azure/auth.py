@@ -43,7 +43,7 @@ def get_azure_credential(plugin, options):
         return ClientSecretCredential(
             tenant_id=tenant,
             client_id=app_id,
-            client_secret=password
+            client_secret=password,
         )
 
     raise Exception("No supported way to authenticate with Azure")

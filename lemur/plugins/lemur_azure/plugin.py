@@ -10,6 +10,7 @@
 .. moduleauthor:: sirferl
 """
 from flask import current_app
+from azure.keyvault.certificates import CertificateClient, CertificatePolicy
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.subscription import SubscriptionClient
 
@@ -23,7 +24,6 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 import requests
 import json
 import sys
-import base64
 
 
 def handle_response(my_response):
@@ -143,43 +143,29 @@ class AzureDestinationPlugin(DestinationPlugin):
         ca_certs = parse_certificate(cert_chain)
         certificate_name = f"{common_name(cert).replace('.', '-')}-{issuer(cert)}"
 
-        access_token = get_azure_credential(self, options).get_token(scopes="https://vault.azure.net/.default")
-        vault_URI = self.get_option("azureKeyVaultUrl", options)
-        cert_url = f"{vault_URI}/certificates/{certificate_name}/import?api-version=7.1"
-        post_header = {
-            "Authorization": f"Bearer {access_token}"
-        }
-        # Azure keyvault accepts PEM and PKCS12-Format Certificates
-        # only the latter is usable for Azure Application Gateway
-        # therefore we upload in PKCS12 format
-        cert_p12 = pkcs12.serialize_key_and_certificates(
-            name=certificate_name.encode(),
-            key=parse_private_key(private_key),
-            cert=cert,
-            cas=[ca_certs],
-            encryption_algorithm=serialization.NoEncryption()
+        certificate_client = CertificateClient(
+            credential=get_azure_credential(self, options),
+            vault_url=self.get_option("azureKeyVaultUrl", options),
         )
-        # encode the p12 string with b64 and encode is at utf-8 again to get string for JSON
-        post_body = {
-            "value": base64.b64encode(cert_p12).decode('utf-8'),
-            "policy": {
-                "key_props": {
-                    "exportable": True,
-                    "kty": "RSA",
-                    "key_size": bitstrength(cert),
-                    "reuse_key": True
-                },
-                "secret_props": {
-                    "contentType": "application/x-pkcs12"
-                }
-            }
-        }
-
-        try:
-            response = self.session.post(cert_url, headers=post_header, json=post_body)
-            return_value = handle_response(response)
-        except requests.exceptions.RequestException as e:
-            current_app.logger.exception(f"AZURE: Error for POST {e}")
+        certificate_client.import_certificate(
+            certificate_name=certificate_name,
+            certificate_bytes=pkcs12.serialize_key_and_certificates(
+                name=certificate_name.encode(),
+                key=parse_private_key(private_key),
+                cert=cert,
+                cas=[ca_certs],
+                encryption_algorithm=serialization.NoEncryption()
+            ),
+            enabled=True,
+            policy=CertificatePolicy(
+                exportable=True,
+                key_type="RSA",
+                key_size=bitstrength(cert),
+                reuse_key=True,
+                content_type="application/x-pkcs12",
+            ),
+            tags={"lemur.managed": "true"},
+        )
 
 
 class AzureSourcePlugin(SourcePlugin):
@@ -271,7 +257,6 @@ class AzureSourcePlugin(SourcePlugin):
                 endpoints.append(ep)
 
         return endpoints
-
 
     @staticmethod
     def update_endpoint(endpoint, certificate):
