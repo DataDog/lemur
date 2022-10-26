@@ -16,7 +16,7 @@ from azure.mgmt.subscription import SubscriptionClient
 from lemur.common.defaults import common_name, issuer, bitstrength
 from lemur.common.utils import parse_certificate, parse_private_key, check_validation
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
-from lemur.plugins.lemur_azure.auth import AccessTokenCredential, get_azure_access_token
+from lemur.plugins.lemur_azure.auth import get_azure_credential
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
@@ -143,7 +143,7 @@ class AzureDestinationPlugin(DestinationPlugin):
         ca_certs = parse_certificate(cert_chain)
         certificate_name = f"{common_name(cert).replace('.', '-')}-{issuer(cert)}"
 
-        access_token = get_azure_access_token(self, options)
+        access_token = get_azure_credential(self, options).get_token(scopes="https://vault.azure.net/.default")
         vault_URI = self.get_option("azureKeyVaultUrl", options)
         cert_url = f"{vault_URI}/certificates/{certificate_name}/import?api-version=7.1"
         post_header = {
@@ -244,19 +244,18 @@ class AzureSourcePlugin(SourcePlugin):
         pass
 
     def get_endpoints(self, options, **kwargs):
-        access_token = get_azure_access_token(self, options)
-        credential = AccessTokenCredential(access_token=access_token)
+        credential = get_azure_credential(self, options)
 
         endpoints = []
         for subscription in SubscriptionClient(credential=credential).subscriptions.list():
             network_client = NetworkManagementClient(credential=credential, subscription_id=subscription.subscription_id)
             for appgw in network_client.application_gateways.list_all():
                 ep = dict(
-                        name=appgw.name,
-                        type="applicationgateway",
-                        port=appgw.frontend_ports[0].port,
-                        sni_certificates=[],
-                    )
+                    name=appgw.name,
+                    type="applicationgateway",
+                    port=appgw.frontend_ports[0].port,
+                    sni_certificates=[],
+                )
                 certs = []
                 for crt in appgw.ssl_certificates:
                     certs.append(
