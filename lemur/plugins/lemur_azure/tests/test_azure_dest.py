@@ -1,6 +1,6 @@
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, ANY
 
 from flask import Flask
 
@@ -96,9 +96,10 @@ class TestAzureDestination(unittest.TestCase):
         self.ctx.pop()
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
+    @patch("cryptography.hazmat.primitives.serialization.pkcs12.serialize_key_and_certificates")
     @patch("azure.keyvault.certificates.CertificateClient.import_certificate")
     @patch("hvac.Client")
-    def test_upload(self, hvac_client_mock, import_certificate_mock):
+    def test_upload(self, hvac_client_mock, import_certificate_mock, certificate_serializer_mock):
         from lemur.plugins.lemur_azure.plugin import AzureDestinationPlugin
 
         subject = AzureDestinationPlugin()
@@ -107,6 +108,15 @@ class TestAzureDestination(unittest.TestCase):
         body = test_server_cert
         private_key = test_server_key
         cert_chain = test_ca_cert
+
+        def _assert_certificate_imported():
+            import_certificate_mock.assert_called_with(
+                certificate_name="localhost-LocalCA",
+                certificate_bytes=ANY,
+                enabled=True,
+                policy=ANY,
+                tags={"lemur.managed": "true"}
+            )
 
         with self.subTest(case="upload cert using azureApp auth method"):
             options = [
@@ -117,7 +127,7 @@ class TestAzureDestination(unittest.TestCase):
                 {"name": "authenticationMethod", "value": "azureApp"}
             ]
             subject.upload(name, body, private_key, cert_chain, options)
-            import_certificate_mock.assert_called()
+            _assert_certificate_imported()
 
         with self.subTest(case="upload cert using hashicorpVault auth method"):
             options = [
@@ -131,4 +141,4 @@ class TestAzureDestination(unittest.TestCase):
                                                                                   "client_secret": "fakesecret123"}
             subject.upload(name, body, private_key, cert_chain, options)
             hvac_client_mock().secrets.azure.generate_credentials.assert_called_with(mount_point="/azure", name="mockedRole")
-            import_certificate_mock.assert_called()
+            _assert_certificate_imported()
