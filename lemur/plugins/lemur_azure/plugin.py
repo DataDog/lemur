@@ -21,7 +21,6 @@ from lemur.plugins.lemur_azure.auth import get_azure_credential
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
-import requests
 
 
 def certificate_from_id(appgw, certificate_id):
