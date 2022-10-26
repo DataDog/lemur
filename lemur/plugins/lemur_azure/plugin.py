@@ -42,6 +42,26 @@ def port_from_id(appgw, port_id):
     raise Exception(f"No port with ID {port_id} associated with {appgw.name}")
 
 
+def resource_group_from_id(resource_id):
+    return resource_id.lstrip("/").split("/")[3]
+
+
+def resource_name_from_id(resource_id):
+    return resource_id.id.lstrip("/").split("/")[7]
+
+
+def public_ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id):
+    for cfg in appgw.frontend_ip_configurations:
+        if cfg.id == frontend_ip_cfg_id:
+            resource_group = resource_group_from_id(cfg.public_ip_address.id)
+            ip_name = resource_name_from_id(cfg.public_ip_address.id)
+            return network_client.public_ip_addresses.get(
+                resource_group_name=resource_group,
+                public_ip_address_name=ip_name
+            ).ip_address
+    raise Exception(f"No public IP associated with {appgw.name} and frontend IP configuration {frontend_ip_cfg_id}")
+
+
 class AzureDestinationPlugin(DestinationPlugin):
     """Azure Keyvault Destination plugin for Lemur"""
 
@@ -219,10 +239,12 @@ class AzureSourcePlugin(SourcePlugin):
             for appgw in network_client.application_gateways.list_all():
                 for listener in appgw.http_listeners:
                     if listener.protocol == "Https":
+                        frontend_ip_cfg_id = listener.frontend_ip_configuration.id
                         frontend_port_id = listener.frontend_port.id
                         ssl_certificate_id = listener.ssl_certificate.id
                         ep = dict(
                             name=appgw.name,
+                            dnsname=public_ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id),
                             port=port_from_id(appgw, frontend_port_id),
                             type="applicationgateway",
                             primary_certificate=certificate_from_id(appgw, ssl_certificate_id),
