@@ -4,8 +4,6 @@ from unittest.mock import patch, ANY
 
 from flask import Flask
 
-from lemur.plugins.lemur_azure import plugin
-
 # mock certificate to test the upload function code
 test_server_cert = '''-----BEGIN CERTIFICATE-----
 MIIDsDCCApigAwIBAgIJAIezI4YBdaH5MA0GCSqGSIb3DQEBCwUAMGYxCzAJBgNV
@@ -84,7 +82,6 @@ Qils0nQFsH1VujvoF9Y04MAgZw==
 
 class TestAzureDestination(unittest.TestCase):
     def setUp(self):
-        self.azure_dest = plugin.AzureDestinationPlugin()
         # Creates a new Flask application for a test duration. In python 3.8, manual push of application context is
         # needed to run tests in dev environment without getting error 'Working outside of application context'.
         _app = Flask('lemur_test_azure_dest')
@@ -96,10 +93,9 @@ class TestAzureDestination(unittest.TestCase):
         self.ctx.pop()
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
-    @patch("cryptography.hazmat.primitives.serialization.pkcs12.serialize_key_and_certificates")
     @patch("azure.keyvault.certificates.CertificateClient.import_certificate")
     @patch("hvac.Client")
-    def test_upload(self, hvac_client_mock, import_certificate_mock, certificate_serializer_mock):
+    def test_upload(self, hvac_client_mock, import_certificate_mock):
         from lemur.plugins.lemur_azure.plugin import AzureDestinationPlugin
 
         subject = AzureDestinationPlugin()

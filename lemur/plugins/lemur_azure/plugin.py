@@ -31,14 +31,14 @@ def certificate_from_id(appgw, certificate_id):
                 path="",
                 registry_type="keyvault",
             )
-    raise Exception(f"No certificate with ID {certificate_id} associated with {appgw.name}")
+    raise Exception(f"No certificate with ID {certificate_id} associated with {appgw.id}")
 
 
 def port_from_id(appgw, port_id):
     for fp in appgw.frontend_ports:
         if fp.id == port_id:
             return fp.port
-    raise Exception(f"No port with ID {port_id} associated with {appgw.name}")
+    raise Exception(f"No port with ID {port_id} associated with {appgw.id}")
 
 
 def resource_group_from_id(resource_id):
@@ -46,19 +46,22 @@ def resource_group_from_id(resource_id):
 
 
 def resource_name_from_id(resource_id):
-    return resource_id.id.lstrip("/").split("/")[7]
+    return resource_id.lstrip("/").split("/")[7]
 
 
-def public_ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id):
+def ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id):
     for cfg in appgw.frontend_ip_configurations:
         if cfg.id == frontend_ip_cfg_id:
-            resource_group = resource_group_from_id(cfg.public_ip_address.id)
-            ip_name = resource_name_from_id(cfg.public_ip_address.id)
-            return network_client.public_ip_addresses.get(
-                resource_group_name=resource_group,
-                public_ip_address_name=ip_name
-            ).ip_address
-    raise Exception(f"No public IP associated with {appgw.name} and frontend IP configuration {frontend_ip_cfg_id}")
+            if cfg.public_ip_address:
+                resource_group = resource_group_from_id(cfg.public_ip_address.id)
+                ip_name = resource_name_from_id(cfg.public_ip_address.id)
+                return network_client.public_ip_addresses.get(
+                    resource_group_name=resource_group,
+                    public_ip_address_name=ip_name
+                ).ip_address
+            elif cfg.private_ip_address:
+                return cfg.private_ip_address
+    raise Exception(f"No IP address associated with {appgw.id} and frontend IP configuration {frontend_ip_cfg_id}")
 
 
 class AzureDestinationPlugin(DestinationPlugin):
@@ -242,14 +245,14 @@ class AzureSourcePlugin(SourcePlugin):
                         ssl_certificate_id = listener.ssl_certificate.id
                         ep = dict(
                             name=appgw.name,
-                            dnsname=public_ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id),
+                            dnsname=ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id),
                             port=port_from_id(appgw, frontend_port_id),
                             type="applicationgateway",
                             primary_certificate=certificate_from_id(appgw, ssl_certificate_id),
                             sni_certificates=[],
                         )
                         endpoints.append(ep)
-
+        print(endpoints)
         return endpoints
 
     @staticmethod
