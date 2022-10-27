@@ -28,7 +28,6 @@ def certificate_from_id(appgw, certificate_id):
         if cert.id == certificate_id:
             return dict(
                 name=cert.name,
-                path="",
                 registry_type="keyvault",
             )
     raise Exception(f"No certificate with ID {certificate_id} associated with {appgw.id}")
@@ -240,18 +239,15 @@ class AzureSourcePlugin(SourcePlugin):
             for appgw in network_client.application_gateways.list_all():
                 for listener in appgw.http_listeners:
                     if listener.protocol == "Https":
-                        frontend_ip_cfg_id = listener.frontend_ip_configuration.id
-                        frontend_port_id = listener.frontend_port.id
-                        ssl_certificate_id = listener.ssl_certificate.id
-                        port = port_from_id(appgw, frontend_port_id)
-                        ip_address, is_public = ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id)
+                        port = port_from_id(appgw, listener.frontend_port.id)
+                        ip_address, is_public = ip_from_cfg_id(appgw, network_client, listener.frontend_ip_configuration.id)
                         listener_type = "public" if is_public else "internal"
                         ep = dict(
                             name=f"{appgw.name}-{listener_type}-{port}",
                             dnsname=ip_address,
                             port=port,
                             type="applicationgateway",
-                            primary_certificate=certificate_from_id(appgw, ssl_certificate_id),
+                            primary_certificate=certificate_from_id(appgw, listener.ssl_certificate.id),
                             sni_certificates=[],
                         )
                         endpoints.append(ep)
@@ -260,8 +256,8 @@ class AzureSourcePlugin(SourcePlugin):
     @staticmethod
     def update_endpoint(endpoint, certificate):
         current_app.logger.info({
-            "message": "No explicit action required to rotate endpoint, Azure will automatically perform the rotation "
-                       "after the new certificate is uploaded to its Key Vault",
+            "message": "No explicit action required to rotate endpoint. Azure will automatically perform the rotation "
+                       "after the new certificate is uploaded to its Key Vault.",
             "endpoint": endpoint.name,
             "certificate": certificate.name,
 
@@ -271,8 +267,8 @@ class AzureSourcePlugin(SourcePlugin):
     @staticmethod
     def replace_sni_certificate(endpoint, old_cert, new_cert):
         current_app.logger.info({
-            "message": "No explicit action required to rotate endpoint, Azure will automatically perform the rotation "
-                       "after the new certificate is uploaded to its Key Vault",
+            "message": "No explicit action required to rotate endpoint. Azure will automatically perform the rotation "
+                       "after the new certificate is uploaded to its Key Vault.",
             "endpoint": endpoint.name,
             "old_certificate": old_cert.name,
             "new_certificate": new_cert.name,
