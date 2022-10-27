@@ -228,6 +228,14 @@ class AzureSourcePlugin(SourcePlugin):
 
     def get_certificates(self, options, **kwargs):
         # TODO(EDGE-1725) Support discovering endpoints and certificates in Azure source plugin
+        certificate_client = CertificateClient(
+            credential=get_azure_credential(self, options),
+            vault_url=self.get_option("azureKeyVaultUrl", options), # TODO(add this option to source plugin)
+        )
+        certificates = certificate_client.list_properties_of_certificates()
+        for cert in certificates:
+            body = certificate_client.get_certificate(certificate_name=cert.name).cer
+            # TODO(parse certificate)
         return []
 
     def get_certificate_by_name(self, certificate_name, options):
