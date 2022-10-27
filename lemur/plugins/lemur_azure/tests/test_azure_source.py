@@ -48,10 +48,9 @@ class TestAzureSource(unittest.TestCase):
 
         foo_appgw = ApplicationGateway(
             id="fake-appgw-foo",
-            name="foo",
             http_listeners=[
                 ApplicationGatewayHttpListener(
-                    id="default-listener-443",
+                    name="public-listener-443",
                     protocol="Https",
                     frontend_ip_configuration=SubResource(
                         id=_frontend_ip_cfg_resource_id(subscription_id="fake-subscription-1",
@@ -100,7 +99,7 @@ class TestAzureSource(unittest.TestCase):
             id="fake-appgw-bar-plaintext-only",
             http_listeners=[
                 ApplicationGatewayHttpListener(
-                    id="public-listener-80",
+                    name="public-listener-80",
                     protocol="Http",
                     frontend_ip_configuration=SubResource(
                         id=_frontend_ip_cfg_resource_id(subscription_id="fake-subscription-1",
@@ -142,7 +141,7 @@ class TestAzureSource(unittest.TestCase):
             id="fake-appgw-baz",
             http_listeners=[
                 ApplicationGatewayHttpListener(
-                    id="public-listener-443",
+                    name="public-listener-443",
                     protocol="Https",
                     frontend_ip_configuration=SubResource(
                         id=_frontend_ip_cfg_resource_id(subscription_id="fake-subscription-2",
@@ -156,7 +155,7 @@ class TestAzureSource(unittest.TestCase):
                                                resource_name="fake-ssl-certificate-baz-1")),
                 ),
                 ApplicationGatewayHttpListener(
-                    id="internal-listener-443",
+                    name="internal-listener-443",
                     protocol="Https",
                     frontend_ip_configuration=SubResource(
                         id=_frontend_ip_cfg_resource_id(subscription_id="fake-subscription-2",
@@ -235,7 +234,7 @@ class TestAzureSource(unittest.TestCase):
         synced_endpoints = self.azure_source.get_endpoints(options)
         assert synced_endpoints == [
             dict(
-                name="fake-appgw-foo",
+                name="fake-appgw-foo-public-443",
                 dnsname="204.13.0.120",
                 port=443,
                 type="applicationgateway",
@@ -247,7 +246,7 @@ class TestAzureSource(unittest.TestCase):
                 sni_certificates=[],
             ),
             dict(
-                name="fake-appgw-baz",
+                name="fake-appgw-baz-public-443",
                 dnsname="204.13.0.121",
                 port=443,
                 type="applicationgateway",
@@ -259,7 +258,7 @@ class TestAzureSource(unittest.TestCase):
                 sni_certificates=[],
             ),
             dict(
-                name="fake-appgw-baz",
+                name="fake-appgw-baz-internal-443",
                 dnsname="10.10.200.1",
                 port=443,
                 type="applicationgateway",

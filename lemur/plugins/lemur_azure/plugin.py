@@ -58,9 +58,9 @@ def ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id):
                 return network_client.public_ip_addresses.get(
                     resource_group_name=resource_group,
                     public_ip_address_name=ip_name
-                ).ip_address
+                ).ip_address, True
             elif cfg.private_ip_address:
-                return cfg.private_ip_address
+                return cfg.private_ip_address, False
     raise Exception(f"No IP address associated with {appgw.id} and frontend IP configuration {frontend_ip_cfg_id}")
 
 
@@ -243,10 +243,13 @@ class AzureSourcePlugin(SourcePlugin):
                         frontend_ip_cfg_id = listener.frontend_ip_configuration.id
                         frontend_port_id = listener.frontend_port.id
                         ssl_certificate_id = listener.ssl_certificate.id
+                        port = port_from_id(appgw, frontend_port_id)
+                        ip_address, is_public = ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id)
+                        listener_type = "public" if is_public else "internal"
                         ep = dict(
-                            name=appgw.name,
-                            dnsname=ip_from_cfg_id(appgw, network_client, frontend_ip_cfg_id),
-                            port=port_from_id(appgw, frontend_port_id),
+                            name=f"{appgw.name}-{listener_type}-{port}",
+                            dnsname=ip_address,
+                            port=port,
                             type="applicationgateway",
                             primary_certificate=certificate_from_id(appgw, ssl_certificate_id),
                             sni_certificates=[],
