@@ -255,7 +255,6 @@ class AzureSourcePlugin(SourcePlugin):
                             sni_certificates=[],
                         )
                         endpoints.append(ep)
-        print(endpoints)
         return endpoints
 
     @staticmethod
