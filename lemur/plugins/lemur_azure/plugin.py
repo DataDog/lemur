@@ -230,6 +230,10 @@ class AzureSourcePlugin(SourcePlugin):
         # TODO(EDGE-1725) Support discovering endpoints and certificates in Azure source plugin
         return []
 
+    def get_certificate_by_name(self, certificate_name, options):
+        # TODO(EDGE-1725) Support discovering endpoints and certificates in Azure source plugin
+        return
+
     def get_endpoints(self, options, **kwargs):
         credential = get_azure_credential(self, options)
 
