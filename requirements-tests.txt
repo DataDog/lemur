@@ -249,7 +249,7 @@ requests-mock==1.10.0
     # via -r requirements-tests.in
 responses==0.20.0
     # via moto
-rsa==4.8
+rsa==4.9
     # via python-jose
 s3transfer==0.6.0
     # via boto3
