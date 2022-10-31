@@ -10,12 +10,16 @@
 .. moduleauthor:: sirferl
 """
 from flask import current_app
+import textwrap
+import x509
 from azure.keyvault.certificates import CertificateClient, CertificatePolicy
+from azure.core.exceptions import ResourceNotFoundError
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.subscription import SubscriptionClient
 
 from lemur.common.defaults import common_name, issuer, bitstrength
 from lemur.common.utils import parse_certificate, parse_private_key, check_validation
+from lemur.extensions import metrics
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins.lemur_azure.auth import get_azure_credential
 
@@ -179,6 +183,13 @@ class AzureSourcePlugin(SourcePlugin):
 
     options = [
         {
+            "name": "azureKeyVaultUrl",
+            "type": "str",
+            "required": True,
+            "validation": check_validation("^https?://[a-zA-Z0-9.:-]+$"),
+            "helpMessage": "Azure key vault to discover certificates from.",
+        },
+        {
             "name": "authenticationMethod",
             "type": "select",
             "value": "azureApp",
@@ -231,8 +242,29 @@ class AzureSourcePlugin(SourcePlugin):
         return []
 
     def get_certificate_by_name(self, certificate_name, options):
-        # TODO(EDGE-1725) Support discovering endpoints and certificates in Azure source plugin
-        return
+        certificate_client = CertificateClient(
+            credential=get_azure_credential(self, options),
+            vault_url=self.get_option("azureKeyVaultUrl", options),
+        )
+        try:
+            crt = certificate_client.get_certificate(certificate_name=certificate_name)
+            decoded_crt = x509.load_der_x509_certificate(bytes(crt.cer))
+            return dict(
+                body=decoded_crt.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
+                name=crt.name,
+            )
+        except ResourceNotFoundError as e:
+            current_app.logger.warning(
+                f"get_azure_key_vault_certificate_failed: Unable to get certificate for {certificate_name}"
+            )
+            metrics.send(
+                "get_azure_key_vault_certificate_failed", "counter", 1,
+                metric_tags={
+                    "certificate_name": certificate_name,
+                    "tenant": self.get_option("azureTenant", options),
+                }
+            )
+        return None
 
     def get_endpoints(self, options, **kwargs):
         credential = get_azure_credential(self, options)
