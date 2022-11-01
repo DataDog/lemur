@@ -11,6 +11,8 @@ from azure.mgmt.network.models import (
     ApplicationGatewayFrontendPort,
     ApplicationGatewayHttpListener,
     ApplicationGatewaySslCertificate,
+    ApplicationGatewaySslPolicy,
+    ApplicationGatewaySslCipherSuite,
     PublicIPAddress,
     SubResource
 )
@@ -97,6 +99,12 @@ class TestAzureSource(unittest.TestCase):
                     name="fake-ssl-certificate-foo",
                 )
             ],
+            ssl_policy=ApplicationGatewaySslPolicy(
+                policy_name="AppGwSslPolicy20170401S",
+                cipher_suites=[
+                    ApplicationGatewaySslCipherSuite("TLS_RSA_WITH_AES_256_CBC_SHA"),
+                ]
+            ),
         )
         foo_public_ip = PublicIPAddress(
             id=_public_ip_resource_id(subscription_id="fake-subscription-1", resource_name="fake-public-ipv4-foo-1"),
@@ -133,15 +141,8 @@ class TestAzureSource(unittest.TestCase):
                 ApplicationGatewayFrontendPort(
                     id=_frontend_port_id(subscription_id="fake-subscription-1", appgw_name="fake-appgw-bar",
                                          resource_name="fake-frontend-port-bar"),
-                    port=443,
+                    port=80,
                 ),
-            ],
-            ssl_certificates=[
-                ApplicationGatewaySslCertificate(
-                    id=_ssl_certificate_id(subscription_id="fake-subscription-1", appgw_name="fake-appgw-bar",
-                                           resource_name="fake-ssl-certificate-bar"),
-                    name="fake-ssl-certificate-bar",
-                )
             ],
         )
         bar_appgw.name = "fake-appgw-bar-plaintext-only"
@@ -218,6 +219,12 @@ class TestAzureSource(unittest.TestCase):
                     name="fake-ssl-certificate-baz-2",
                 )
             ],
+            ssl_policy=ApplicationGatewaySslPolicy(
+                policy_name="AppGwSslPolicy20170401S",
+                cipher_suites=[
+                    ApplicationGatewaySslCipherSuite("TLS_RSA_WITH_AES_256_CBC_SHA"),
+                ]
+            ),
         )
         baz_appgw.name = "fake-appgw-baz"
         baz_public_ip = PublicIPAddress(
@@ -252,6 +259,10 @@ class TestAzureSource(unittest.TestCase):
                     registry_type="keyvault",
                 ),
                 sni_certificates=[],
+                policy=dict(
+                    name="AppGwSslPolicy20170401S",
+                    ciphers=["TLS_RSA_WITH_AES_256_CBC_SHA"],
+                )
             ),
             dict(
                 name="fake-appgw-baz-public-443",
@@ -264,6 +275,10 @@ class TestAzureSource(unittest.TestCase):
                     registry_type="keyvault",
                 ),
                 sni_certificates=[],
+                policy=dict(
+                    name="AppGwSslPolicy20170401S",
+                    ciphers=["TLS_RSA_WITH_AES_256_CBC_SHA"],
+                )
             ),
             dict(
                 name="fake-appgw-baz-internal-443",
@@ -276,5 +291,9 @@ class TestAzureSource(unittest.TestCase):
                     registry_type="keyvault",
                 ),
                 sni_certificates=[],
+                policy=dict(
+                    name="AppGwSslPolicy20170401S",
+                    ciphers=["TLS_RSA_WITH_AES_256_CBC_SHA"],
+                )
             ),
         ]

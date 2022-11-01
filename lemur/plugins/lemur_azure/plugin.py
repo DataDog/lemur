@@ -15,6 +15,7 @@ from azure.keyvault.certificates import CertificateClient, CertificatePolicy
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.subscription import SubscriptionClient
+from azure.mgmt.network.models import ApplicationGatewaySslCipherSuite
 
 from lemur.common.defaults import common_name, issuer, bitstrength
 from lemur.common.utils import parse_certificate, parse_private_key, check_validation
@@ -25,6 +26,25 @@ from lemur.plugins.lemur_azure.auth import get_azure_credential
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
+
+
+def policy_from_appgw(appgw):
+    if not appgw.ssl_policy:
+        return dict(
+            name="none",
+            ciphers=[],
+        )
+    policy = dict(
+        name=appgw.ssl_policy.policy_name,
+        ciphers=[],
+    )
+    if appgw.ssl_policy.cipher_suites:
+        for c in appgw.ssl_policy.cipher_suites:
+            if isinstance(c, ApplicationGatewaySslCipherSuite):
+                policy["ciphers"].append(c.value)
+            else:
+                policy["ciphers"].append(c)
+    return policy
 
 
 def certificate_from_id(appgw, certificate_id):
@@ -302,6 +322,7 @@ class AzureSourcePlugin(SourcePlugin):
                             type="applicationgateway",
                             primary_certificate=certificate_from_id(appgw, listener.ssl_certificate.id),
                             sni_certificates=[],
+                            policy=policy_from_appgw(appgw),
                         )
                         endpoints.append(ep)
         return endpoints
