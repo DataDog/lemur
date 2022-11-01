@@ -178,8 +178,8 @@ class AzureDestinationPlugin(DestinationPlugin):
         :return:
         """
 
-        # we use the common name to identify the certificate
-        # Azure does not allow "." in the certificate name we replace them with "-"
+        # The certificate name must be a 1-127 character string, starting with a letter
+        # and containing only 0-9, a-z, A-Z, and -.
         cert = parse_certificate(body)
         ca_certs = parse_certificate(cert_chain)
         certificate_name = f"{common_name(cert).replace('.', '-').replace('*', 'star')}-{issuer(cert)}"
