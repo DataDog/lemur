@@ -12,9 +12,11 @@ from azure.mgmt.network.models import (
     ApplicationGatewayFrontendIPConfiguration,
     ApplicationGatewayFrontendPort,
     ApplicationGatewayHttpListener,
+    ApplicationGatewaySslPredefinedPolicy,
     ApplicationGatewaySslCertificate,
     ApplicationGatewaySslPolicy,
     ApplicationGatewaySslPolicyName,
+    ApplicationGatewaySslPolicyType,
     ApplicationGatewaySslCipherSuite,
     PublicIPAddress,
     SubResource
@@ -118,14 +120,27 @@ class TestAzureSource(unittest.TestCase):
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
     @patch("azure.mgmt.network.v2022_05_01.operations.PublicIPAddressesOperations.get")
+    @patch("azure.mgmt.network.v2022_05_01.operations.ApplicationGatewaysOperations.get_ssl_predefined_policy")
     @patch("azure.mgmt.network.v2022_05_01.operations.ApplicationGatewaysOperations.list_all")
     @patch("azure.mgmt.subscription.operations.SubscriptionsOperations.list")
-    def test_get_endpoints(self, list_subscriptions_mock, list_all_appgw_mock, get_public_ip_mock):
+    def test_get_endpoints(
+            self,
+            list_subscriptions_mock,
+            list_all_appgw_mock,
+            get_ssl_predefined_policy_mock,
+            get_public_ip_mock
+    ):
         test_subscription_1 = Subscription()
         test_subscription_1.subscription_id = "fake-subscription-1"
         test_subscription_2 = Subscription()
         test_subscription_2.subscription_id = "fake-subscription-2"
 
+        test_predefined_ssl_policy = ApplicationGatewaySslPredefinedPolicy(
+            predefined_policy_name="AppGwSslPolicy20170401S",
+            cipher_suites=[
+                ApplicationGatewaySslCipherSuite("TLS_RSA_WITH_AES_256_CBC_SHA"),
+            ]
+        )
         foo_appgw = ApplicationGateway(
             id="fake-appgw-foo",
             http_listeners=[
@@ -170,10 +185,8 @@ class TestAzureSource(unittest.TestCase):
                 )
             ],
             ssl_policy=ApplicationGatewaySslPolicy(
-                policy_name="AppGwSslPolicy20170401S",
-                cipher_suites=[
-                    "TLS_RSA_WITH_AES_256_CBC_SHA",
-                ]
+                policy_name=ApplicationGatewaySslPolicyName("AppGwSslPolicy20170401S"),
+                policy_type=ApplicationGatewaySslPolicyType("Predefined"),
             ),
         )
         foo_public_ip = PublicIPAddress(
@@ -290,9 +303,10 @@ class TestAzureSource(unittest.TestCase):
                 )
             ],
             ssl_policy=ApplicationGatewaySslPolicy(
-                policy_name=ApplicationGatewaySslPolicyName("AppGwSslPolicy20170401S"),
+                policy_name="UserDefinedCustomAppGwSslPolicy",
+                policy_type=ApplicationGatewaySslPolicyType("CustomV2"),
                 cipher_suites=[
-                    ApplicationGatewaySslCipherSuite("TLS_RSA_WITH_AES_256_CBC_SHA"),
+                    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
                 ]
             ),
         )
@@ -309,6 +323,7 @@ class TestAzureSource(unittest.TestCase):
         list_subscriptions_mock.return_value = [test_subscription_1, test_subscription_2]
         list_all_appgw_mock.side_effect = [test_subscription_1_appgws, test_subscription_2_appgws]
         get_public_ip_mock.side_effect = [ip for ip in test_public_ips]
+        get_ssl_predefined_policy_mock.return_value = test_predefined_ssl_policy
 
         synced_endpoints = self.azure_source.get_endpoints(self.options)
         assert synced_endpoints == [
@@ -340,8 +355,8 @@ class TestAzureSource(unittest.TestCase):
                 ),
                 sni_certificates=[],
                 policy=dict(
-                    name="AppGwSslPolicy20170401S",
-                    ciphers=["TLS_RSA_WITH_AES_256_CBC_SHA"],
+                    name="UserDefinedCustomAppGwSslPolicy",
+                    ciphers=["TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"],
                 )
             ),
             dict(
@@ -356,8 +371,8 @@ class TestAzureSource(unittest.TestCase):
                 ),
                 sni_certificates=[],
                 policy=dict(
-                    name="AppGwSslPolicy20170401S",
-                    ciphers=["TLS_RSA_WITH_AES_256_CBC_SHA"],
+                    name="UserDefinedCustomAppGwSslPolicy",
+                    ciphers=["TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"],
                 )
             ),
         ]

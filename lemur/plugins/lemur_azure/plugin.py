@@ -15,7 +15,7 @@ from azure.keyvault.certificates import CertificateClient, CertificatePolicy
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.subscription import SubscriptionClient
-from azure.mgmt.network.models import ApplicationGatewaySslPolicyName, ApplicationGatewaySslCipherSuite
+from azure.mgmt.network.models import ApplicationGatewaySslPolicyName, ApplicationGatewaySslPolicyType, ApplicationGatewaySslCipherSuite
 
 from lemur.common.defaults import common_name, issuer, bitstrength
 from lemur.common.utils import parse_certificate, parse_private_key, check_validation
@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 
-def policy_from_appgw(appgw):
+def policy_from_appgw(network_client, appgw):
     if not appgw.ssl_policy:
         return dict(
             name="none",
@@ -38,16 +38,27 @@ def policy_from_appgw(appgw):
         name="",
         ciphers=[],
     )
+    policy_name = appgw.ssl_policy.policy_name
     if isinstance(appgw.ssl_policy.policy_name, ApplicationGatewaySslPolicyName):
-        policy["name"] = appgw.ssl_policy.policy_name.value
-    else:
-        policy["name"] = appgw.ssl_policy.policy_name
-    if appgw.ssl_policy.cipher_suites:
-        for c in appgw.ssl_policy.cipher_suites:
-            if isinstance(c, ApplicationGatewaySslCipherSuite):
-                policy["ciphers"].append(c.value)
-            else:
-                policy["ciphers"].append(c)
+        policy_name = appgw.ssl_policy.policy_name.value
+    policy_type = appgw.ssl_policy.policy_type
+    if isinstance(appgw.ssl_policy.policy_type, ApplicationGatewaySslPolicyType):
+        policy_type = appgw.ssl_policy.policy_type.value
+
+    cipher_suites = []
+    if policy_type == "Predefined":
+        predefined_policy = network_client.application_gateways.get_ssl_predefined_policy(predefined_policy_name=policy_name)
+        cipher_suites = predefined_policy.cipher_suites
+    elif appgw.ssl_policy.cipher_suites:
+        cipher_suites = appgw.ssl_policy.cipher_suites
+
+    for c in cipher_suites:
+        if isinstance(c, ApplicationGatewaySslCipherSuite):
+            policy["ciphers"].append(c.value)
+        else:
+            policy["ciphers"].append(c)
+    policy["name"] = policy_name
+
     return policy
 
 
@@ -326,7 +337,7 @@ class AzureSourcePlugin(SourcePlugin):
                             type="applicationgateway",
                             primary_certificate=certificate_from_id(appgw, listener.ssl_certificate.id),
                             sni_certificates=[],
-                            policy=policy_from_appgw(appgw),
+                            policy=policy_from_appgw(network_client, appgw),
                         )
                         endpoints.append(ep)
         return endpoints
