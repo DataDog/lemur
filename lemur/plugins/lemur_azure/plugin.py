@@ -238,8 +238,33 @@ class AzureSourcePlugin(SourcePlugin):
         super(AzureSourcePlugin, self).__init__(*args, **kwargs)
 
     def get_certificates(self, options, **kwargs):
-        # TODO(EDGE-1725) Support discovering endpoints and certificates in Azure source plugin
-        return []
+        certificates = []
+        certificate_client = CertificateClient(
+            credential=get_azure_credential(self, options),
+            vault_url=self.get_option("azureKeyVaultUrl", options),
+        )
+        for prop in certificate_client.list_properties_of_certificates():
+            try:
+                crt = certificate_client.get_certificate(certificate_name=prop.name)
+                decoded_crt = x509.load_der_x509_certificate(bytes(crt.cer))
+                certificates.append(
+                    dict(
+                        body=decoded_crt.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
+                        name=crt.name,
+                    )
+                )
+            except ResourceNotFoundError as e:
+                current_app.logger.warning(
+                    f"get_azure_key_vault_certificate_failed: Unable to get certificate for {prop.name}"
+                )
+                metrics.send(
+                    "get_azure_key_vault_certificate_failed", "counter", 1,
+                    metric_tags={
+                        "certificate_name": prop.name,
+                        "tenant": self.get_option("azureTenant", options),
+                    }
+                )
+        return certificates
 
     def get_certificate_by_name(self, certificate_name, options):
         certificate_client = CertificateClient(
