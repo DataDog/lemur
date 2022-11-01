@@ -32,6 +32,7 @@ def certificate_from_id(appgw, certificate_id):
         if cert.id == certificate_id:
             return dict(
                 name=cert.name,
+                path="",
                 registry_type="keyvault",
             )
     raise Exception(f"No certificate with ID {certificate_id} associated with {appgw.id}")

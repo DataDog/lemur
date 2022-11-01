@@ -240,6 +240,7 @@ class TestAzureSource(unittest.TestCase):
                 type="applicationgateway",
                 primary_certificate=dict(
                     name="fake-ssl-certificate-foo",
+                    path="",
                     registry_type="keyvault",
                 ),
                 sni_certificates=[],
@@ -251,6 +252,7 @@ class TestAzureSource(unittest.TestCase):
                 type="applicationgateway",
                 primary_certificate=dict(
                     name="fake-ssl-certificate-baz-1",
+                    path="",
                     registry_type="keyvault",
                 ),
                 sni_certificates=[],
@@ -262,6 +264,7 @@ class TestAzureSource(unittest.TestCase):
                 type="applicationgateway",
                 primary_certificate=dict(
                     name="fake-ssl-certificate-baz-2",
+                    path="",
                     registry_type="keyvault",
                 ),
                 sni_certificates=[],
