@@ -1,6 +1,8 @@
 import os
 import unittest
 from unittest.mock import patch
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 
 from lemur.plugins.lemur_azure import plugin
 
@@ -16,6 +18,32 @@ from azure.mgmt.network.models import (
     PublicIPAddress,
     SubResource
 )
+from azure.keyvault.certificates import KeyVaultCertificate
+
+
+test_server_cert_1 = """-----BEGIN CERTIFICATE-----
+MIIDsDCCApigAwIBAgIJAIezI4YBdaH5MA0GCSqGSIb3DQEBCwUAMGYxCzAJBgNV
+BAYTAkFUMQ8wDQYDVQQHDAZWaWVubmExEDAOBgNVBAoMB1NpcmZlcmwxETAPBgNV
+BAMMCExvY2FsIENBMSEwHwYJKoZIhvcNAQkBFhJzaXJmZXJsQGdpdGh1Yi5jb20w
+HhcNMjEwNzI0MDM1MDIzWhcNMjIxMjA2MDM1MDIzWjBnMQswCQYDVQQGEwJBVDEP
+MA0GA1UEBwwGVmllbm5hMRAwDgYDVQQKDAdTaXJmZXJsMSEwHwYJKoZIhvcNAQkB
+FhJzaXJmZXJsQGdpdGh1Yi5jb20xEjAQBgNVBAMMCWxvY2FsaG9zdDCCASIwDQYJ
+KoZIhvcNAQEBBQADggEPADCCAQoCggEBALR59JM38ltmUDAjQiohKjsB/xkRM86P
+ZlsKlL78yTA/XRbrIHDq+88InQajr+R4sq26MmCaAbHBuwn7RCVh2o/letI14WBL
+wvYIk1RGxwIFR2nNkQfTMfweK3aHLiL1714pW3cZbGgqGNmP4V5BQLI4eMDu6I9O
+WmGWL+HDJsn7ug55aNBV8qxiYIzAQm87bqbBBHbB6ht98SjVPG9kYT4hdxmaQ0lo
+eb+hJ6LKcwEN6shyz3bWQ4p2ngglOYQ+D9SNxOH6GHAh72jQr3Pz0iU49D6HUOGg
+QXKzV4nl2JFsA+nd8swoHhqmNMAvNgjv5ydaRFwWDdCiyhT8PNGOeFECAwEAAaNg
+MF4wHwYDVR0jBBgwFoAUf09uS3ulWhvipHzUkEVskyhfAUcwCQYDVR0TBAIwADAL
+BgNVHQ8EBAMCBPAwIwYDVR0RBBwwGoINbXlleGFtcGxlLmNvbYIJbG9jYWxob3N0
+MA0GCSqGSIb3DQEBCwUAA4IBAQBS/7o0fMhDX2k0dc5S8cVxBhg8BPVqas99E8g3
+bDKnFcUdv4KTVgdYRbQ+o8DMkWZVDwyRDs5f2v9dyWtMk33jtxjs8UTXCmIhNgLg
+oSd+GXhOxThRj9euiyP/NA0JbCdrv4z5UEWZ2+U+lsLALoXBZqQAgDpZNggsujqn
+o0BydDBcgoQtQ3w5e9k5Upah6f+X0ZryXQemC/BnjKSdXipkcg295WyV780jTQV1
+9+NK9wF8ED74VGLaqAHjTT2UmVfiyPs7kxU+KqYzLfl2GL49RDcf4V06q5pr/JmR
+tXwUxRyH8L1hRMfyCE/35EhVTmPdc3lRaPXROD1gtuRDEQIb
+-----END CERTIFICATE-----
+"""
 
 
 def _frontend_ip_cfg_resource_id(subscription_id, appgw_name, resource_name):
@@ -37,10 +65,24 @@ def _ssl_certificate_id(subscription_id, appgw_name, resource_name):
 class TestAzureSource(unittest.TestCase):
     def setUp(self):
         self.azure_source = plugin.AzureSourcePlugin()
+        self.options = [
+            {"name": "azureKeyVaultUrl", "value": "https://couldbeanyvalue.com"},
+            {"name": "azureTenant", "value": "mockedTenant"},
+            {"name": "azureAppID", "value": "mockedAppID"},
+            {"name": "azurePassword", "value": "mockedPW"},
+            {"name": "authenticationMethod", "value": "azureApp"}
+        ]
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
-    def test_get_certificate_by_name(self):
-        pass
+    @patch("azure.keyvault.certificates.CertificateClient.get_certificate")
+    def test_get_certificate_by_name(self, get_certificate_mock):
+        fake_crt = x509.load_pem_x509_certificate(str.encode(test_server_cert_1))
+        fake_cer_contents = fake_crt.public_bytes(encoding=serialization.Encoding.DER)
+        kv_cert = KeyVaultCertificate(cer=fake_cer_contents)
+        get_certificate_mock.return_value = kv_cert
+
+        crt = self.azure_source.get_certificate_by_name("localhost-LocalCA", self.options)
+        assert crt["body"] == test_server_cert_1
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
     def test_get_certificates(self):
@@ -240,13 +282,7 @@ class TestAzureSource(unittest.TestCase):
         list_all_appgw_mock.side_effect = [test_subscription_1_appgws, test_subscription_2_appgws]
         get_public_ip_mock.side_effect = [ip for ip in test_public_ips]
 
-        options = [
-            {"name": "azureTenant", "value": "mockedTenant"},
-            {"name": "azureAppID", "value": "mockedAppID"},
-            {"name": "azurePassword", "value": "mockedPW"},
-            {"name": "authenticationMethod", "value": "azureApp"}
-        ]
-        synced_endpoints = self.azure_source.get_endpoints(options)
+        synced_endpoints = self.azure_source.get_endpoints(self.options)
         assert synced_endpoints == [
             dict(
                 name="fake-appgw-foo-public-443",
