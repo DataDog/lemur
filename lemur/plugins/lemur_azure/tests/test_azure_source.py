@@ -37,6 +37,14 @@ class TestAzureSource(unittest.TestCase):
         self.azure_source = plugin.AzureSourcePlugin()
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
+    def test_get_certificate_by_name(self):
+        pass
+
+    @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
+    def test_get_certificates(self):
+        pass
+
+    @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
     @patch("azure.mgmt.network.v2022_05_01.operations.PublicIPAddressesOperations.get")
     @patch("azure.mgmt.network.v2022_05_01.operations.ApplicationGatewaysOperations.list_all")
     @patch("azure.mgmt.subscription.operations.SubscriptionsOperations.list")
