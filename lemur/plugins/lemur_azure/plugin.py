@@ -10,10 +10,9 @@
 .. moduleauthor:: sirferl
 """
 from flask import current_app
-import textwrap
-import x509
+from sentry_sdk import capture_exception
 from azure.keyvault.certificates import CertificateClient, CertificatePolicy
-from azure.core.exceptions import ResourceNotFoundError
+from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.subscription import SubscriptionClient
 
@@ -23,6 +22,7 @@ from lemur.extensions import metrics
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins.lemur_azure.auth import get_azure_credential
 
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
@@ -253,10 +253,11 @@ class AzureSourcePlugin(SourcePlugin):
                         name=crt.name,
                     )
                 )
-            except ResourceNotFoundError as e:
+            except HttpResponseError:
                 current_app.logger.warning(
                     f"get_azure_key_vault_certificate_failed: Unable to get certificate for {prop.name}"
                 )
+                capture_exception()
                 metrics.send(
                     "get_azure_key_vault_certificate_failed", "counter", 1,
                     metric_tags={
@@ -278,18 +279,8 @@ class AzureSourcePlugin(SourcePlugin):
                 body=decoded_crt.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
                 name=crt.name,
             )
-        except ResourceNotFoundError as e:
-            current_app.logger.warning(
-                f"get_azure_key_vault_certificate_failed: Unable to get certificate for {certificate_name}"
-            )
-            metrics.send(
-                "get_azure_key_vault_certificate_failed", "counter", 1,
-                metric_tags={
-                    "certificate_name": certificate_name,
-                    "tenant": self.get_option("azureTenant", options),
-                }
-            )
-        return None
+        except ResourceNotFoundError:
+            return None
 
     def get_endpoints(self, options, **kwargs):
         credential = get_azure_credential(self, options)
