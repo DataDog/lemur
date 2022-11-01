@@ -14,6 +14,7 @@ from azure.mgmt.network.models import (
     ApplicationGatewayHttpListener,
     ApplicationGatewaySslCertificate,
     ApplicationGatewaySslPolicy,
+    ApplicationGatewaySslPolicyName,
     ApplicationGatewaySslCipherSuite,
     PublicIPAddress,
     SubResource
@@ -42,6 +43,33 @@ oSd+GXhOxThRj9euiyP/NA0JbCdrv4z5UEWZ2+U+lsLALoXBZqQAgDpZNggsujqn
 o0BydDBcgoQtQ3w5e9k5Upah6f+X0ZryXQemC/BnjKSdXipkcg295WyV780jTQV1
 9+NK9wF8ED74VGLaqAHjTT2UmVfiyPs7kxU+KqYzLfl2GL49RDcf4V06q5pr/JmR
 tXwUxRyH8L1hRMfyCE/35EhVTmPdc3lRaPXROD1gtuRDEQIb
+-----END CERTIFICATE-----
+"""
+
+test_server_cert_2 = """-----BEGIN CERTIFICATE-----
+MIIEJDCCAwygAwIBAgIPK/QvcZhAY7VPU7Ek/nCDMA0GCSqGSIb3DQEBCwUAMIGn
+MS0wKwYDVQQDDCRMZW11clRydXN0IFVuaXR0ZXN0cyBDbGFzcyAxIENBIDIwMTgx
+IzAhBgNVBAoMGkxlbXVyVHJ1c3QgRW50ZXJwcmlzZXMgTHRkMSYwJAYDVQQLDB1V
+bml0dGVzdGluZyBPcGVyYXRpb25zIENlbnRlcjELMAkGA1UEBhMCRUUxDDAKBgNV
+BAgMA04vQTEOMAwGA1UEBwwFRWFydGgwHhcNMTcxMjMxMjIwMDAwWhcNNDcxMjMx
+MjIwMDAwWjB9MRswGQYDVQQDDBIqLndpbGQuZXhhbXBsZS5vcmcxETAPBgNVBAoM
+CFBsYXl0ZWNoMRkwFwYDVQQLDBBJbmZyYSBPcGVyYXRpb25zMQswCQYDVQQGEwJF
+RTERMA8GA1UECAwISGFyanVtYWExEDAOBgNVBAcMB1RhbGxpbm4wggEiMA0GCSqG
+SIb3DQEBAQUAA4IBDwAwggEKAoIBAQCoT8Ak5kynUzosBvP8hCnP4hGMAtgHLcHG
+UBWug4BofAhxxBrZW3UteoQzNznK5jz0hy2azqnz3/9q5N/FKwHxfMY/VEHPXyYK
+QsZuSdVceJ/EHL+MLx+uisIRJstV8fC5oYRfg74m07ZED7NM4EerJTxKZAy7UuSM
+L65i/LEChPzjLN46GcUEuC2O03nZtFTPvN9j7vzen9/qIzs1TGQukOn4z5l2GuAx
+RCEfBl3IrnvSY+npGARPJsXSymXCCP3ntzq6I6iRHuZf+QETZtiMR1TCNZRTqcc2
+LxWn+W5N18yyXvUcVMfrg4jzEWKHuhwInoiH1pu/myyKrnoIi4nTAgMBAAGjdjB0
+MBMGA1UdJQQMMAoGCCsGAQUFBwMBMA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8E
+AjAAMB0GA1UdDgQWBBRR9Q9DHJRPt69Qm8lir4iJfOmJ4TAgBgNVHREBAf8EFjAU
+ghIqLndpbGQuZXhhbXBsZS5vcmcwDQYJKoZIhvcNAQELBQADggEBAMm2DiYfGLve
+r/gCtYgXKkRmbuv57PmAUm52w5l4hjxssdUwq4Wn4T+K0+Sqp3IzcNhEaIqPB+bG
+8rIbJLBiiDPbSUZC0DbvlXihk7FHjqmrbVFwNmkWNywLhB1qOlp0kQH+w9lDWA1p
+y99P0Bxcot66scbiaag0i0AUpkRKbUG+v+VGXdPrJrWE+63ROhWQMmQNiUlZ6QGO
+45tUSn//MuUpJiJVkUVR1fSbCpHQj2mHiuhShOmatmh5e1ISwVP19cX64Gr6djlY
+wKJqcmw7WDjl+T+y7luJWw4UqI7s7hY6Y9RQVh61L4eV8CIma3NmTaQCSgR3tCxh
+d4FCKAE8+Lw=
 -----END CERTIFICATE-----
 """
 
@@ -144,7 +172,7 @@ class TestAzureSource(unittest.TestCase):
             ssl_policy=ApplicationGatewaySslPolicy(
                 policy_name="AppGwSslPolicy20170401S",
                 cipher_suites=[
-                    ApplicationGatewaySslCipherSuite("TLS_RSA_WITH_AES_256_CBC_SHA"),
+                    "TLS_RSA_WITH_AES_256_CBC_SHA",
                 ]
             ),
         )
@@ -262,7 +290,7 @@ class TestAzureSource(unittest.TestCase):
                 )
             ],
             ssl_policy=ApplicationGatewaySslPolicy(
-                policy_name="AppGwSslPolicy20170401S",
+                policy_name=ApplicationGatewaySslPolicyName("AppGwSslPolicy20170401S"),
                 cipher_suites=[
                     ApplicationGatewaySslCipherSuite("TLS_RSA_WITH_AES_256_CBC_SHA"),
                 ]

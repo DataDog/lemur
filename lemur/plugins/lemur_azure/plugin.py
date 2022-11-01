@@ -15,7 +15,7 @@ from azure.keyvault.certificates import CertificateClient, CertificatePolicy
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.subscription import SubscriptionClient
-from azure.mgmt.network.models import ApplicationGatewaySslCipherSuite
+from azure.mgmt.network.models import ApplicationGatewaySslPolicyName, ApplicationGatewaySslCipherSuite
 
 from lemur.common.defaults import common_name, issuer, bitstrength
 from lemur.common.utils import parse_certificate, parse_private_key, check_validation
@@ -35,9 +35,13 @@ def policy_from_appgw(appgw):
             ciphers=[],
         )
     policy = dict(
-        name=appgw.ssl_policy.policy_name,
+        name="",
         ciphers=[],
     )
+    if isinstance(appgw.ssl_policy.policy_name, ApplicationGatewaySslPolicyName):
+        policy["name"] = appgw.ssl_policy.policy_name.value
+    else:
+        policy["name"] = appgw.ssl_policy.policy_name
     if appgw.ssl_policy.cipher_suites:
         for c in appgw.ssl_policy.cipher_suites:
             if isinstance(c, ApplicationGatewaySslCipherSuite):
