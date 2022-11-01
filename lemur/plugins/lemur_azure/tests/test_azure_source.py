@@ -21,7 +21,7 @@ from azure.mgmt.network.models import (
     PublicIPAddress,
     SubResource
 )
-from azure.keyvault.certificates import KeyVaultCertificate
+from azure.keyvault.certificates import CertificateProperties, KeyVaultCertificate
 
 
 test_server_cert_1 = """-----BEGIN CERTIFICATE-----
@@ -115,7 +115,43 @@ class TestAzureSource(unittest.TestCase):
         assert crt["body"] == test_server_cert_1
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
-    def test_get_certificates(self):
+    @patch("azure.keyvault.certificates.CertificateClient.get_certificate")
+    @patch("azure.keyvault.certificates.CertificateClient.list_properties_of_certificates")
+    def test_get_certificates(self, list_properties_of_certificates_mock, get_certificate_mock):
+        test_crt_1 = x509.load_pem_x509_certificate(str.encode(test_server_cert_1))
+        test_crt_1_contents = test_crt_1.public_bytes(encoding=serialization.Encoding.DER)
+        test_crt_2 = x509.load_pem_x509_certificate(str.encode(test_server_cert_2))
+        test_crt_2_contents = test_crt_2.public_bytes(encoding=serialization.Encoding.DER)
+        test_properties = [
+            CertificateProperties(cert_id="https://couldbeanyvalue.com/certificates/localhost-LocalCA/1234abc"),
+            CertificateProperties(cert_id="https://couldbeanyvalue.com/certificates/star-wild-example-org-LemurTrust/1234abc"),
+        ]
+        test_certificates = [
+            KeyVaultCertificate(
+                properties=test_properties[0],
+                cer=test_crt_1_contents,
+            ),
+            KeyVaultCertificate(
+                properties=test_properties[1],
+                cer=test_crt_2_contents,
+            )
+        ]
+
+        list_properties_of_certificates_mock.return_value = test_properties
+        get_certificate_mock.side_effect = [c for c in test_certificates]
+
+        synced_certificates = self.azure_source.get_certificates(self.options)
+        assert synced_certificates == [
+            dict(
+                name="localhost-LocalCA",
+                body=test_crt_1.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
+            ),
+            dict(
+                name="star-wild-example-org-LemurTrust",
+                body=test_crt_2.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
+            ),
+        ]
+
         pass
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})

@@ -182,7 +182,7 @@ class AzureDestinationPlugin(DestinationPlugin):
         # Azure does not allow "." in the certificate name we replace them with "-"
         cert = parse_certificate(body)
         ca_certs = parse_certificate(cert_chain)
-        certificate_name = f"{common_name(cert).replace('.', '-')}-{issuer(cert)}"
+        certificate_name = f"{common_name(cert).replace('.', '-').replace('*', 'star')}-{issuer(cert)}"
 
         certificate_client = CertificateClient(
             credential=get_azure_credential(self, options),
