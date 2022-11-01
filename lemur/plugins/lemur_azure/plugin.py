@@ -10,8 +10,6 @@
 .. moduleauthor:: sirferl
 """
 from flask import current_app
-import textwrap
-import x509
 from azure.keyvault.certificates import CertificateClient, CertificatePolicy
 from azure.core.exceptions import ResourceNotFoundError
 from azure.mgmt.network import NetworkManagementClient
@@ -23,6 +21,7 @@ from lemur.extensions import metrics
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins.lemur_azure.auth import get_azure_credential
 
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
