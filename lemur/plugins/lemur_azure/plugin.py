@@ -28,6 +28,15 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 
+def get_and_decode_certificate(certificate_client, certificate_name):
+    crt = certificate_client.get_certificate(certificate_name=certificate_name)
+    decoded_crt = x509.load_der_x509_certificate(bytes(crt.cer))
+    return dict(
+        body=decoded_crt.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
+        name=crt.name,
+    )
+
+
 def policy_from_appgw(network_client, appgw):
     if not appgw.ssl_policy:
         return dict(
@@ -281,13 +290,8 @@ class AzureSourcePlugin(SourcePlugin):
         )
         for prop in certificate_client.list_properties_of_certificates():
             try:
-                crt = certificate_client.get_certificate(certificate_name=prop.name)
-                decoded_crt = x509.load_der_x509_certificate(bytes(crt.cer))
                 certificates.append(
-                    dict(
-                        body=decoded_crt.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
-                        name=crt.name,
-                    )
+                    get_and_decode_certificate(certificate_client=certificate_client, certificate_name=prop.name)
                 )
             except HttpResponseError:
                 current_app.logger.warning(
@@ -309,12 +313,7 @@ class AzureSourcePlugin(SourcePlugin):
             vault_url=self.get_option("azureKeyVaultUrl", options),
         )
         try:
-            crt = certificate_client.get_certificate(certificate_name=certificate_name)
-            decoded_crt = x509.load_der_x509_certificate(bytes(crt.cer))
-            return dict(
-                body=decoded_crt.public_bytes(encoding=serialization.Encoding.PEM).decode("utf-8"),
-                name=crt.name,
-            )
+            return get_and_decode_certificate(certificate_client=certificate_client, certificate_name=certificate_name)
         except ResourceNotFoundError:
             return None
 
