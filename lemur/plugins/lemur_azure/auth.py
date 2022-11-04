@@ -1,4 +1,6 @@
+from azure.core.exceptions CredentialUnavailableError, ClientAuthenticationError
 from azure.identity import ClientSecretCredential
+from flask import current_app
 
 import hvac
 import os
@@ -21,7 +23,11 @@ class RetryableClientSecretCredential(ClientSecretCredential):
 
 def get_azure_credential(plugin, options):
     if plugin.credential:
-        return plugin.credential
+        try:
+            plugin.credential.get_token()
+            return plugin.credential
+        except (CredentialUnavailableError, ClientAuthenticationError) as e:
+            current_app.logger.warning(f"Failed to re-use existing Azure credential, another one will attempt to be re-generated: {e}")
 
     tenant = plugin.get_option("azureTenant", options)
     auth_method = plugin.get_option("authenticationMethod", options)
