@@ -24,7 +24,7 @@ class RetryableClientSecretCredential(ClientSecretCredential):
 def get_azure_credential(plugin, options):
     if plugin.credential:
         try:
-            plugin.credential.get_token()
+            plugin.credential.get_token()  # Try to dispense a valid token.
             return plugin.credential
         except (CredentialUnavailableError, ClientAuthenticationError) as e:
             current_app.logger.warning(f"Failed to re-use existing Azure credential, another one will attempt to be re-generated: {e}")
