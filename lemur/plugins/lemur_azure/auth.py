@@ -20,6 +20,9 @@ class RetryableClientSecretCredential(ClientSecretCredential):
 
 
 def get_azure_credential(plugin, options):
+    if plugin.credential:
+        return plugin.credential
+
     tenant = plugin.get_option("azureTenant", options)
     auth_method = plugin.get_option("authenticationMethod", options)
 
@@ -31,20 +34,22 @@ def get_azure_credential(plugin, options):
         # It may take up-to 10 minutes for the generated OAuth credentials to become usable due
         # to AD replication delay. To account for this, the credential will continuously
         # retry generating an access token until it succeeds or 10 minutes elapse.
-        return RetryableClientSecretCredential(
+        plugin.credential = RetryableClientSecretCredential(
             tenant_id=tenant,
             client_id=client_id,
             client_secret=client_secret,
         )
+        return plugin.credential
     elif auth_method == "azureApp":
         app_id = plugin.get_option("azureAppID", options)
         password = plugin.get_option("azurePassword", options)
 
-        return ClientSecretCredential(
+        plugin.credential = ClientSecretCredential(
             tenant_id=tenant,
             client_id=app_id,
             client_secret=password,
         )
+        return plugin.credential
 
     raise Exception("No supported way to authenticate with Azure")
 
