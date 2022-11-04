@@ -1,5 +1,5 @@
-from azure.core.exceptions CredentialUnavailableError, ClientAuthenticationError
-from azure.identity import ClientSecretCredential
+from azure.core.exceptions import ClientAuthenticationError
+from azure.identity import ClientSecretCredential, CredentialUnavailableError
 from flask import current_app
 
 import hvac
