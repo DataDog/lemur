@@ -22,6 +22,16 @@ class RetryableClientSecretCredential(ClientSecretCredential):
 
 
 def get_azure_credential(plugin, options):
+    """
+    Fetches a credential used for authenticating with the Azure API.
+    A new credential will be created if one does not already exist.
+    If a credential already exists and is valid, then it will be re-used.
+    When an existing credential is determined to be invalid, it will be replaced with a new one.
+
+    :param plugin: source or destination plugin
+    :param options: options set for the plugin
+    :return: an Azure credential
+    """
     if plugin.credential:
         try:
             plugin.credential.get_token("https://management.azure.com/.default")  # Try to dispense a valid token.
