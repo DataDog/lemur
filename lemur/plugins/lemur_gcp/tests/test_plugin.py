@@ -250,8 +250,9 @@ cert4.type_ = "MANAGED"
 
 
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPSourcePlugin.get_option")
+@mock.patch("lemur.plugins.lemur_gcp.auth.get_gcp_credentials", return_value=token)
 @mock.patch("google.cloud.compute_v1.services.ssl_certificates.SslCertificatesClient.list")
-def test_get_certificates(mock_ssl_client_list, mock_get_option):
+def test_get_certificates(mock_ssl_client_list, mock_credentials, mock_get_option):
     from lemur.plugins.lemur_gcp.plugin import GCPSourcePlugin
     mock_ssl_client_list.return_value = [cert1, cert2, cert3, cert4]
     mock_get_option.side_effect = ["lemur-test", None]
@@ -276,8 +277,9 @@ def test_get_certificates(mock_ssl_client_list, mock_get_option):
 
 
 @mock.patch("lemur.plugins.lemur_gcp.plugin.GCPSourcePlugin.get_option")
+@mock.patch("lemur.plugins.lemur_gcp.auth.get_gcp_credentials", return_value=token)
 @mock.patch("google.cloud.compute_v1.services.region_ssl_certificates.RegionSslCertificatesClient.list")
-def test_get_regional_certificates(mock_ssl_client_list, mock_get_option):
+def test_get_regional_certificates(mock_ssl_client_list, mock_credentials, mock_get_option):
     from lemur.plugins.lemur_gcp.plugin import GCPSourcePlugin
     mock_ssl_client_list.return_value = [cert1, cert2, cert3, cert4]
     mock_get_option.side_effect = ["lemur-test", "europe-west3"]
