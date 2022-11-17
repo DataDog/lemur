@@ -28,6 +28,27 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 
+def get_application_gateways(network_client):
+    endpoints = []
+    for appgw in network_client.application_gateways.list_all():
+        for listener in appgw.http_listeners:
+            if listener.protocol == "Https":
+                port = port_from_id(appgw, listener.frontend_port.id)
+                ip_address, is_public = ip_from_cfg_id(appgw, network_client, listener.frontend_ip_configuration.id)
+                listener_type = "public" if is_public else "internal"
+                ep = dict(
+                    name=f"{appgw.name}-{listener_type}-{port}",
+                    dnsname=ip_address,
+                    port=port,
+                    type="applicationgateway",
+                    primary_certificate=certificate_from_id(appgw, listener.ssl_certificate.id),
+                    sni_certificates=[],
+                    policy=policy_from_appgw(network_client, appgw),
+                )
+                endpoints.append(ep)
+    return endpoints
+
+
 def get_and_decode_certificate(certificate_client, certificate_name):
     crt = certificate_client.get_certificate(certificate_name=certificate_name)
     decoded_crt = x509.load_der_x509_certificate(bytes(crt.cer))
@@ -325,22 +346,7 @@ class AzureSourcePlugin(SourcePlugin):
         endpoints = []
         for subscription in SubscriptionClient(credential=credential).subscriptions.list():
             network_client = NetworkManagementClient(credential=credential, subscription_id=subscription.subscription_id)
-            for appgw in network_client.application_gateways.list_all():
-                for listener in appgw.http_listeners:
-                    if listener.protocol == "Https":
-                        port = port_from_id(appgw, listener.frontend_port.id)
-                        ip_address, is_public = ip_from_cfg_id(appgw, network_client, listener.frontend_ip_configuration.id)
-                        listener_type = "public" if is_public else "internal"
-                        ep = dict(
-                            name=f"{appgw.name}-{listener_type}-{port}",
-                            dnsname=ip_address,
-                            port=port,
-                            type="applicationgateway",
-                            primary_certificate=certificate_from_id(appgw, listener.ssl_certificate.id),
-                            sni_certificates=[],
-                            policy=policy_from_appgw(network_client, appgw),
-                        )
-                        endpoints.append(ep)
+            endpoints = get_application_gateways(network_client)
         return endpoints
 
     @staticmethod
