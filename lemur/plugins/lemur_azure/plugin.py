@@ -13,8 +13,10 @@ from flask import current_app
 from sentry_sdk import capture_exception
 from azure.keyvault.certificates import CertificateClient, CertificatePolicy
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
+from azure.mgmt.cdn import CdnManagementClient
 from azure.mgmt.network import NetworkManagementClient
 from azure.mgmt.subscription import SubscriptionClient
+from azure.mgmt.cdn.models import UserManagedHttpsParameters
 from azure.mgmt.network.models import ApplicationGatewaySslPolicyName, ApplicationGatewaySslPolicyType, ApplicationGatewaySslCipherSuite
 
 from lemur.common.defaults import common_name, issuer, bitstrength
@@ -26,6 +28,39 @@ from lemur.plugins.lemur_azure.auth import get_azure_credential
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
+
+
+def get_cdn_endpoints(cdn_client):
+    for profile in cdn_client.profiles.list():
+        resource_group_name = resource_group_from_id(profile.id)
+        for endpoint in cdn_client.endpoints.list_by_profile(
+                resource_group_name=resource_group_name,
+                profile_name=profile.name
+        ):
+            ep = dict(
+                name=endpoint.name,
+                dnsname=endpoint.host_name,
+                port=443,  # Azure CDN doesn't support configuring a custom port.
+                type="azurecdn",
+                sni_certificates=[],
+                policy=dict(
+                    name="none",  # Azure CDN doesn't support configuring SSL policies.
+                    ciphers=[],
+                ),
+            )
+            for domain in cdn_client.custom_domains.list_by_endpoint(
+                    resource_group_name=resource_group_name,
+                    profile_name=profile.name,
+                    endpoint_name=endpoint.name,
+            ):
+                if isinstance(domain.custom_https_parameters, UserManagedHttpsParameters):
+                    ep["sni_certificates"].append(
+                        dict(
+                            name=domain.custom_https_parameters.certificate_source_parameters.secret_name,
+                            path="",
+                            registry_type="keyvault",
+                        )
+                    )
 
 
 def get_application_gateways(network_client):
@@ -347,6 +382,10 @@ class AzureSourcePlugin(SourcePlugin):
         for subscription in SubscriptionClient(credential=credential).subscriptions.list():
             network_client = NetworkManagementClient(credential=credential, subscription_id=subscription.subscription_id)
             endpoints = get_application_gateways(network_client)
+
+            cdn_client = CdnManagementClient(credential=credential, subscription_id=subscription.subscription_id)
+            endpoints.append(get_cdn_endpoints(cdn_client))
+
         return endpoints
 
     @staticmethod
