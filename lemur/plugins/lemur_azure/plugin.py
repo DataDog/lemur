@@ -31,6 +31,7 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 
 
 def get_cdn_endpoints(cdn_client):
+    endpoints = []
     for profile in cdn_client.profiles.list():
         resource_group_name = resource_group_from_id(profile.id)
         for endpoint in cdn_client.endpoints.list_by_profile(
@@ -61,6 +62,8 @@ def get_cdn_endpoints(cdn_client):
                             registry_type="keyvault",
                         )
                     )
+                    endpoints.append(ep)
+    return endpoints
 
 
 def get_application_gateways(network_client):
@@ -381,11 +384,10 @@ class AzureSourcePlugin(SourcePlugin):
         endpoints = []
         for subscription in SubscriptionClient(credential=credential).subscriptions.list():
             network_client = NetworkManagementClient(credential=credential, subscription_id=subscription.subscription_id)
-            endpoints = get_application_gateways(network_client)
+            endpoints += get_application_gateways(network_client)
 
             cdn_client = CdnManagementClient(credential=credential, subscription_id=subscription.subscription_id)
-            endpoints.append(get_cdn_endpoints(cdn_client))
-
+            endpoints += get_cdn_endpoints(cdn_client)
         return endpoints
 
     @staticmethod
