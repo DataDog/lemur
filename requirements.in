@@ -16,7 +16,8 @@ certbot
 certifi
 certsrv
 CloudFlare
-cryptography
+cryptography < 37.0.2 # https://github.com/pyca/pyopenssl/issues/1154#issuecomment-1270332681
+deprecated
 dnspython3
 dyn
 Flask-Bcrypt
@@ -47,7 +48,7 @@ pem
 psycopg2
 pyjks >= 19 # pyjks < 19 depends on pycryptodome, which conflicts with dyn's usage of pycrypto
 pyjwt
-pyOpenSSL
+pyOpenSSL <= 22.0.0 # https://github.com/pyca/pyopenssl/issues/1154#issuecomment-1270332681
 pyyaml>=4.2b1 #high severity alert
 python_ldap
 redis < 4.5.0 # requires a newer release of fakeredis
