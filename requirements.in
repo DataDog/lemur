@@ -50,7 +50,6 @@ pyjks >= 19 # pyjks < 19 depends on pycryptodome, which conflicts with dyn's usa
 pyjwt
 pyOpenSSL <= 22.0.0 # https://github.com/pyca/pyopenssl/issues/1154#issuecomment-1270332681
 pyyaml>=4.2b1 #high severity alert
-python_ldap
 redis < 4.5.0 # requires a newer release of fakeredis
 requests
 retrying

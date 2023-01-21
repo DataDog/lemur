@@ -28,7 +28,6 @@ from lemur.users import service as user_service
 from lemur.roles import service as role_service
 from lemur.logs import service as log_service
 from lemur.auth.service import create_token, fetch_token_header, get_rsa_public_key
-from lemur.auth import ldap
 from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
@@ -395,31 +394,6 @@ class Login(Resource):
                 "login", "counter", 1, metric_tags={"status": SUCCESS_METRIC_STATUS}
             )
             return dict(token=create_token(user))
-
-        # try ldap login
-        if current_app.config.get("LDAP_AUTH"):
-            try:
-                ldap_principal = ldap.LdapPrincipal(args)
-                user = ldap_principal.authenticate()
-                if user and user.active:
-                    # Tell Flask-Principal the identity changed
-                    identity_changed.send(
-                        current_app._get_current_object(), identity=Identity(user.id)
-                    )
-                    metrics.send(
-                        "login",
-                        "counter",
-                        1,
-                        metric_tags={"status": SUCCESS_METRIC_STATUS},
-                    )
-                    return dict(token=create_token(user))
-            except Exception as e:
-                current_app.logger.error("ldap error: {0}".format(e))
-                ldap_message = "ldap error: %s" % e
-                metrics.send(
-                    "login", "counter", 1, metric_tags={"status": FAILURE_METRIC_STATUS}
-                )
-                return dict(message=ldap_message), 403
 
         # if not valid user - no certificates for you
         metrics.send(

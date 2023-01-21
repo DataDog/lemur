@@ -287,13 +287,11 @@ pyasn1==0.4.8
     #   ndg-httpsclient
     #   pyasn1-modules
     #   pyjks
-    #   python-ldap
     #   rsa
 pyasn1-modules==0.2.8
     # via
     #   google-auth
     #   pyjks
-    #   python-ldap
 pycparser==2.21
     # via cffi
 pycryptodomex==3.14.1
@@ -324,8 +322,6 @@ python-dateutil==2.8.2
     #   botocore
 python-json-logger==2.0.2
     # via logmatic-python
-python-ldap==3.4.3
-    # via -r requirements.in
 pytz==2022.1
     # via
     #   acme
