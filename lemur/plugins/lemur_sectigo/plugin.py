@@ -1,9 +1,15 @@
-from validators.url import regex as url_regex
+import arrow
+import pem
 
-from cert_manager import Client
+from cert_manager import Client, Organization, Pending, SSL
 from flask import current_app
 from lemur.common.utils import validate_conf
 from lemur.plugins.bases import IssuerPlugin
+from retrying import retry
+
+_MAX_CERTIFICATE_VALIDITY_DAYS = (
+    397  # No public certificate can be valid for more than 397 days.
+)
 
 
 class SectigoIssuerPlugin(IssuerPlugin):
@@ -20,6 +26,8 @@ class SectigoIssuerPlugin(IssuerPlugin):
             "SECTIGO_LOGIN_URI",
             "SECTIGO_USERNAME",
             "SECTIGO_PASSWORD",
+            "SECTIGO_ORG_NAME",
+            "SECTIGO_CERT_TYPE",
         ]
 
         validate_conf(current_app, required_vars)
@@ -34,7 +42,44 @@ class SectigoIssuerPlugin(IssuerPlugin):
         super(SectigoIssuerPlugin, self).__init__(*args, **kwargs)
 
     def create_certificate(self, csr, issuer_options):
-        raise NotImplementedError
+        org = Organization(client=self.client)
+        ssl = SSL(client=self.client)
+
+        cert_org = org.find(org_name=current_app.config.get("SECTIGO_ORG_NAME"))
+        cert_type = current_app.config.get("SECTIGO_CERT_TYPE")
+        cert_validity_days = _MAX_CERTIFICATE_VALIDITY_DAYS
+
+        min_start = arrow.utcnow()
+        max_end = arrow.utcnow().shift(days=_MAX_CERTIFICATE_VALIDITY_DAYS)
+        validity_end = issuer_options.get("validity_end", max_end)
+        if min_start <= validity_end <= max_end:
+            cert_validity_days = (validity_end - min_start).days
+
+        result = ssl.enroll(
+            cert_type_name=cert_type,
+            csr=csr,
+            term=cert_validity_days,
+            org_id=cert_org[0]["id"],
+        )
+
+        @retry(wait_fixed=2000, stop_max_delay=300000)
+        def collect_certificate():
+            """
+            Collect the certificate from Sectigo.
+            """
+            while True:
+                try:
+                    cert_pem = ssl.collect(cert_id=result["sslId"], cert_format="pem")
+                    end_entity, intermediate, root = pem.parse(cert_pem)
+                    return (
+                        "\n".join(str(end_entity).splitlines()),
+                        "\n".join(str(intermediate).splitlines()),
+                        result["sslId"],
+                    )
+                except Pending:
+                    raise Exception("Certificate is still pending...")
+
+        return collect_certificate()
 
     def create_authority(self, options):
         raise NotImplementedError
