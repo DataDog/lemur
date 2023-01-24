@@ -39,14 +39,13 @@ class SectigoIssuerPlugin(IssuerPlugin):
             username=current_app.config.get("SECTIGO_USERNAME"),
             password=current_app.config.get("SECTIGO_PASSWORD"),
         )
+        self.org = Organization(client=self.client)
+        self.ssl = SSL(client=self.client)
 
         super(SectigoIssuerPlugin, self).__init__(*args, **kwargs)
 
     def create_certificate(self, csr, issuer_options):
-        org = Organization(client=self.client)
-        ssl = SSL(client=self.client)
-
-        cert_org = org.find(org_name=current_app.config.get("SECTIGO_ORG_NAME"))
+        cert_org = self.org.find(org_name=current_app.config.get("SECTIGO_ORG_NAME"))
         cert_type = current_app.config.get("SECTIGO_CERT_TYPE")
         cert_validity_days = _MAX_CERTIFICATE_VALIDITY_DAYS
 
@@ -56,7 +55,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
         if min_start <= validity_end <= max_end:
             cert_validity_days = (validity_end - min_start).days
 
-        result = ssl.enroll(
+        result = self.ssl.enroll(
             cert_type_name=cert_type,
             csr=csr,
             term=cert_validity_days,
@@ -81,7 +80,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
                 current_app.logger.info(
                     {"message": "Collecting certificate from Sectigo..."}
                 )
-                cert_pem = ssl.collect(cert_id=result["sslId"], cert_format="pem")
+                cert_pem = self.ssl.collect(cert_id=result["sslId"], cert_format="pem")
                 end_entity, intermediate, root = pem.parse(cert_pem)
                 return (
                     "\n".join(str(end_entity).splitlines()),
