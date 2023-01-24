@@ -74,7 +74,7 @@ ecdsa==0.17.0
     #   sshpubkeys
 factory-boy==3.2.1
     # via -r requirements-tests.in
-faker==15.3.4
+faker==16.6.0
     # via
     #   -r requirements-tests.in
     #   factory-boy
@@ -137,8 +137,6 @@ jsonschema==3.2.0
     # via
     #   aws-sam-translator
     #   cfn-lint
-    #   openapi-schema-validator
-    #   openapi-spec-validator
 junit-xml==1.9
     # via cfn-lint
 mako==1.2.2
@@ -154,7 +152,7 @@ marshmallow==2.21.0
     #   marshmallow-sqlalchemy
 marshmallow-sqlalchemy==0.23.1
     # via -r requirements-tests.in
-moto[all]==3.1.17
+moto[all]==3.1.1
     # via -r requirements-tests.in
 mypy-extensions==0.4.3
     # via black
@@ -162,10 +160,6 @@ networkx==2.7.1
     # via cfn-lint
 nose==1.3.7
     # via -r requirements-tests.in
-openapi-schema-validator==0.2.3
-    # via openapi-spec-validator
-openapi-spec-validator==0.4.0
-    # via moto
 packaging==21.3
     # via pytest
 parsedatetime==2.6
@@ -196,9 +190,7 @@ pyopenssl==23.0.0
     #   acme
     #   josepy
 pyparsing==3.0.7
-    # via
-    #   moto
-    #   packaging
+    # via packaging
 pyrfc3339==1.1
     # via
     #   acme
@@ -293,7 +285,7 @@ werkzeug==2.0.3
     #   flask
     #   moto
     #   pytest-flask
-wrapt==1.14.0
+wrapt==1.14.1
     # via aws-xray-sdk
 xmltodict==0.13.0
     # via moto
