@@ -62,23 +62,37 @@ class SectigoIssuerPlugin(IssuerPlugin):
             term=cert_validity_days,
             org_id=cert_org[0]["id"],
         )
+        current_app.logger.info(
+            {
+                "message": "Issued Sectigo certificate",
+                "term": cert_validity_days,
+                "cert_type": cert_type,
+                "cert_org": cert_org,
+                "result": result,
+            }
+        )
 
         @retry(wait_fixed=2000, stop_max_delay=300000)
         def collect_certificate():
             """
             Collect the certificate from Sectigo.
             """
-            while True:
-                try:
-                    cert_pem = ssl.collect(cert_id=result["sslId"], cert_format="pem")
-                    end_entity, intermediate, root = pem.parse(cert_pem)
-                    return (
-                        "\n".join(str(end_entity).splitlines()),
-                        "\n".join(str(intermediate).splitlines()),
-                        result["sslId"],
-                    )
-                except Pending:
-                    raise Exception("Certificate is still pending...")
+            try:
+                current_app.logger.info(
+                    {"message": "Collecting certificate from Sectigo..."}
+                )
+                cert_pem = ssl.collect(cert_id=result["sslId"], cert_format="pem")
+                end_entity, intermediate, root = pem.parse(cert_pem)
+                return (
+                    "\n".join(str(end_entity).splitlines()),
+                    "\n".join(str(intermediate).splitlines()),
+                    result["sslId"],
+                )
+            except Pending:
+                current_app.logger.info(
+                    {"message": "Certificate is still pending, will retry collecting it again..."}
+                )
+                raise
 
         return collect_certificate()
 
