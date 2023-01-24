@@ -63,7 +63,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
         )
         current_app.logger.info(
             {
-                "message": "Issued Sectigo certificate",
+                "message": "Issued Sectigo certificate.",
                 "term": cert_validity_days,
                 "cert_type": cert_type,
                 "cert_org": cert_org,
@@ -92,6 +92,11 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     {"message": "Certificate is still pending, will retry collecting it again..."}
                 )
                 raise
+            except Exception:
+                current_app.logger.error(
+                    {"message": "Collection attempt failed."},
+                    exc_info=True,
+                )
 
         return collect_certificate()
 
