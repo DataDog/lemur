@@ -28,6 +28,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
             "SECTIGO_PASSWORD",
             "SECTIGO_ORG_NAME",
             "SECTIGO_CERT_TYPE",
+            "SECTIGO_ROOT",
         ]
 
         validate_conf(current_app, required_vars)
@@ -82,7 +83,9 @@ class SectigoIssuerPlugin(IssuerPlugin):
         return collect_certificate()
 
     def create_authority(self, options):
-        raise NotImplementedError
+        name = "sectigo_" + "_".join(options["name"].split(" ")) + "_admin"
+        role = {"username": "", "password": "", "name": name}
+        return current_app.config.get("SECTIGO_ROOT"), "", [role]
 
     def revoke_certificate(self, certificate, reason):
         raise NotImplementedError
