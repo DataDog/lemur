@@ -81,15 +81,20 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     {"message": "Collecting certificate from Sectigo..."}
                 )
                 cert_pem = self.ssl.collect(cert_id=result["sslId"], cert_format="pem")
-                end_entity, intermediate, root = pem.parse(cert_pem)
+                rootA, rootB, intermediate, issued_cert = pem.parse(
+                    cert_pem.encode("utf-8")
+                )
+
                 return (
-                    "\n".join(str(end_entity).splitlines()),
-                    "\n".join(str(intermediate).splitlines()),
+                    str(issued_cert),
+                    (str(intermediate) + str(rootB) + str(rootA)).strip(),
                     result["sslId"],
                 )
             except Pending:
                 current_app.logger.info(
-                    {"message": "Certificate is still pending, will retry collecting it again..."}
+                    {
+                        "message": "Certificate is still pending, will retry collecting it again..."
+                    }
                 )
                 raise
             except Exception:
