@@ -85,12 +85,12 @@ class TestSectigoIssuerPlugin(TestCase):
             )
             plugin.client.session.mount("mock", adapter)
 
-            with self.subTest(case="successfully create certificate"):
+            with self.subTest(case="create certificate with supported term"):
                 cert_pem, ca_bundle, cert_id = plugin.create_certificate(
                     "",
                     {
                         "common_name": "star.wild.example.org",
-                        "validity_end": arrow.utcnow().shift(days=31),
+                        "validity_end": arrow.utcnow().shift(days=30),
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
@@ -99,15 +99,42 @@ class TestSectigoIssuerPlugin(TestCase):
                 ).strip() == ca_bundle
                 assert 3000 == cert_id
 
+            with self.subTest(case="create certificates with unsupported terms"):
+                cert_pem, ca_bundle, cert_id = plugin.create_certificate(
+                    "",
+                    {
+                        "common_name": "star.wild.example.org",
+                        "validity_end": arrow.utcnow().shift(days=72),
+                    },
+                )
+                assert WILDCARD_CERT_STR == cert_pem
+                assert (
+                    INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR + ROOTCA_CERT_STR
+                ).strip() == ca_bundle
+                assert 3000 == cert_id
 
-def config_mock(*args):
-    values = {
-        "SECTIGO_BASE_URL": "https://cert-manager.com/api",
-        "SECTIGO_LOGIN_URI": "lemur",
-        "SECTIGO_USERNAME": "lemur@test.com",
-        "SECTIGO_PASSWORD": "test1234",
-        "SECTIGO_ORG_NAME": "Lemur, Inc.",
-        "SECTIGO_CERT_TYPE": "SectigoSSL UCC DV",
-        "SECTIGO_ROOT": "fakeroot",
-    }
-    return values[args[0]]
+                cert_pem, ca_bundle, cert_id = plugin.create_certificate(
+                    "",
+                    {
+                        "common_name": "star.wild.example.org",
+                        "validity_end": arrow.utcnow().shift(days=365 * 5),
+                    },
+                )
+                assert WILDCARD_CERT_STR == cert_pem
+                assert (
+                               INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR + ROOTCA_CERT_STR
+                       ).strip() == ca_bundle
+                assert 3000 == cert_id
+
+                cert_pem, ca_bundle, cert_id = plugin.create_certificate(
+                    "",
+                    {
+                        "common_name": "star.wild.example.org",
+                        "validity_end": arrow.utcnow().shift(days=180),
+                    },
+                )
+                assert WILDCARD_CERT_STR == cert_pem
+                assert (
+                               INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR + ROOTCA_CERT_STR
+                       ).strip() == ca_bundle
+                assert 3000 == cert_id
