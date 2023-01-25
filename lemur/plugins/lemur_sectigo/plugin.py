@@ -7,9 +7,7 @@ from lemur.common.utils import validate_conf
 from lemur.plugins.bases import IssuerPlugin
 from retrying import retry
 
-_MAX_CERTIFICATE_VALIDITY_DAYS = (
-    365  # No public certificate can be valid for more than 397 days, and Sectigo only supports up-to 365 day terms.
-)
+_MAX_CERTIFICATE_VALIDITY_DAYS = 365  # No public certificate can be valid for more than 397 days, and Sectigo only supports up-to 365 day terms.
 
 
 class SectigoIssuerPlugin(IssuerPlugin):
@@ -57,8 +55,8 @@ class SectigoIssuerPlugin(IssuerPlugin):
             current_app.logger.warning(
                 {
                     "message": f"Requested certificate with a term greater than the maximum allowed "
-                               f"of {_MAX_CERTIFICATE_VALIDITY_DAYS} days. Certificate will be therefore be "
-                               f"issued with the maximum allowed {_MAX_CERTIFICATE_VALIDITY_DAYS} day term."
+                    f"of {_MAX_CERTIFICATE_VALIDITY_DAYS} days. Certificate will be therefore be "
+                    f"issued with the maximum allowed {_MAX_CERTIFICATE_VALIDITY_DAYS} day term."
                 }
             )
             cert_validity_days = (validity_end - min_start).days
@@ -66,12 +64,14 @@ class SectigoIssuerPlugin(IssuerPlugin):
         supported_terms = ssl.types[cert_type]["terms"]
         if cert_validity_days not in supported_terms:
             requested_validity = cert_validity_days
-            cert_validity_days = min(supported_terms, key=lambda x:abs(x-requested_validity))
+            cert_validity_days = min(
+                supported_terms, key=lambda x: abs(x - requested_validity)
+            )
             current_app.logger.warning(
                 {
                     "message": f"Requested certificate with {requested_validity} day term but only the "
-                               f"following terms are only supported: {supported_terms}. Certificate will instead "
-                               f"be issued with a {cert_validity_days} day term."
+                    f"following terms are only supported: {supported_terms}. Certificate will instead "
+                    f"be issued with a {cert_validity_days} day term."
                 }
             )
 
@@ -101,9 +101,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     {"message": "Collecting certificate from Sectigo..."}
                 )
                 cert_pem = ssl.collect(cert_id=result["sslId"], cert_format="pem")
-                parts = pem.parse(
-                    cert_pem.encode("utf-8")
-                )
+                parts = pem.parse(cert_pem.encode("utf-8"))
                 ca_bundle = [str(c) for c in parts[:-1]]
                 ca_bundle.reverse()
                 ca_bundle = "".join(ca_bundle)
