@@ -15,6 +15,7 @@ celery[redis]
 certbot
 certifi
 certsrv
+https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.0.2-py3-none-any.whl
 CloudFlare
 cryptography
 deprecated

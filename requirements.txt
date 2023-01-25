@@ -84,6 +84,8 @@ cachetools==5.3.0
     # via google-auth
 celery[redis]==5.2.7
     # via -r requirements.in
+cert-orchestration-adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.0.2-py3-none-any.whl
+    # via -r requirements.in
 certbot==2.1.0
     # via -r requirements.in
 certifi==2022.12.7
