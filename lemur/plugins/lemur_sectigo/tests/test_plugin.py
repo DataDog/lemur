@@ -2,7 +2,10 @@ import arrow
 import json
 from unittest import TestCase
 from flask import Flask
-from lemur.plugins.lemur_sectigo.plugin import SectigoIssuerPlugin
+from lemur.plugins.lemur_sectigo.plugin import (
+    SectigoIssuerPlugin,
+    _determine_certificate_term,
+)
 from lemur.tests.vectors import (
     ROOTCA_CERT_STR,
     INTERMEDIATE_CERT_STR,
@@ -127,3 +130,30 @@ class TestSectigoIssuerPlugin(TestCase):
                 assert WILDCARD_CERT_STR == cert_pem
                 assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
                 assert 3000 == cert_id
+
+    def test_determine_certificate_term(self):
+        with self.app_context:
+            assert 365 == _determine_certificate_term(
+                arrow.utcnow().shift(days=365 * 5), [30, 365]
+            )
+            assert 365 == _determine_certificate_term(
+                arrow.utcnow().shift(days=270), [30, 365]
+            )
+            assert 365 == _determine_certificate_term(
+                arrow.utcnow().shift(days=365), [365]
+            )
+            assert 365 == _determine_certificate_term(
+                arrow.utcnow().shift(days=397), [365]
+            )
+            assert 30 == _determine_certificate_term(
+                arrow.utcnow().shift(days=72), [30, 365]
+            )
+            assert 30 == _determine_certificate_term(
+                arrow.utcnow().shift(days=30), [30, 365]
+            )
+            assert 30 == _determine_certificate_term(
+                arrow.utcnow().shift(days=30), [30]
+            )
+            assert 30 == _determine_certificate_term(
+                arrow.utcnow().shift(days=90), [30]
+            )
