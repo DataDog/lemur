@@ -91,7 +91,11 @@ class SectigoIssuerPlugin(IssuerPlugin):
             }
         )
 
-        @retry(wait_fixed=2000, stop_max_delay=300000)
+        @retry(
+            wait_fixed=2000,
+            stop_max_delay=300000,
+            retry_on_exception=retry_if_certificate_pending,
+        )
         def collect_certificate():
             """
             Collect the certificate from Sectigo.
@@ -119,11 +123,6 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     }
                 )
                 raise
-            except Exception:
-                current_app.logger.error(
-                    {"message": "Collection attempt failed."},
-                    exc_info=True,
-                )
 
         return collect_certificate()
 
@@ -140,3 +139,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
 
     def cancel_ordered_certificate(self, pending_cert, **kwargs):
         raise NotImplementedError
+
+
+def retry_if_certificate_pending(exception):
+    return isinstance(exception, Pending)
