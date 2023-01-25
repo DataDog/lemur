@@ -101,13 +101,17 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     {"message": "Collecting certificate from Sectigo..."}
                 )
                 cert_pem = ssl.collect(cert_id=result["sslId"], cert_format="pem")
-                rootA, rootB, intermediate, issued_cert = pem.parse(
+                parts = pem.parse(
                     cert_pem.encode("utf-8")
                 )
+                ca_bundle = [str(c) for c in parts[:-1]]
+                ca_bundle.reverse()
+                ca_bundle = "".join(ca_bundle)
+                issued_cert = str(parts[-1])
 
                 return (
-                    str(issued_cert),
-                    (str(intermediate) + str(rootB) + str(rootA)).strip(),
+                    issued_cert,
+                    ca_bundle,
                     result["sslId"],
                 )
             except Pending:

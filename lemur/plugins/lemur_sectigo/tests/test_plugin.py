@@ -73,10 +73,7 @@ class TestSectigoIssuerPlugin(TestCase):
             adapter.register_uri(
                 "GET",
                 "mock://cert-manager.com/api/ssl/v1/collect/3000/pem",
-                text=ROOTCA_CERT_STR
-                + ROOTCA_CERT_STR
-                + INTERMEDIATE_CERT_STR
-                + WILDCARD_CERT_STR,
+                text=ROOTCA_CERT_STR + INTERMEDIATE_CERT_STR + WILDCARD_CERT_STR,
             )
             adapter.register_uri(
                 "GET",
@@ -94,9 +91,7 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (
-                    INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR + ROOTCA_CERT_STR
-                ).strip() == ca_bundle
+                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
                 assert 3000 == cert_id
 
             with self.subTest(case="create certificates with unsupported terms"):
@@ -108,9 +103,7 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (
-                    INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR + ROOTCA_CERT_STR
-                ).strip() == ca_bundle
+                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
                 assert 3000 == cert_id
 
                 cert_pem, ca_bundle, cert_id = plugin.create_certificate(
@@ -121,9 +114,7 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (
-                               INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR + ROOTCA_CERT_STR
-                       ).strip() == ca_bundle
+                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
                 assert 3000 == cert_id
 
                 cert_pem, ca_bundle, cert_id = plugin.create_certificate(
@@ -134,7 +125,5 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (
-                               INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR + ROOTCA_CERT_STR
-                       ).strip() == ca_bundle
+                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
                 assert 3000 == cert_id
