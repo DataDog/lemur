@@ -7,8 +7,6 @@ from lemur.common.utils import validate_conf
 from lemur.plugins.bases import IssuerPlugin
 from retrying import retry
 
-_MAX_CERTIFICATE_VALIDITY_DAYS = 365  # No public certificate can be valid for more than 397 days, and Sectigo only supports up-to 365 day terms.
-
 
 class SectigoIssuerPlugin(IssuerPlugin):
     title = "Sectigo"
@@ -120,19 +118,14 @@ def _collect_certificate(cert_id, ssl_client):
 
 
 def _determine_certificate_term(validity_end, supported_terms):
+    """
+    Determines the certificate term (in days) to issue the certificate with based
+    on the requested end date. If the requested end date is not aligned with a supported
+    term length, then this method will pick and return the closest certificate term that
+    is supported.
+    """
     min_start = arrow.utcnow()
-    max_end = arrow.utcnow().shift(days=_MAX_CERTIFICATE_VALIDITY_DAYS)
-    cert_term_days = _MAX_CERTIFICATE_VALIDITY_DAYS
-    if min_start <= validity_end <= max_end:
-        current_app.logger.warning(
-            {
-                "message": f"Requested certificate with a term greater than the maximum allowed "
-                f"of {_MAX_CERTIFICATE_VALIDITY_DAYS} days. Certificate will be therefore be "
-                f"issued with the maximum allowed {_MAX_CERTIFICATE_VALIDITY_DAYS} day term."
-            }
-        )
-        cert_term_days = (validity_end - min_start).days
-
+    cert_term_days = (validity_end - min_start).days
     if cert_term_days not in supported_terms:
         unsupported_cert_term_days = cert_term_days
         supported_cert_term_days = min(
