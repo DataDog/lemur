@@ -44,7 +44,7 @@ build-stage-image:
   variables:
     CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
   script:
-    - cd publish && docker buildx build --label target=staging --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag registry.ddbuild.io/ci/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA --push .
+    - cd publish && docker buildx build --label target=staging --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag registry.ddbuild.io/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA --push .
   except:
     - tags
 
@@ -60,6 +60,6 @@ build-prod-image:
   variables:
     CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
   script:
-    - cd publish && docker buildx build --label target=prod --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag registry.ddbuild.io/ci/lemur:$CI_COMMIT_TAG --push .
+    - cd publish && docker buildx build --label target=prod --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag registry.ddbuild.io/lemur:$CI_COMMIT_TAG --push .
   only:
     - tags
