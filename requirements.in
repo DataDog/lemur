@@ -35,6 +35,8 @@ flask_replicated
 future
 google-cloud-compute
 gunicorn
+grpcio == 1.50.0 # Required for cert orchestration adapter.
+grpcio-status == 1.44.0 # Required for cert orchestration adapter.
 hvac # required for the vault destination plugin
 inflection
 itsdangerous < 2.1.0 # requires Flask 2.0.3
@@ -46,6 +48,7 @@ marshmallow<2.21.1 #schema duplicate issues https://github.com/marshmallow-code/
 ndg-httpsclient
 paramiko  # required for the SFTP destination plugin
 pem
+protobuf == 3.20.2 # Required for cert orchestration adapter.
 psycopg2
 pyjks >= 19 # pyjks < 19 depends on pycryptodome, which conflicts with dyn's usage of pycrypto
 pyjwt

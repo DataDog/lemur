@@ -84,11 +84,11 @@ cachetools==5.3.0
     # via google-auth
 celery[redis]==5.2.7
     # via -r requirements.in
+cert-manager==2.3.0
+    # via -r requirements.in
 cert-orchestration-adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.0.2-py3-none-any.whl
     # via -r requirements.in
 certbot==2.1.0
-cert-manager==2.3.0
-    # via -r requirements.in
     # via -r requirements.in
 certifi==2022.12.7
     # via
@@ -191,12 +191,15 @@ googleapis-common-protos==1.58.0
     # via
     #   google-api-core
     #   grpcio-status
-grpcio==1.51.1
+grpcio==1.50.0
     # via
+    #   -r requirements.in
     #   google-api-core
     #   grpcio-status
-grpcio-status==1.51.1
-    # via google-api-core
+grpcio-status==1.44.0
+    # via
+    #   -r requirements.in
+    #   google-api-core
 gunicorn==20.1.0
     # via -r requirements.in
 hvac==1.0.2
@@ -275,8 +278,9 @@ prompt-toolkit==3.0.28
     # via click-repl
 proto-plus==1.22.2
     # via google-cloud-compute
-protobuf==4.21.12
+protobuf==3.20.2
     # via
+    #   -r requirements.in
     #   google-api-core
     #   google-cloud-compute
     #   googleapis-common-protos
@@ -380,6 +384,7 @@ six==1.16.0
     #   flask-cors
     #   flask-restful
     #   google-auth
+    #   grpcio
     #   isodate
     #   python-dateutil
     #   retrying
