@@ -16,7 +16,7 @@ certbot
 certifi
 cert_manager
 certsrv
-https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.0.2-py3-none-any.whl
+https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.0.3-py3-none-any.whl
 CloudFlare
 cryptography
 deprecated
@@ -41,6 +41,7 @@ hvac # required for the vault destination plugin
 inflection
 itsdangerous < 2.1.0 # requires Flask 2.0.3
 jinja2 < 3.1.0 # requires a newer version of Flask
+jsonschema ~= 3.0 # Required for cert orchestration adapter.
 lockfile
 logmatic-python
 marshmallow-sqlalchemy == 0.23.1 #related to the marshmallow issue (to avoid conflicts)
