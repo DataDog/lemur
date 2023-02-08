@@ -70,6 +70,8 @@ class SectigoIssuerPlugin(IssuerPlugin):
                 {
                     "message": "Encountered an error while issuing Sectigo certificate.",
                     "url": err.request.url,
+                    "request": err.request,
+                    "requestBody": err.request.text,
                     "response": err.response.text,
                 }
             )
