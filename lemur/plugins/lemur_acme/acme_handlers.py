@@ -184,8 +184,7 @@ class AcmeHandler(object):
                 "Connecting with directory at {0}".format(directory_url)
             )
             net = ClientNetwork(key, account=regr)
-            directory = ClientV2.get_directory(directory_url, net)
-            client = ClientV2(directory, net=net)
+            client = ClientV2(net, key, directory_url)
             return client, {}
         else:
             # Create an account for each certificate issuance
@@ -197,8 +196,7 @@ class AcmeHandler(object):
             )
 
             net = ClientNetwork(key, account=None, timeout=3600)
-            directory = ClientV2.get_directory(directory_url, net)
-            client = ClientV2(directory, net=net)
+            client = ClientV2(net, key, directory_url)
             if eab_kid and eab_hmac_key:
                 # external account binding (eab_kid and eab_hmac_key could be potentially single use to establish
                 # long-term credentials)
