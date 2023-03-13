@@ -1,5 +1,5 @@
 # Lemur Builder
-FROM gbi-ubuntu_2004 as builder
+FROM registry.ddbuild.io/images/base/gbi-ubuntu_2004 as builder
 
 ARG CI_COMMIT_SHA
 
@@ -43,7 +43,7 @@ RUN npm config set registry http://registry.npmjs.org/ && \
     rm -rf node_modules
 
 # Lemur Application
-FROM gbi-ubuntu_2004
+FROM registry.ddbuild.io/images/base/gbi-ubuntu_2004
 
 USER root
 
