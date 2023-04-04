@@ -269,7 +269,7 @@ class AzureDestinationPlugin(DestinationPlugin):
             ca_vendor=ca_vendor,
             key_type=key_type,
         )
-        
+
         certificate_client = CertificateClient(
             credential=get_azure_credential(self, options),
             vault_url=self.get_option("azureKeyVaultUrl", options),
