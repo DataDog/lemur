@@ -96,6 +96,17 @@ def get_and_decode_certificate(certificate_client, certificate_name):
     )
 
 
+def parse_ca_vendor(chain):
+    org_name = chain.subject.get_attributes_for_oid(x509.OID_ORGANIZATION_NAME)[
+        0
+    ].value.strip()
+    if "DigiCert" in org_name:
+        return "DigiCert"
+    elif "Sectigo" in org_name:
+        return "Sectigo"
+    return org_name.replace(" ", "").strip()
+
+
 def policy_from_appgw(network_client, appgw):
     if not appgw.ssl_policy:
         return dict(
@@ -251,8 +262,14 @@ class AzureDestinationPlugin(DestinationPlugin):
         # and containing only 0-9, a-z, A-Z, and -.
         cert = parse_certificate(body)
         ca_certs = parse_certificate(cert_chain)
-        certificate_name = f"{common_name(cert).replace('.', '-').replace('*', 'star')}-{issuer(cert)}"
-
+        ca_vendor = parse_ca_vendor(ca_certs)
+        key_type = get_key_type_from_certificate(body)
+        certificate_name = "{common_name}-{ca_vendor}-{key_type}".format(
+            common_name=common_name(cert).replace('.', '-').replace('*', 'star'),
+            ca_vendor=ca_vendor,
+            key_type=key_type,
+        )
+        
         certificate_client = CertificateClient(
             credential=get_azure_credential(self, options),
             vault_url=self.get_option("azureKeyVaultUrl", options),
