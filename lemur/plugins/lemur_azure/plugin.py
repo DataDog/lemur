@@ -19,8 +19,8 @@ from azure.mgmt.subscription import SubscriptionClient
 from azure.mgmt.cdn.models import UserManagedHttpsParameters
 from azure.mgmt.network.models import ApplicationGatewaySslPolicyName, ApplicationGatewaySslPolicyType, ApplicationGatewaySslCipherSuite
 
-from lemur.common.defaults import common_name, issuer, bitstrength
-from lemur.common.utils import parse_certificate, parse_private_key, check_validation
+from lemur.common.defaults import common_name, bitstrength
+from lemur.common.utils import parse_certificate, parse_private_key, check_validation, get_key_type_from_certificate
 from lemur.extensions import metrics
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins.lemur_azure.auth import get_azure_credential
