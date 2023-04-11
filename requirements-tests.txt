@@ -74,11 +74,11 @@ ecdsa==0.17.0
     #   sshpubkeys
 factory-boy==3.2.1
     # via -r requirements-tests.in
-faker==16.6.0
+faker==18.4.0
     # via
     #   -r requirements-tests.in
     #   factory-boy
-fakeredis==2.4.0
+fakeredis==2.10.3
     # via -r requirements-tests.in
 flask==1.1.2
     # via
@@ -197,7 +197,7 @@ pyrfc3339==1.1
     #   certbot
 pyrsistent==0.19.3
     # via jsonschema
-pytest==7.1.3
+pytest==7.2.0
     # via
     #   -r requirements-tests.in
     #   pytest-flask
