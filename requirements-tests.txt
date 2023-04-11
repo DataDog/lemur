@@ -187,7 +187,7 @@ pycparser==2.21
     # via cffi
 pyflakes==2.4.0
     # via -r requirements-tests.in
-pyopenssl==23.0.0
+pyopenssl==23.1.1
     # via
     #   acme
     #   josepy
