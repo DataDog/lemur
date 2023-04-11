@@ -109,7 +109,7 @@ certifi==2022.12.7
     #   sentry-sdk
 certsrv==2.1.1
     # via -r requirements.in
-cffi==1.15.0
+cffi==1.15.1
     # via
     #   bcrypt
     #   cryptography
