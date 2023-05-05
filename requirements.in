@@ -25,12 +25,11 @@ ddtrace == 0.53.0 # Required for cert orchestration adapter.
 dyn
 Flask-Bcrypt
 Flask-Mail
-Flask-Migrate <= 2.7.0 #mirgration to Flask CLI required, https://github.com/miguelgrinberg/Flask-Migrate/issues/407
+Flask-Migrate
 Flask-Principal
 Flask-RESTful
-Flask-Script
 Flask-SQLAlchemy
-Flask <= 1.1.2 # similar to Flask-Migrate
+Flask
 Flask-Cors
 flask_replicated
 future
@@ -40,9 +39,8 @@ grpcio == 1.50.0 # Required for cert orchestration adapter.
 grpcio-status == 1.44.0 # Required for cert orchestration adapter.
 hvac # required for the vault destination plugin
 inflection
-itsdangerous < 2.1.0 # requires Flask 2.0.3
-jinja2 < 3.1.0 # requires a newer version of Flask
-jsonschema ~= 3.0 # Required for cert orchestration adapter.
+itsdangerous
+jinja2
 lockfile
 logmatic-python
 marshmallow-sqlalchemy == 0.23.1 #related to the marshmallow issue (to avoid conflicts)
@@ -63,8 +61,8 @@ retrying
 sentry-sdk
 six
 SQLAlchemy-Utils
-sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226
+sqlalchemy
 tabulate
 validators
-werkzeug < 2.1.0 # requires a newer version of Flask
+werkzeug
 xmltodict
