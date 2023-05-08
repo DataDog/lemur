@@ -78,7 +78,7 @@ faker==18.4.0
     # via
     #   -r requirements-tests.in
     #   factory-boy
-fakeredis==2.10.3
+fakeredis==2.12.0
     # via -r requirements-tests.in
 flask==1.1.2
     # via
@@ -177,8 +177,6 @@ platformdirs==2.5.1
     # via black
 pluggy==1.0.0
     # via pytest
-py==1.11.0
-    # via pytest
 pyasn1==0.4.8
     # via
     #   python-jose
@@ -272,8 +270,6 @@ stevedore==3.5.0
     # via bandit
 toml==0.10.2
     # via responses
-tomli==2.0.1
-    # via pytest
 types-toml==0.10.8.6
     # via responses
 urllib3==1.26.15
