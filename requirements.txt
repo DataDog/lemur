@@ -109,7 +109,7 @@ certifi==2022.12.7
     #   sentry-sdk
 certsrv==2.1.1
     # via -r requirements.in
-cffi==1.15.0
+cffi==1.15.1
     # via
     #   bcrypt
     #   cryptography
@@ -135,7 +135,7 @@ configargparse==1.5.3
     # via certbot
 configobj==5.0.6
     # via certbot
-cryptography==39.0.1
+cryptography==40.0.1
     # via
     #   -r requirements.in
     #   acme
@@ -347,7 +347,7 @@ pyjwt[crypto]==2.6.0
     #   msal
 pynacl==1.5.0
     # via paramiko
-pyopenssl==23.0.0
+pyopenssl==23.1.1
     # via
     #   -r requirements.in
     #   acme
@@ -407,7 +407,7 @@ rsa==4.9
     # via google-auth
 s3transfer==0.6.0
     # via boto3
-sentry-sdk==1.9.0
+sentry-sdk==1.14.0
     # via -r requirements.in
 simplejson==3.18.1
     # via cert-orchestration-adapter
@@ -454,14 +454,14 @@ toml==0.10.2
     #   responses
 twofish==0.3.0
     # via pyjks
-types-toml==0.10.8.1
+types-toml==0.10.8.6
     # via responses
 typing-extensions==4.4.0
     # via
     #   azure-core
     #   bytecode
     #   ddtrace
-urllib3==1.26.9
+urllib3==1.26.15
     # via
     #   botocore
     #   cert-orchestration-adapter
