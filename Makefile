@@ -63,7 +63,7 @@ clean:
 	find . -name "*.pyc" -delete
 	@echo ""
 
-test:
+test: develop lint test-python
 
 testloop: develop
 	pip install pytest-xdist
