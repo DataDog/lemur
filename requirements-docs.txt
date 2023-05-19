@@ -125,7 +125,7 @@ configobj==5.0.6
     # via
     #   -r requirements-tests.txt
     #   certbot
-coverage==7.2.3
+coverage==7.2.5
     # via -r requirements-tests.txt
 cryptography==40.0.1
     # via
@@ -366,8 +366,6 @@ pluggy==1.0.0
     #   pytest
 prompt-toolkit==3.0.28
     # via click-repl
-py==1.11.0
-    # via -r requirements-tests.txt
 pyasn1==0.4.8
     # via
     #   -r requirements-tests.txt
@@ -566,8 +564,6 @@ toml==0.10.2
     # via
     #   -r requirements-tests.txt
     #   responses
-tomli==2.0.1
-    # via -r requirements-tests.txt
 twofish==0.3.0
     # via pyjks
 types-toml==0.10.8.6
