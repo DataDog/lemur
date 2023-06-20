@@ -37,14 +37,14 @@ blinker==1.6.2
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.26.152
+boto3==1.26.156
     # via -r requirements.in
-botocore==1.29.152
+botocore==1.29.156
     # via
     #   -r requirements.in
     #   boto3
     #   s3transfer
-celery[redis]==5.3.0
+celery[redis]==5.3.1
     # via -r requirements.in
 cert-manager==2.3.0
     # via -r requirements.in
@@ -78,7 +78,7 @@ click-didyoumean==0.3.0
     # via celery
 click-plugins==1.1.1
     # via celery
-click-repl==0.2.0
+click-repl==0.3.0
     # via celery
 cloudflare==2.11.1
     # via -r requirements.in
@@ -145,11 +145,11 @@ future==0.18.3
     # via -r requirements.in
 gunicorn==20.1.0
     # via -r requirements.in
-hvac==1.0.2
+hvac==1.1.1
     # via -r requirements.in
 idna==3.4
     # via requests
-importlib-metadata==6.6.0
+importlib-metadata==6.7.0
     # via flask
 inflection==0.5.1
     # via -r requirements.in
@@ -173,7 +173,7 @@ josepy==1.13.0
     #   certbot
 jsonlines==3.1.0
     # via cloudflare
-kombu==5.3.0
+kombu==5.3.1
     # via celery
 lockfile==0.12.2
     # via -r requirements.in
@@ -292,7 +292,7 @@ pyyaml==6.0
     # via
     #   -r requirements.in
     #   cloudflare
-redis==4.4.4
+redis==4.5.4
     # via
     #   -r requirements.in
     #   celery
@@ -326,7 +326,6 @@ simplejson==3.18.1
 six==1.16.0
     # via
     #   -r requirements.in
-    #   click-repl
     #   configobj
     #   ddsketch
     #   ddtrace
