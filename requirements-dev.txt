@@ -54,7 +54,7 @@ nodeenv==1.7.0
     #   pre-commit
 pkginfo==1.9.6
     # via twine
-platformdirs==3.6.0
+platformdirs==3.7.0
     # via virtualenv
 pre-commit==3.3.3
     # via -r requirements-dev.in
