@@ -163,6 +163,10 @@ ecdsa==0.17.0
     #   moto
     #   python-jose
     #   sshpubkeys
+exceptiongroup==1.1.3
+    # via
+    #   -r requirements-tests.txt
+    #   pytest
 factory-boy==3.3.0
     # via -r requirements-tests.txt
 faker==19.2.0
@@ -235,6 +239,8 @@ idna==3.3
     #   moto
     #   requests
 imagesize==1.3.0
+    # via sphinx
+importlib-metadata==6.8.0
     # via sphinx
 inflection==0.5.1
     # via -r requirements-docs.in
@@ -579,12 +585,21 @@ toml==0.10.2
     # via
     #   -r requirements-tests.txt
     #   responses
+tomli==2.0.1
+    # via
+    #   -r requirements-tests.txt
+    #   black
+    #   pytest
 twofish==0.3.0
     # via pyjks
 types-toml==0.10.8.6
     # via
     #   -r requirements-tests.txt
     #   responses
+typing-extensions==4.7.1
+    # via
+    #   -r requirements-tests.txt
+    #   black
 urllib3==1.26.15
     # via
     #   -r requirements-tests.txt
@@ -620,6 +635,8 @@ xmltodict==0.13.0
     #   -r requirements-docs.in
     #   -r requirements-tests.txt
     #   moto
+zipp==3.16.2
+    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
