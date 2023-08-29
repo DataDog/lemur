@@ -24,7 +24,6 @@ asyncpool==1.0
     # via -r requirements.in
 attrs==21.4.0
     # via
-    #   cattrs
     #   ddtrace
     #   jsonlines
     #   jsonschema
@@ -84,14 +83,10 @@ botocore==1.27.96
     #   -r requirements.in
     #   boto3
     #   s3transfer
-bytecode==0.14.0
-    # via ddtrace
 cachetools==5.3.0
     # via
     #   cert-orchestration-adapter
     #   google-auth
-cattrs==22.2.0
-    # via ddtrace
 celery[redis]==5.2.7
     # via -r requirements.in
 cert-manager==2.3.0
@@ -148,10 +143,10 @@ cryptography==40.0.1
     #   paramiko
     #   pyjwt
     #   pyopenssl
-ddsketch==2.0.4
-    # via ddtrace
 ddtrace==0.53.0
-    # via cert-orchestration-adapter
+    # via
+    #   -r requirements.in
+    #   cert-orchestration-adapter
 decorator==5.1.1
     # via validators
 deprecated==1.2.13
@@ -164,10 +159,6 @@ dnspython3==1.15.0
     # via -r requirements.in
 dyn==1.8.1
     # via -r requirements.in
-envier==0.4.0
-    # via ddtrace
-exceptiongroup==1.1.0
-    # via cattrs
 flask==1.1.2
     # via
     #   -r requirements.in
@@ -254,9 +245,7 @@ josepy==1.13.0
 jsonlines==3.0.0
     # via cloudflare
 jsonschema==3.2.0
-    # via
-    #   -r requirements.in
-    #   ddtrace
+    # via -r requirements.in
 kombu==5.2.4
     # via celery
 lockfile==0.12.2
@@ -311,7 +300,6 @@ protobuf==3.20.2
     # via
     #   -r requirements.in
     #   cert-orchestration-adapter
-    #   ddsketch
     #   ddtrace
     #   google-api-core
     #   google-cloud-compute
@@ -423,7 +411,6 @@ six==1.16.0
     #   cert-orchestration-adapter
     #   click-repl
     #   configobj
-    #   ddsketch
     #   ddtrace
     #   flask-cors
     #   flask-restful
@@ -457,10 +444,7 @@ twofish==0.3.0
 types-toml==0.10.8.6
     # via responses
 typing-extensions==4.4.0
-    # via
-    #   azure-core
-    #   bytecode
-    #   ddtrace
+    # via azure-core
 urllib3==1.26.15
     # via
     #   botocore
@@ -484,9 +468,7 @@ werkzeug==2.0.3
 wrapt==1.14.1
     # via deprecated
 xmltodict==0.13.0
-    # via
-    #   -r requirements.in
-    #   ddtrace
+    # via -r requirements.in
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
