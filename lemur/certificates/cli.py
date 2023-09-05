@@ -377,6 +377,72 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
 
 
 @manager.option(
+    "-s",
+    "--source",
+    dest="source",
+    help="Source of the endpoint you wish to rotate.",
+)
+@manager.option(
+    "-a",
+    "--notify",
+    dest="message",
+    action="store_true",
+    help="Send a rotation notification to the certificates owner.",
+)
+@manager.option(
+    "-c",
+    "--commit",
+    dest="commit",
+    action="store_true",
+    default=False,
+    help="Persist changes.",
+)
+def rotate_by_source(source, message, commit):
+    if commit:
+        print("[!] Running in COMMIT mode.")
+
+    print(f"[+] Starting endpoint rotation for source: {source}")
+    for endpoint in endpoint_service.get_all_pending_rotation_by_source(source):
+
+        for certificate in endpoint.certificates:
+            log_data["message"] = "Rotating endpoint from old to new cert"
+            if not certificate.replaced:
+                continue
+            if len(certificate.replaced) > 1:
+                log_data["message"] = f"Multiple replacement certificates found, going with the first one out of " \
+                                      f"{len(certificate.replaced)}"
+            new_cert = certificate.replaced[0]
+            old_cert = certificate
+            log_data["endpoint"] = endpoint.dnsname
+            log_data["new_certificate"] = new_cert.name
+            log_data["old_certificate"] = old_cert.name
+            print(
+                f"[+] Rotating {old_cert.name} to {new_cert.name} on {endpoint.name}"
+            )
+
+            request_rotation(endpoint, old_cert, new_cert, message, commit)
+            current_app.logger.info(log_data)
+
+        status = SUCCESS_METRIC_STATUS
+        metrics.send(
+            "source_rotation_job",
+            "counter",
+            1,
+            metric_tags={
+                "status": status,
+                "old_certificate_name": str(old_cert),
+                "new_certificate_name": str(new_cert),
+                "endpoint_name": str(endpoint),
+                "message": str(message),
+                "source": str(source),
+            },
+        )
+    print("[+] Done!")
+
+
+
+
+@manager.option(
     "-o",
     "--old-certificate",
     dest="old_certificate_name",
