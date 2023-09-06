@@ -323,9 +323,9 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
                     request_rotation(ep, old_cert, new_cert, message, commit)
                 current_app.logger.info(log_data)
         else:
-            # If a source is provided then we rotate endpoints only associated to that source
-            # No certificate name or endpoint is provided. We will now fetch all endpoints,
-            # which are associated with a certificate that has been replaced
+            # No certificate name or endpoint is provided.
+            # If a source is provided then we rotate endpoints only associated to that source.
+            # Otherwise, we will now fetch all endpoints, which are associated with a certificate that has been replaced
             source_rotation = False
             if source is not None or source == "":
                 source_rotation = True

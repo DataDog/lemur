@@ -353,7 +353,7 @@ def test_rotate_cli_old_to_new(session, source_plugin):
     assert ep3.sni_certificates == [new_cert2]
 
 
-def test_rotate_cli_source_primary(session, source_plugin):
+def test_rotate_cli__by_source_primary(session, source_plugin):
     """
     Ensure that the CLI command 'lemur rotate_by_source --source 'test source'
     correctly rotates all endpoints using the old certificate with the new certificate.
@@ -394,7 +394,7 @@ def test_rotate_cli_source_primary(session, source_plugin):
     assert ep2.primary_certificate == new_cert2
 
 
-def test_rotate_cli_source_sni(session, source_plugin):
+def test_rotate_cli_by_source_sni(session, source_plugin):
     """
     Ensure that the CLI command 'lemur rotate_by_source --source 'test source'
     correctly rotates all endpoints using the old certificate with the new certificate.
@@ -444,7 +444,7 @@ def test_rotate_cli_source_sni(session, source_plugin):
     assert ep2.primary_certificate == primary_cert2
 
 
-def test_rotate_cli_source_multiple_sources(session, source_plugin):
+def test_rotate_cli_by_source_multiple_sources(session, source_plugin):
     """
     Ensure that the CLI command 'lemur rotate_by_source --source 'test source'
     correctly rotates all endpoints using the old certificate with the new certificate.
