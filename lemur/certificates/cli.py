@@ -402,6 +402,11 @@ def rotate_by_source(source, message, commit):
         print("[!] Running in COMMIT mode.")
 
     print(f"[+] Starting endpoint rotation for source: {source}")
+
+    log_data = {
+        "function": f"{__name__}.{sys._getframe().f_code.co_name}",
+    }
+
     for endpoint in endpoint_service.get_all_pending_rotation_by_source(source):
 
         for certificate in endpoint.certificates:
@@ -438,8 +443,6 @@ def rotate_by_source(source, message, commit):
             },
         )
     print("[+] Done!")
-
-
 
 
 @manager.option(

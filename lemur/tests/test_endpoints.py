@@ -1,7 +1,7 @@
 import pytest
 
 from lemur.endpoints.views import *  # noqa
-from lemur.tests.factories import EndpointFactory, CertificateFactory
+from lemur.tests.factories import EndpointFactory, CertificateFactory, SourceFactory
 
 
 from .vectors import (
@@ -353,6 +353,88 @@ def test_rotate_cli_old_to_new(session, source_plugin):
     assert ep3.sni_certificates == [new_cert2]
 
 
+def test_rotate_cli_source_primary(session, source_plugin):
+    """
+    Ensure that the CLI command 'lemur rotate_by_source --source 'test source'
+    correctly rotates all endpoints using the old certificate with the new certificate.
+    Ensure that we properly rotate Primary Certificates
+    """
+    from lemur.certificates.cli import rotate_by_source
+
+    # Setup Primary Certs
+    old_cert1, new_cert1 = CertificateFactory(), CertificateFactory()
+    old_cert2, new_cert2 = CertificateFactory(), CertificateFactory()
+
+    ep1, ep2 = EndpointFactory(), EndpointFactory()
+
+    _setup_rotation_eligible_endpoint_primary_certificate(
+        endpoint=ep1, old_primary_certificate=old_cert1, new_primary_certificate=new_cert1
+    )
+
+    _setup_rotation_eligible_endpoint_primary_certificate(
+        endpoint=ep2, old_primary_certificate=old_cert2, new_primary_certificate=new_cert2
+    )
+
+    source_name = "test-source"
+    _setup_source_for_endpoints([ep1, ep2], source_name)
+
+    rotate_by_source(
+        source=source_name,
+        message="test message",
+        commit=True
+    )
+    session.commit()
+
+    assert ep1.primary_certificate == new_cert1
+    assert ep2.primary_certificate == new_cert2
+
+
+def test_rotate_cli_source_sni(session, source_plugin):
+    """
+    Ensure that the CLI command 'lemur rotate_by_source --source 'test source'
+    correctly rotates all endpoints using the old certificate with the new certificate.
+    Ensure that we properly rotate SNI Certificates
+    """
+    from lemur.certificates.cli import rotate_by_source
+
+    # Setup Primary Certs
+    primary_cert1, primary_cert2 = CertificateFactory(), CertificateFactory()
+
+    # Setup SNI Certs
+    old_sni_cert1, new_sni_cert1 = CertificateFactory(), CertificateFactory()
+    old_sni_cert2, new_sni_cert2 = CertificateFactory(), CertificateFactory()
+
+    # Setup endpoints
+    ep1, ep2 = EndpointFactory(), EndpointFactory()
+
+    # Add Primary Certs to Endpoints
+    ep1.primary_certificate = primary_cert1
+    ep2.primary_certificate = primary_cert2
+
+    _setup_rotation_eligible_endpoint_sni_certificate(ep1, old_sni_cert1, new_sni_cert1)
+    _setup_rotation_eligible_endpoint_sni_certificate(ep2, old_sni_cert2, new_sni_cert2)
+
+    # Setup Source
+    source_name = "test-source"
+    _setup_source_for_endpoints([ep1, ep2], source_name)
+
+    session.commit()
+
+    rotate_by_source(
+        source=source_name,
+        message="test message",
+        commit=True
+    )
+
+    # Ensure that SNI certs were rotated
+    assert ep1.sni_certificates == [new_sni_cert1]
+    assert ep2.sni_certificates == [new_sni_cert2]
+
+    # Ensure that Primary certs were no rotated
+    assert ep1.primary_certificate == primary_cert1
+    assert ep2.primary_certificate == primary_cert2
+
+
 def test_rotate_cli_endpoint(session, source_plugin):
     """
     Ensure that the CLI command 'lemur rotate -e <endpoint_name> -n <new_certificate_name>
@@ -465,3 +547,11 @@ def _setup_rotation_eligible_endpoint(
     new_sni_certificate.replaces = [old_sni_certificate]
     endpoint.primary_certificate = old_primary_certificate
     endpoint.add_sni_certificate(old_sni_certificate)
+
+
+def _setup_source_for_endpoints(endpoints, label):
+    source = SourceFactory()
+    source.label = label
+
+    for endpoint in endpoints:
+        endpoint.source = source
