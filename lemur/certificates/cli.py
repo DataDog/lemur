@@ -323,10 +323,20 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
                     request_rotation(ep, old_cert, new_cert, message, commit)
                 current_app.logger.info(log_data)
         else:
+            # If a source is provided then we rotate endpoints only associated to that source
             # No certificate name or endpoint is provided. We will now fetch all endpoints,
             # which are associated with a certificate that has been replaced
-            print("[+] Rotating all endpoints that have new certificates available")
-            for endpoint in endpoint_service.get_all_pending_rotation():
+            source_rotation = False
+            if source is not None or source == "":
+                source_rotation = True
+
+            if source_rotation:
+                print(f"[+] Rotating all endpoints for source: {source} that have new certificates available")
+                endpoints = endpoint_service.get_all_pending_rotation_by_source(source)
+            else:
+                print("[+] Rotating all endpoints that have new certificates available")
+                endpoints = endpoint_service.get_all_pending_rotation()
+            for endpoint in endpoints:
                 for certificate in endpoint.certificates:
                     log_data["message"] = "Rotating endpoint from old to new cert"
                     if not certificate.replaced:
@@ -374,75 +384,6 @@ def rotate(endpoint_name, source, new_certificate_name, old_certificate_name, me
             "endpoint": str(globals().get("endpoint")),
         },
     )
-
-
-@manager.option(
-    "-s",
-    "--source",
-    dest="source",
-    help="Source of the endpoint you wish to rotate.",
-)
-@manager.option(
-    "-a",
-    "--notify",
-    dest="message",
-    action="store_true",
-    help="Send a rotation notification to the certificates owner.",
-)
-@manager.option(
-    "-c",
-    "--commit",
-    dest="commit",
-    action="store_true",
-    default=False,
-    help="Persist changes.",
-)
-def rotate_by_source(source, message, commit):
-    if commit:
-        print("[!] Running in COMMIT mode.")
-
-    print(f"[+] Starting endpoint rotation for source: {source}")
-
-    log_data = {
-        "function": f"{__name__}.{sys._getframe().f_code.co_name}",
-    }
-
-    for endpoint in endpoint_service.get_all_pending_rotation_by_source(source):
-
-        for certificate in endpoint.certificates:
-            log_data["message"] = "Rotating endpoint from old to new cert"
-            if not certificate.replaced:
-                continue
-            if len(certificate.replaced) > 1:
-                log_data["message"] = f"Multiple replacement certificates found, going with the first one out of " \
-                                      f"{len(certificate.replaced)}"
-            new_cert = certificate.replaced[0]
-            old_cert = certificate
-            log_data["endpoint"] = endpoint.dnsname
-            log_data["new_certificate"] = new_cert.name
-            log_data["old_certificate"] = old_cert.name
-            print(
-                f"[+] Rotating {old_cert.name} to {new_cert.name} on {endpoint.name}"
-            )
-
-            request_rotation(endpoint, old_cert, new_cert, message, commit)
-            current_app.logger.info(log_data)
-
-        status = SUCCESS_METRIC_STATUS
-        metrics.send(
-            "source_rotation_job",
-            "counter",
-            1,
-            metric_tags={
-                "status": status,
-                "old_certificate_name": str(old_cert),
-                "new_certificate_name": str(new_cert),
-                "endpoint_name": str(endpoint),
-                "message": str(message),
-                "source": str(source),
-            },
-        )
-    print("[+] Done!")
 
 
 @manager.option(
