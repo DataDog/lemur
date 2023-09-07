@@ -360,6 +360,7 @@ def test_rotate_cli_by_source_primary(session, source_plugin):
     Ensure that we properly rotate Primary Certificates
     """
     from lemur.certificates.cli import rotate
+    from lemur.sources.service import delete as delete_source
 
     # Setup Primary Certs
     old_cert1, new_cert1 = CertificateFactory(), CertificateFactory()
@@ -394,7 +395,7 @@ def test_rotate_cli_by_source_primary(session, source_plugin):
     assert ep2.primary_certificate == new_cert2
 
     # cleanup
-    lemur.sources.service.delete(source.id)
+    delete_source(source.id)
 
 
 def test_rotate_cli_by_source_sni(session, source_plugin):
@@ -404,6 +405,7 @@ def test_rotate_cli_by_source_sni(session, source_plugin):
     Ensure that we properly rotate SNI Certificates
     """
     from lemur.certificates.cli import rotate
+    from lemur.sources.service import delete as delete_source
 
     # Setup Primary Certs
     primary_cert1, primary_cert2 = CertificateFactory(), CertificateFactory()
@@ -447,7 +449,7 @@ def test_rotate_cli_by_source_sni(session, source_plugin):
     assert ep2.primary_certificate == primary_cert2
 
     # cleanup
-    lemur.sources.service.delete(source.id)
+    delete_source(source.id)
 
 
 def test_rotate_cli_by_source_multiple_sources(session, source_plugin):
@@ -458,6 +460,7 @@ def test_rotate_cli_by_source_multiple_sources(session, source_plugin):
     source that we pass in
     """
     from lemur.certificates.cli import rotate
+    from lemur.sources.service import delete as delete_source
 
     # These endpoints will be associated to Source="test-source" and should be rotated
     ep1, ep2 = EndpointFactory(), EndpointFactory()
@@ -527,8 +530,8 @@ def test_rotate_cli_by_source_multiple_sources(session, source_plugin):
     assert ep4.primary_certificate == ep4_new_cert
 
     # cleanup
-    lemur.sources.service.delete(source.id)
-    lemur.sources.service.delete(source_other.id)
+    delete_source(source.id)
+    delete_source(source_other.id)
 
 
 def test_rotate_cli_endpoint(session, source_plugin):
