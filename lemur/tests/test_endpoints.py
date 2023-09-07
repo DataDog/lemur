@@ -375,8 +375,8 @@ def test_rotate_cli_by_source_primary(session, source_plugin):
         endpoint=ep2, old_primary_certificate=old_cert2, new_primary_certificate=new_cert2
     )
 
-    source_name = "test_rotate_cli_source_primary"
-    _setup_source_for_endpoints([ep1, ep2], source_name)
+    source_name = "test-source"
+    source = _setup_source_for_endpoints([ep1, ep2], source_name)
 
     rotate(
         source=source_name,
@@ -392,6 +392,9 @@ def test_rotate_cli_by_source_primary(session, source_plugin):
 
     assert ep1.primary_certificate == new_cert1
     assert ep2.primary_certificate == new_cert2
+
+    # cleanup
+    lemur.sources.service.delete(source.id)
 
 
 def test_rotate_cli_by_source_sni(session, source_plugin):
@@ -420,8 +423,8 @@ def test_rotate_cli_by_source_sni(session, source_plugin):
     _setup_rotation_eligible_endpoint_sni_certificate(ep2, old_sni_cert2, new_sni_cert2)
 
     # Setup Source
-    source_name = "test_rotate_cli_source_sni"
-    _setup_source_for_endpoints([ep1, ep2], source_name)
+    source_name = "test-source"
+    source = _setup_source_for_endpoints([ep1, ep2], source_name)
 
     session.commit()
 
@@ -442,6 +445,9 @@ def test_rotate_cli_by_source_sni(session, source_plugin):
     # Ensure that Primary certs were not rotated
     assert ep1.primary_certificate == primary_cert1
     assert ep2.primary_certificate == primary_cert2
+
+    # cleanup
+    lemur.sources.service.delete(source.id)
 
 
 def test_rotate_cli_by_source_multiple_sources(session, source_plugin):
@@ -480,12 +486,12 @@ def test_rotate_cli_by_source_multiple_sources(session, source_plugin):
     )
 
     # Associated ep1 and ep2 with Source.label="test-source"
-    source_name = "rotate_cli_source_multiple"
-    _setup_source_for_endpoints([ep1, ep2], source_name)
+    source_name = "test-source"
+    source = _setup_source_for_endpoints([ep1, ep2], source_name)
 
     # Associated ep3 and ep4 with Source.label="test-source-other"
-    source_name_other = "rotate_cli_source_multiple2"
-    _setup_source_for_endpoints([ep3, ep4], source_name_other)
+    source_name_other = "test-source-other"
+    source_other = _setup_source_for_endpoints([ep3, ep4], source_name_other)
 
     session.commit()
 
@@ -519,6 +525,10 @@ def test_rotate_cli_by_source_multiple_sources(session, source_plugin):
     # Ensure endpoints associated with Source.label="test-source-other" are rotated
     assert ep3.primary_certificate == ep3_new_cert
     assert ep4.primary_certificate == ep4_new_cert
+
+    # cleanup
+    lemur.sources.service.delete(source.id)
+    lemur.sources.service.delete(source_other.id)
 
 
 def test_rotate_cli_endpoint(session, source_plugin):
@@ -641,3 +651,5 @@ def _setup_source_for_endpoints(endpoints, label):
 
     for endpoint in endpoints:
         endpoint.source = source
+
+    return source
