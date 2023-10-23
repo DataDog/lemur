@@ -444,7 +444,7 @@ pytest==7.4.0
     #   -r requirements-tests.txt
     #   pytest-flask
     #   pytest-mock
-pytest-flask==1.2.0
+pytest-flask==1.3.0
     # via -r requirements-tests.txt
 pytest-mock==3.11.1
     # via -r requirements-tests.txt
