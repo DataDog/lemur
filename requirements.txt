@@ -35,7 +35,7 @@ azure-common==1.1.28
     #   azure-mgmt-cdn
     #   azure-mgmt-network
     #   azure-mgmt-subscription
-azure-core==1.29.5
+azure-core==1.29.3
     # via
     #   azure-identity
     #   azure-keyvault-certificates
@@ -53,14 +53,14 @@ azure-keyvault-keys==4.8.0
     # via azure-keyvault
 azure-keyvault-secrets==4.7.0
     # via azure-keyvault
-azure-mgmt-cdn==13.0.0
+azure-mgmt-cdn==12.0.0
     # via -r requirements.in
 azure-mgmt-core==1.4.0
     # via
     #   azure-mgmt-cdn
     #   azure-mgmt-network
     #   azure-mgmt-subscription
-azure-mgmt-network==25.1.0
+azure-mgmt-network==25.0.0
     # via -r requirements.in
 azure-mgmt-subscription==3.1.1
     # via -r requirements.in
