@@ -43,7 +43,7 @@ azure-core==1.29.5
     #   azure-keyvault-secrets
     #   azure-mgmt-core
     #   msrest
-azure-identity==1.14.1
+azure-identity==1.14.0
     # via -r requirements.in
 azure-keyvault==4.2.0
     # via -r requirements.in
