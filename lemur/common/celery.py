@@ -149,6 +149,15 @@ def report_celery_last_success_metrics():
         metrics.send(
             f"{task}.time_since_last_success", "gauge", current_time - last_success
         )
+
+        kwargs = t.get("kwargs")
+        if "source" in kwargs:
+            source = kwargs[source]
+            last_success = int(red.get(f"{source}.last_success") or 0)
+            metrics.send(
+                f"{source}.time_since_last_success", "gauge", current_time - last_success
+            )
+
     red.set(
         f"{function}.last_success", int(time.time())
     )  # Alert if this metric is not seen
@@ -181,6 +190,11 @@ def report_successful_task(**kwargs):
     with flask_app.app_context():
         tags = get_celery_request_tags(**kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
+
+        if "source" in kwargs:
+            source = kwargs[source]
+            red.set(f"{source}.last_success", int(time.time()))
+            
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
 
 
