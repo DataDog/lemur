@@ -194,7 +194,7 @@ def report_successful_task(**kwargs):
         if "source" in kwargs:
             source = kwargs["source"]
             red.set(f"{source}.last_success", int(time.time()))
-            
+
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
 
 
