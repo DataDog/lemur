@@ -152,7 +152,7 @@ def report_celery_last_success_metrics():
 
         kwargs = t.get("kwargs")
         if "source" in kwargs:
-            source = kwargs[source]
+            source = kwargs["source"]
             last_success = int(red.get(f"{source}.last_success") or 0)
             metrics.send(
                 f"{source}.time_since_last_success", "gauge", current_time - last_success
@@ -192,7 +192,7 @@ def report_successful_task(**kwargs):
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
 
         if "source" in kwargs:
-            source = kwargs[source]
+            source = kwargs["source"]
             red.set(f"{source}.last_success", int(time.time()))
             
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
