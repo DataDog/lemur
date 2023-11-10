@@ -145,18 +145,22 @@ def report_celery_last_success_metrics():
     schedule = current_app.config.get("CELERYBEAT_SCHEDULE")
     for _, t in schedule.items():
         task = t.get("task")
-        last_success = int(red.get(f"{task}.last_success") or 0)
-        metrics.send(
-            f"{task}.time_since_last_success", "gauge", current_time - last_success
-        )
 
+        tags = {}
         kwargs = t.get("kwargs")
-        if "source" in kwargs:
+        if not kwargs is None and "source" in kwargs:
             source = kwargs["source"]
             last_success = int(red.get(f"{source}.last_success") or 0)
-            metrics.send(
-                f"{source}.time_since_last_success", "gauge", current_time - last_success
-            )
+            tags["source_name"] = source
+        else:
+            last_success = int(red.get(f"{task}.last_success") or 0)
+
+        metrics.send(
+            f"{task}.time_since_last_success", 
+            "gauge",
+            current_time - last_success, 
+            tags=tags
+        )
 
     red.set(
         f"{function}.last_success", int(time.time())
@@ -191,7 +195,7 @@ def report_successful_task(**kwargs):
         tags = get_celery_request_tags(**kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
 
-        if "source" in kwargs:
+        if not kwargs is None and "source" in kwargs:
             source = kwargs["source"]
             red.set(f"{source}.last_success", int(time.time()))
 
