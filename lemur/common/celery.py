@@ -150,17 +150,18 @@ def report_celery_last_success_metrics():
         kwargs = t.get("kwargs")
         if kwargs is not None and "source" in kwargs:
             source = kwargs["source"]
-            last_success = int(red.get(f"{source}.last_success") or 0)
+            last_success = int(red.get(f"{task}_{source}.last_success") or 0)
             metric_tags["source_name"] = source
         else:
             last_success = int(red.get(f"{task}.last_success") or 0)
 
-        metrics.send(
-            f"{task}.time_since_last_success",
-            "gauge",
-            current_time - last_success,
-            metric_tags=metric_tags
-        )
+        if last_success != 0:
+            metrics.send(
+                f"{task}.time_since_last_success",
+                "gauge",
+                current_time - last_success,
+                metric_tags=metric_tags
+            )
 
     red.set(
         f"{function}.last_success", int(time.time())
@@ -197,7 +198,7 @@ def report_successful_task(**kwargs):
 
         if kwargs is not None and "source" in kwargs:
             source = kwargs["source"]
-            red.set(f"{source}.last_success", int(time.time()))
+            red.set(f"{tags['task_name']}_{source}.last_success", int(time.time()))
 
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
 
