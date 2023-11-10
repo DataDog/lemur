@@ -146,12 +146,12 @@ def report_celery_last_success_metrics():
     for _, t in schedule.items():
         task = t.get("task")
 
-        tags = {}
+        metric_tags = {}
         kwargs = t.get("kwargs")
         if kwargs is not None and "source" in kwargs:
             source = kwargs["source"]
             last_success = int(red.get(f"{source}.last_success") or 0)
-            tags["source_name"] = source
+            metric_tags["source_name"] = source
         else:
             last_success = int(red.get(f"{task}.last_success") or 0)
 
@@ -159,7 +159,7 @@ def report_celery_last_success_metrics():
             f"{task}.time_since_last_success",
             "gauge",
             current_time - last_success,
-            tags=tags
+            metric_tags=metric_tags
         )
 
     red.set(
