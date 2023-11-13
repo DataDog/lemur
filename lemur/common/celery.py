@@ -196,6 +196,8 @@ def report_successful_task(**kwargs):
         tags = get_celery_request_tags(**kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
 
+        print(kwargs)
+
         if kwargs is not None and "source" in kwargs:
             source = kwargs["source"]
             red.set(f"{tags['task_name']}_{source}.last_success", int(time.time()))
