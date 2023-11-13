@@ -145,9 +145,15 @@ def report_celery_last_success_metrics():
     schedule = current_app.config.get("CELERYBEAT_SCHEDULE")
     for _, t in schedule.items():
         task = t.get("task")
+        metric_tags = {}
+        # add tags tags for certificate_rotate task
+        if task == "lemur.common.celery.certificate_rotate":
+            kwargs = t.get('kwargs')
+            if kwargs:
+                metric_tags = {"source": kwargs.get('source')}
         last_success = int(red.get(f"{task}.last_success") or 0)
         metrics.send(
-            f"{task}.time_since_last_success", "gauge", current_time - last_success
+            f"{task}.time_since_last_success", "gauge", current_time - last_success, metric_tags=metric_tags
         )
     red.set(
         f"{function}.last_success", int(time.time())
