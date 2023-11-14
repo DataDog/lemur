@@ -195,11 +195,6 @@ def report_successful_task(**kwargs):
     with flask_app.app_context():
         tags = get_celery_request_tags(**kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
-
-        if kwargs is not None and "source" in kwargs:
-            source = kwargs["source"]
-            red.set(f"{tags['task_name']}_{source}.last_success", int(time.time()))
-
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
 
 
@@ -678,6 +673,10 @@ def certificate_rotate(**kwargs):
     log_data["message"] = "rotation completed"
     current_app.logger.debug(log_data)
     metrics.send(f"{function}.success", "counter", 1, metric_tags=metric_tags)
+
+    if source:
+        red.set(f"{function}_{source}.last_success", int(time.time()))
+
     return log_data
 
 
