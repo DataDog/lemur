@@ -674,6 +674,8 @@ def certificate_rotate(**kwargs):
     current_app.logger.debug(log_data)
     metrics.send(f"{function}.success", "counter", 1, metric_tags=metric_tags)
 
+    # When doing rotation by source we want to emit a `time_since_last_success` metric for the given source.
+    # as this source information is only available via the kwargs for this task we have to store the last_success time for the source here to access later
     if source:
         red.set(f"{function}_{source}.last_success", int(time.time()))
 
