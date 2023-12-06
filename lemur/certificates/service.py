@@ -483,7 +483,7 @@ def create(**kwargs):
             account = get_plugin_option("accountNumber", dest.options)
 
             # only AWS destinations have an account number, so we can skip this validation if an account number is not found
-            if account != None:
+            if account is not None:
                 if account in plugin_accounts:
                     raise Exception(f"Too many destinations for plugin {dest.plugin_name} and account {account}")
                 plugin_accounts[account] = True
