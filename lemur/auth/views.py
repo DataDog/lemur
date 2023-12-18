@@ -616,6 +616,66 @@ class Google(Resource):
         )
 
 
+class Vault(Resource):
+    def __init__(self):
+        self.reqparse = reqparse.RequestParser()
+        super(Vault, self).__init__()
+
+    def get(self):
+        return "Redirecting..."
+
+    def post(self):
+        self.reqparse.add_argument("clientId", type=str, required=True, location="json")
+        self.reqparse.add_argument(
+            "redirectUri", type=str, required=True, location="json"
+        )
+        self.reqparse.add_argument("code", type=str, required=True, location="json")
+
+        args = self.reqparse.parse_args()
+
+        # you can either discover these dynamically or simply configure them
+        access_token_url = current_app.config.get("VAULT_ACCESS_TOKEN_URL")
+
+        secret = current_app.config.get("VAULT_SECRET")
+
+        id_token, access_token = exchange_for_access_token(
+            args["code"],
+            args["redirectUri"],
+            args["clientId"],
+            secret,
+            access_token_url=access_token_url,
+        )
+
+        jwks_url = current_app.config.get("VAULT_JWKS_URL")
+        error_code = validate_id_token(id_token, args["clientId"], jwks_url)
+        if error_code:
+            return error_code
+
+        user, profile = retrieve_user_memberships(
+            current_app.config.get("VAULT_USER_API_URL"),
+            current_app.config.get("USER_MEMBERSHIP_PROVIDER"),
+            access_token
+        )
+        roles = create_user_roles(profile)
+        user = update_user(user, profile, roles)
+
+        if not user or not user.active:
+            metrics.send(
+                "login", "counter", 1, metric_tags={"status": FAILURE_METRIC_STATUS}
+            )
+            return dict(message="The supplied credentials are invalid"), 403
+
+        # Tell Flask-Principal the identity changed
+        identity_changed.send(
+            current_app._get_current_object(), identity=Identity(user.id)
+        )
+
+        metrics.send(
+            "login", "counter", 1, metric_tags={"status": SUCCESS_METRIC_STATUS}
+        )
+        return dict(token=create_token(user))
+
+
 class Providers(Resource):
     def get(self):
         active_providers = []
@@ -670,6 +730,23 @@ class Providers(Resource):
                     }
                 )
 
+            elif provider == "vault":
+                active_providers.append(
+                    {
+                        "name": current_app.config.get("VAULT_NAME"),
+                        "redirectUri": current_app.config.get("VAULT_REDIRECT_URI"),
+                        "clientId": current_app.config.get("VAULT_CLIENT_ID"),
+                        "responseType": "code",
+                        "scope": ["openid", "email", "profile", "address"],
+                        "scopeDelimiter": " ",
+                        "authorizationEndpoint": current_app.config.get(
+                            "VAULT_AUTH_ENDPOINT"
+                        ),
+                        "requiredUrlParams": ["scope"],
+                        "type": "2.0",
+                    }
+                )
+
         return active_providers
 
 
@@ -677,4 +754,5 @@ api.add_resource(Login, "/auth/login", endpoint="login")
 api.add_resource(Ping, "/auth/ping", endpoint="ping")
 api.add_resource(Google, "/auth/google", endpoint="google")
 api.add_resource(OAuth2, "/auth/oauth2", endpoint="oauth2")
+api.add_resource(Vault, "/auth/vault", endpoint="vault")
 api.add_resource(Providers, "/auth/providers", endpoint="providers")
