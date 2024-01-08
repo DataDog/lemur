@@ -634,17 +634,18 @@ class Vault(Resource):
         return "Redirecting..."
 
     def post(self):
+        print("In the Vault.post")
         if not request.headers.get("Authorization"):
-            response = jsonify(message="Missing authorization header")
-            response.status_code = 401
-            return response
+            return dict(message="Token is not found"), 403
 
         try:
+            print("Splitting the token header" + str(request))
             token = request.headers.get("Authorization").split()[1]
         except Exception as e:
             return dict(message="Token is invalid"), 403
 
         try:
+            print("Token: " + str(token))
             data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
             print("DD Authenticated Token Data: " + str(data))
 
