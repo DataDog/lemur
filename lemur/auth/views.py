@@ -623,11 +623,10 @@ class Vault(Resource):
         self.reqparse = reqparse.RequestParser()
 
         JWTAuthenticator.instance(
-                name="lemur_vault_authenticator",
-                audience="trustedAudience",
-                timeout=1,
-                cache_to_file=True,
-            )
+            name="lemur_vault_authenticator",
+            audience="trustedAudience",
+            timeout=1,
+            cache_to_file=True,)
 
         super(Vault, self).__init__()
 
