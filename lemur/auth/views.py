@@ -16,8 +16,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 
 from dd_internal_authentication.jwt_authenticator import JWTAuthenticator
-from dd_internal_authentication.exceptions import InternalAuthException
-from dd_internal_authentication.pyjwkset import PyJWTError
 
 from flask import Blueprint, current_app, jsonify, request
 
@@ -652,14 +650,9 @@ class Vault(Resource):
             print("DD Authenticated Token Data: " + str(data))
 
             return dict(message="The supplied credentials are invalid."), 403
-        except ReadTimeout:
-            raise GatewayTimeout()
-        except InternalAuthException as e:
-            log.warning('invalid internal key authentication request: invalid token, message="{}"'.format(str(e)))
-            return None
-        except PyJWTError as e:
-            log.warning('invalid internal key authentication request: invalid token, message="{}"'.format(str(e)))
-            return None
+        except Exception as e:
+            print("Exception hit in Vault.Post: " + str(e))
+            return dict(message="The following exception was hit." + str(e)), 403
 
 
 class Providers(Resource):
