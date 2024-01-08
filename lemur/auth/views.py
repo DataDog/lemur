@@ -715,7 +715,8 @@ class Providers(Resource):
                         "name": current_app.config.get("VAULT_NAME"),
                         "redirectUri": current_app.config.get("VAULT_REDIRECT_URI"),
                         "clientId": current_app.config.get("VAULT_CLIENT_ID"),
-                        "responseType": "token",
+                        "tokenName": "id_token",
+                        "responseType": "id_token",
                         "scope": ["openid"],
                         "scopeDelimiter": " ",
                         "authorizationEndpoint": current_app.config.get(
