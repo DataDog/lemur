@@ -643,14 +643,15 @@ class Vault(Resource):
 
             args = self.reqparse.parse_args()
             if not verify_state_token(args["state"]):
+                log.info("Vault.Get state was invalid")
                 return dict(message="The supplied credentials are invalid"), 403
 
             id_token = args["id_token"]
-            print("Vault.Get got a token")
+            log.info("Vault.Get got a token")
             data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
-            print(data)
+            log.info(data)
         except Exception as ex:
-            print("Vault.Get ex: " + str(ex))
+            log.info("Vault.Get ex: " + str(ex))
 
         return "Redirecting..."
 
@@ -667,11 +668,11 @@ class Vault(Resource):
                 return dict(message="The supplied credentials are invalid"), 403
 
             id_token = args["id_token"]
-            print("Vault.post got a token")
+            log.info("Vault.post got a token")
             data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
-            print(data)
+            log.info(data)
         except Exception as ex:
-            print("Vault.post ex: " + str(ex))
+            log.info("Vault.post ex: " + str(ex))
 
         return dict(message="The supplied credentials are invalid"), 403
 

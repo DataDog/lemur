@@ -95,23 +95,19 @@ def login_required(f):
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        log.info("authorizing token from request headers: " + str(request.headers))
         if not request.headers.get("Authorization"):
             response = jsonify(message="Missing authorization header")
             response.status_code = 401
             return response
 
-        log.info("we have a token")
         try:
             token = request.headers.get("Authorization").split()[1]
         except Exception as e:
             return dict(message="Token is invalid"), 403
 
         try:
-            log.info("we have a token!")
             header_data = fetch_token_header(token)
             payload = jwt.decode(token, current_app.config["LEMUR_TOKEN_SECRET"], algorithms=[header_data["alg"]])
-            log.info("we decoded a token!")
         except jwt.DecodeError:
             try:
                 log.info("DecodeError, will try treating token as a dd id_token")
