@@ -638,9 +638,8 @@ class Vault(Resource):
         log.info("Vault.Get request: " + str(request))
 
         try:
-            self.reqparse.add_argument("id_token", type=str, required=True, location="json")
-            self.reqparse.add_argument("state", type=str, required=True, location="json")
-
+            self.reqparse.add_argument("id_token", type=str, required=True)
+            self.reqparse.add_argument("state", type=str, required=True)
             args = self.reqparse.parse_args()
             if not verify_state_token(args["state"]):
                 log.info("Vault.Get state was invalid")
@@ -653,6 +652,15 @@ class Vault(Resource):
         except Exception as ex:
             log.info("Vault.Get ex: " + str(ex))
 
+        user = user_service.get_by_email("trevor.morton@datadoghq.com")
+
+        if not (user and user.active):
+            return dict(message="The supplied credentials are invalid."), 403
+
+        if user:
+            log.info("Vault.Get is going to return a user")
+            return dict(token=create_token(user))
+        
         return "Redirecting..."
 
     def post(self):
@@ -735,6 +743,7 @@ class Providers(Resource):
                 active_providers.append(
                     {
                         "name": current_app.config.get("VAULT_NAME"),
+                        "url": current_app.config.get("VAULT_CONFIG_URL"),
                         "redirectUri": current_app.config.get("VAULT_REDIRECT_URI"),
                         "clientId": current_app.config.get("VAULT_CLIENT_ID"),
                         "responseType": "id_token",
