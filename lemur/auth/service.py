@@ -117,8 +117,7 @@ def login_required(f):
             try:
                 data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
                 log.info("DD Authenticated Token Data: " + str(data))
-                return dict(message="Token is invalid"), 403
-            except:
+            except Exception:
                 return dict(message="Token is invalid"), 403
 
             return dict(message="Token is invalid"), 403
