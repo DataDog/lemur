@@ -49,7 +49,7 @@
         templateUrl: 'angular/welcome/welcome.html'
       });
 
-    $authProvider.tokenName = 'id_token';  
+    // $authProvider.tokenName = 'id_token';  
 
     _.each(providers, function(provider) {
       if ($authProvider.hasOwnProperty(provider.name)) {

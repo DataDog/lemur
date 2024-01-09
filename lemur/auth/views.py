@@ -721,8 +721,9 @@ class Providers(Resource):
                         "authorizationEndpoint": current_app.config.get(
                             "VAULT_AUTH_ENDPOINT"
                         ),
-                        "requiredUrlParams": ["scope"],
-                        "type": "2.0",
+                        "requiredUrlParams": ["scope", "nonce"],
+                        "nonce": get_psuedo_random_string(),
+                        "popupOptions": { "width": 1028, "height": 529 }
                     }
                 )
 
