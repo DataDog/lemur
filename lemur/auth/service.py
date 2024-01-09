@@ -33,6 +33,7 @@ from lemur.auth.permissions import AuthorityCreatorNeed, RoleMemberNeed
 
 log = logging.getLogger("lemur.auth." + __name__)
 
+
 def get_rsa_public_key(n, e):
     """
     Retrieve an RSA public key based on a module and exponent as provided by the JWKS format.
