@@ -660,7 +660,7 @@ class Vault(Resource):
         if user:
             log.info("Vault.Get is going to return a user")
             return dict(token=create_token(user))
-        
+
         return "Redirecting..."
 
     def post(self):
