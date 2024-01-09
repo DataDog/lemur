@@ -95,7 +95,7 @@ def login_required(f):
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        log.info("authorizing token")
+        log.info("authorizing token from request headers: " + str(request.headers))
         if not request.headers.get("Authorization"):
             response = jsonify(message="Missing authorization header")
             response.status_code = 401
