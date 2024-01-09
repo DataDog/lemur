@@ -634,7 +634,7 @@ class Vault(Resource):
 
     def get(self):
         log.info("In the Vault.get")
-        log.info("Vault.Get requestArgs: " + str(request.args))
+        log.info("Vault.Get request: " + str(request))
         if request.headers.get("Authorization"):
             try:
                 log.info("Splitting the token header")

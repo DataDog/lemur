@@ -113,11 +113,12 @@ def login_required(f):
             payload = jwt.decode(token, current_app.config["LEMUR_TOKEN_SECRET"], algorithms=[header_data["alg"]])
             log.info("we decoded a token!")
         except jwt.DecodeError:
-            log.info("DecodeError")
             try:
+                log.info("DecodeError, will try treating token as a dd id_token")
                 data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
                 log.info("DD Authenticated Token Data: " + str(data))
-            except Exception:
+            except Exception as ex:
+                log.info("Exception authenticating token as dd token: " + str(ex))
                 return dict(message="Token is invalid"), 403
 
             return dict(message="Token is invalid"), 403
