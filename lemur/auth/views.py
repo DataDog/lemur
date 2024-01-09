@@ -723,7 +723,7 @@ class Providers(Resource):
                         ),
                         "requiredUrlParams": ["scope", "nonce"],
                         "nonce": get_psuedo_random_string(),
-                        "popupOptions": { "width": 1028, "height": 529 }
+                        "popupOptions": {"width": 1028, "height": 529}
                     }
                 )
 
