@@ -634,6 +634,7 @@ class Vault(Resource):
 
     def get(self):
         log.info("In the Vault.get")
+        log.info("Vault.Get requestArgs: " + str(request.args))
         if request.headers.get("Authorization"):
             try:
                 log.info("Splitting the token header")
@@ -643,28 +644,19 @@ class Vault(Resource):
             except Exception as e:
                 log.info("Vault.get ex: " + str(e))
 
+        if request.args.get("id_token"):
+            try:
+                log.info("Splitting the token header")
+                token = request.args.get("id_token")
+                data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
+                log.info("DD Authenticated Token Data from get: " + str(data))
+            except Exception as e:
+                log.info("Vault.get id_token ex: " + str(e))
+
         return "Redirecting..."
 
     def post(self):
-        log.info("In the Vault.post")
-        if not request.headers.get("Authorization"):
-            return dict(message="Token is not found"), 403
-
-        try:
-            log.info("Splitting the token header" + str(request))
-            token = request.headers.get("Authorization").split()[1]
-        except Exception as e:
-            return dict(message="Token is invalid"), 403
-
-        try:
-            log.info("Token: " + str(token))
-            data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
-            log.info("DD Authenticated Token Data: " + str(data))
-
-            return dict(message="The supplied credentials are invalid."), 403
-        except Exception as e:
-            log.info("Exception hit in Vault.Post: " + str(e))
-            return dict(message="The following exception was hit." + str(e)), 403
+        return "Not Implemented for Implicit OIDC"
 
 
 class Providers(Resource):

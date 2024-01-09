@@ -16,6 +16,8 @@ import logging
 from functools import wraps
 from datetime import datetime, timedelta
 
+from dd_internal_authentication.jwt_authenticator import JWTAuthenticator
+
 from flask import g, current_app, jsonify, request
 
 from flask_restful import Resource
@@ -112,6 +114,13 @@ def login_required(f):
             log.info("we decoded a token!")
         except jwt.DecodeError:
             log.info("DecodeError")
+            try:
+                data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
+                log.info("DD Authenticated Token Data: " + str(data))
+                return dict(message="Token is invalid"), 403
+            except:
+                return dict(message="Token is invalid"), 403
+
             return dict(message="Token is invalid"), 403
         except jwt.ExpiredSignatureError:
             log.info("ExpiredSignatureError")
