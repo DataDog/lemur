@@ -631,6 +631,16 @@ class Vault(Resource):
         super(Vault, self).__init__()
 
     def get(self):
+        print("In the Vault.get")
+        if request.headers.get("Authorization"):
+            try:
+                print("Splitting the token header")
+                token = request.headers.get("Authorization").split()[1]
+                data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
+                print("DD Authenticated Token Data: " + str(data))
+            except Exception as e:
+                print("Vault.get ex: " + str(e))
+
         return "Redirecting..."
 
     def post(self):

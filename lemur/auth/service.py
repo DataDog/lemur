@@ -15,6 +15,8 @@ import binascii
 from functools import wraps
 from datetime import datetime, timedelta
 
+from dd_internal_authentication.jwt_authenticator import JWTAuthenticator
+
 from flask import g, current_app, jsonify, request
 
 from flask_restful import Resource
@@ -90,24 +92,31 @@ def login_required(f):
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        print("authorizing token")
         if not request.headers.get("Authorization"):
             response = jsonify(message="Missing authorization header")
             response.status_code = 401
             return response
 
+        print("we have a token")
         try:
             token = request.headers.get("Authorization").split()[1]
         except Exception as e:
             return dict(message="Token is invalid"), 403
 
         try:
+            print("we have a token!")
             header_data = fetch_token_header(token)
             payload = jwt.decode(token, current_app.config["LEMUR_TOKEN_SECRET"], algorithms=[header_data["alg"]])
+            print("we decoded a token!")
         except jwt.DecodeError:
+            print("DecodeError")
             return dict(message="Token is invalid"), 403
         except jwt.ExpiredSignatureError:
+            print("ExpiredSignatureError")
             return dict(message="Token has expired"), 403
         except jwt.InvalidTokenError:
+            print("InvalidTokenError")
             return dict(message="Token is invalid"), 403
 
         if "aid" in payload:
