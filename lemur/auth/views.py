@@ -10,6 +10,7 @@ import jwt
 import base64
 import requests
 import time
+import logging
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -35,6 +36,7 @@ from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
 api = Api(mod)
+log = logging.getLogger("lemur.auth." + __name__)
 
 
 def exchange_for_access_token(
@@ -631,37 +633,37 @@ class Vault(Resource):
         super(Vault, self).__init__()
 
     def get(self):
-        print("In the Vault.get")
+        log.info("In the Vault.get")
         if request.headers.get("Authorization"):
             try:
-                print("Splitting the token header")
+                log.info("Splitting the token header")
                 token = request.headers.get("Authorization").split()[1]
                 data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
-                print("DD Authenticated Token Data: " + str(data))
+                log.info("DD Authenticated Token Data: " + str(data))
             except Exception as e:
-                print("Vault.get ex: " + str(e))
+                log.info("Vault.get ex: " + str(e))
 
         return "Redirecting..."
 
     def post(self):
-        print("In the Vault.post")
+        log.info("In the Vault.post")
         if not request.headers.get("Authorization"):
             return dict(message="Token is not found"), 403
 
         try:
-            print("Splitting the token header" + str(request))
+            log.info("Splitting the token header" + str(request))
             token = request.headers.get("Authorization").split()[1]
         except Exception as e:
             return dict(message="Token is invalid"), 403
 
         try:
-            print("Token: " + str(token))
+            log.info("Token: " + str(token))
             data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
-            print("DD Authenticated Token Data: " + str(data))
+            log.info("DD Authenticated Token Data: " + str(data))
 
             return dict(message="The supplied credentials are invalid."), 403
         except Exception as e:
-            print("Exception hit in Vault.Post: " + str(e))
+            log.info("Exception hit in Vault.Post: " + str(e))
             return dict(message="The following exception was hit." + str(e)), 403
 
 

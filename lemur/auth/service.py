@@ -11,6 +11,7 @@
 import jwt
 import json
 import binascii
+import logging
 
 from functools import wraps
 from datetime import datetime, timedelta
@@ -30,6 +31,7 @@ from lemur.users import service as user_service
 from lemur.api_keys import service as api_key_service
 from lemur.auth.permissions import AuthorityCreatorNeed, RoleMemberNeed
 
+log = logging.getLogger("lemur.auth." + __name__)
 
 def get_rsa_public_key(n, e):
     """
@@ -90,31 +92,31 @@ def login_required(f):
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        print("authorizing token")
+        log.info("authorizing token")
         if not request.headers.get("Authorization"):
             response = jsonify(message="Missing authorization header")
             response.status_code = 401
             return response
 
-        print("we have a token")
+        log.info("we have a token")
         try:
             token = request.headers.get("Authorization").split()[1]
         except Exception as e:
             return dict(message="Token is invalid"), 403
 
         try:
-            print("we have a token!")
+            log.info("we have a token!")
             header_data = fetch_token_header(token)
             payload = jwt.decode(token, current_app.config["LEMUR_TOKEN_SECRET"], algorithms=[header_data["alg"]])
-            print("we decoded a token!")
+            log.info("we decoded a token!")
         except jwt.DecodeError:
-            print("DecodeError")
+            log.info("DecodeError")
             return dict(message="Token is invalid"), 403
         except jwt.ExpiredSignatureError:
-            print("ExpiredSignatureError")
+            log.info("ExpiredSignatureError")
             return dict(message="Token has expired"), 403
         except jwt.InvalidTokenError:
-            print("InvalidTokenError")
+            log.info("InvalidTokenError")
             return dict(message="Token is invalid"), 403
 
         if "aid" in payload:
