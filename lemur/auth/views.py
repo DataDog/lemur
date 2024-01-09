@@ -636,28 +636,44 @@ class Vault(Resource):
     def get(self):
         log.info("In the Vault.get")
         log.info("Vault.Get request: " + str(request))
-        if request.headers.get("Authorization"):
-            try:
-                log.info("Splitting the token header")
-                token = request.headers.get("Authorization").split()[1]
-                data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
-                log.info("DD Authenticated Token Data: " + str(data))
-            except Exception as e:
-                log.info("Vault.get ex: " + str(e))
 
-        if request.args.get("id_token"):
-            try:
-                log.info("Splitting the token header")
-                token = request.args.get("id_token")
-                data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
-                log.info("DD Authenticated Token Data from get: " + str(data))
-            except Exception as e:
-                log.info("Vault.get id_token ex: " + str(e))
+        try:
+            self.reqparse.add_argument("id_token", type=str, required=True, location="json")
+            self.reqparse.add_argument("state", type=str, required=True, location="json")
+
+            args = self.reqparse.parse_args()
+            if not verify_state_token(args["state"]):
+                return dict(message="The supplied credentials are invalid"), 403
+
+            id_token = args["id_token"]
+            print("Vault.Get got a token")
+            data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
+            print(data)
+        except Exception as ex:
+            print("Vault.Get ex: " + str(ex))
 
         return "Redirecting..."
 
     def post(self):
-        return "Not Implemented for Implicit OIDC"
+        log.info("In the Vault.post")
+        log.info("Vault.post request: " + str(request))
+
+        try:
+            self.reqparse.add_argument("id_token", type=str, required=True, location="json")
+            self.reqparse.add_argument("state", type=str, required=True, location="json")
+
+            args = self.reqparse.parse_args()
+            if not verify_state_token(args["state"]):
+                return dict(message="The supplied credentials are invalid"), 403
+
+            id_token = args["id_token"]
+            print("Vault.post got a token")
+            data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
+            print(data)
+        except Exception as ex:
+            print("Vault.post ex: " + str(ex))
+
+        return dict(message="The supplied credentials are invalid"), 403
 
 
 class Providers(Resource):
@@ -726,9 +742,9 @@ class Providers(Resource):
                         "authorizationEndpoint": current_app.config.get(
                             "VAULT_AUTH_ENDPOINT"
                         ),
-                        "requiredUrlParams": ["scope", "nonce"],
+                        "requiredUrlParams": ["scope", "state", "nonce"],
+                        "state": generate_state_token(),
                         "nonce": get_psuedo_random_string(),
-                        "popupOptions": {"width": 1028, "height": 529}
                     }
                 )
 
