@@ -634,33 +634,6 @@ class Vault(Resource):
         super(Vault, self).__init__()
 
     def get(self):
-        log.info("In the Vault.get")
-        log.info("Vault.Get request: " + str(request))
-
-        try:
-            self.reqparse.add_argument("id_token", type=str, required=True)
-            self.reqparse.add_argument("state", type=str, required=True)
-            args = self.reqparse.parse_args()
-            if not verify_state_token(args["state"]):
-                log.info("Vault.Get state was invalid")
-                return dict(message="The supplied credentials are invalid"), 403
-
-            id_token = args["id_token"]
-            log.info("Vault.Get got a token")
-            data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
-            log.info(data)
-        except Exception as ex:
-            log.info("Vault.Get ex: " + str(ex))
-
-        user = user_service.get_by_email("trevor.morton@datadoghq.com")
-
-        if not (user and user.active):
-            return dict(message="The supplied credentials are invalid."), 403
-
-        if user:
-            log.info("Vault.Get is going to return a user")
-            return dict(token=create_token(user))
-
         return "Redirecting..."
 
     def post(self):
@@ -753,6 +726,15 @@ class Providers(Resource):
                             "VAULT_AUTH_ENDPOINT"
                         ),
                         "requiredUrlParams": ["scope", "state", "nonce"],
+                        "optionalUrlParams": [
+                            "display"
+                        ],
+                        "display": "popup",
+                        "oauthType": "2.0",
+                        "popupOptions": {
+                            "width": 452,
+                            "height": 633
+                        },
                         "state": generate_state_token(),
                         "nonce": get_psuedo_random_string(),
                     }
