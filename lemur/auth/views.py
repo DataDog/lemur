@@ -10,7 +10,6 @@ import jwt
 import base64
 import requests
 import time
-import logging
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -36,7 +35,6 @@ from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
 api = Api(mod)
-log = logging.getLogger("lemur.auth." + __name__)
 
 
 def exchange_for_access_token(
@@ -642,8 +640,14 @@ class Vault(Resource):
         id_token = args["id_token"]
         profile = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
 
-        # todo: do we need to check the groups here or will unauthorized users be unable to get a token from this audience
-        if profile["aud"] != current_app.config.get("VAULT_CLIENT_ID"):
+        token_for_valid_audience = profile["aud"] == current_app.config.get("VAULT_CLIENT_ID")
+        user_in_authorized_group = False
+        for group in current_app.config.get("VAULT_AUTHORIZED_GROUPS"):
+            if group in profile['groups']:
+                user_in_authorized_group = True
+                break
+
+        if not token_for_valid_audience or not user_in_authorized_group:
             return dict(message="The supplied credentials are invalid"), 403
 
         user = user_service.get_by_email(profile["email"])
@@ -727,7 +731,7 @@ class Providers(Resource):
                 active_providers.append(
                     {
                         "name": current_app.config.get("VAULT_NAME"),
-                        "url": current_app.config.get("VAULT_CONFIG_URL"),
+                        "url": current_app.config.get("VAULT_REDIRECT_URI"),
                         "redirectUri": current_app.config.get("VAULT_REDIRECT_URI"),
                         "clientId": current_app.config.get("VAULT_CLIENT_ID"),
                         "responseType": "id_token",
@@ -743,15 +747,7 @@ class Providers(Resource):
                             "VAULT_AUTH_ENDPOINT"
                         ),
                         "requiredUrlParams": ["scope", "nonce"],
-                        "optionalUrlParams": [
-                            "display"
-                        ],
-                        "display": "popup",
                         "oauthType": "2.0",
-                        "popupOptions": {
-                            "width": 452,
-                            "height": 633
-                        },
                         "nonce": get_psuedo_random_string(),
                     }
                 )

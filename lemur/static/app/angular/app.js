@@ -49,8 +49,6 @@
         templateUrl: 'angular/welcome/welcome.html'
       });
 
-    // $authProvider.tokenName = 'id_token';  
-
     _.each(providers, function(provider) {
       if ($authProvider.hasOwnProperty(provider.name)) {
         $authProvider[provider.name](provider);
