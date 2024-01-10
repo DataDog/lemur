@@ -637,19 +637,36 @@ class Vault(Resource):
         return "Redirecting..."
 
     def post(self):
-        log.info("In the Vault.post")
+        self.reqparse.add_argument("id_token", type=str, required=True, location="json")
+        args = self.reqparse.parse_args()
+        id_token = args["id_token"]
+        profile = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
 
-        try:
-            self.reqparse.add_argument("id_token", type=str, required=True, location="json")
-            args = self.reqparse.parse_args()
-            id_token = args["id_token"]
-            log.info("Vault.post got a token")
-            data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
-            log.info(data)
-        except Exception as ex:
-            log.info("Vault.post ex: " + str(ex))
+        # todo: do we need to check the groups here or will unauthorized users be unable to get a token from this audience
+        if profile["aud"] != current_app.config.get("VAULT_CLIENT_ID"):
+            return dict(message="The supplied credentials are invalid"), 403
 
-        return dict(message="The supplied credentials are invalid"), 403
+        user = user_service.get_by_email(profile["email"])
+
+        roles = create_user_roles(profile)
+        user = update_user(user, profile, roles)
+
+        if not user.active:
+            metrics.send(
+                "login", "counter", 1, metric_tags={"status": FAILURE_METRIC_STATUS}
+            )
+            return dict(message="The supplied credentials are invalid"), 403
+
+        # Tell Flask-Principal the identity changed
+        identity_changed.send(
+            current_app._get_current_object(), identity=Identity(user.id)
+        )
+
+        metrics.send(
+            "login", "counter", 1, metric_tags={"status": SUCCESS_METRIC_STATUS}
+        )
+
+        return dict(token=create_token(user))
 
 
 class Providers(Resource):
