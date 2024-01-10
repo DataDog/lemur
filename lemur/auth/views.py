@@ -638,16 +638,10 @@ class Vault(Resource):
 
     def post(self):
         log.info("In the Vault.post")
-        log.info("Vault.post request: " + str(request))
 
         try:
             self.reqparse.add_argument("id_token", type=str, required=True, location="json")
-            self.reqparse.add_argument("state", type=str, required=True, location="json")
-
             args = self.reqparse.parse_args()
-            if not verify_state_token(args["state"]):
-                return dict(message="The supplied credentials are invalid"), 403
-
             id_token = args["id_token"]
             log.info("Vault.post got a token")
             data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
