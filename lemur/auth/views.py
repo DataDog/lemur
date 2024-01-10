@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import hashes, hmac
 
 from dd_internal_authentication.jwt_authenticator import JWTAuthenticator
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app
 
 from flask_restful import reqparse, Resource, Api
 from flask_principal import Identity, identity_changed
