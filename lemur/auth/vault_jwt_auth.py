@@ -140,15 +140,13 @@ class JWTAuthenticator(object):
         cls,
         name,
         audience,
-        additional_issuers=None,
-        datacenter=None,
+        issuers,
         timeout=None,
     ):
         if name not in cls._instances:
             cls._instances[name] = JWTAuthenticator(
                 audience=audience,
-                additional_issuers=additional_issuers,
-                datacenter=datacenter,
+                issuers=issuers,
                 timeout=timeout,
             )
         return cls._instances[name]

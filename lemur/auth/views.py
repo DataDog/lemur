@@ -628,9 +628,8 @@ class Vault(Resource):
         JWTAuthenticator.instance(
             name="lemur_vault_authenticator",
             audience=current_app.config.get("VAULT_CLIENT_ID"),
-            additional_issuers=[current_app.config.get("VAULT_ISSUER_URL"),],
-            timeout=1,
-            cache_to_file=True,)
+            issuers=[current_app.config.get("VAULT_ISSUER_URL"),],
+            timeout=1,)
 
         super(Vault, self).__init__()
 
