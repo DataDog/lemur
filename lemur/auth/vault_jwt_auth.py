@@ -87,10 +87,10 @@ class PyJWKSet:
         self.keys_by_id = {}
 
         if not keys or not isinstance(keys, list):
-            raise PyJWKSetError("Invalid JWK Set value")
+            raise Exception("Invalid JWK Set value")
 
         if len(keys) == 0:
-            raise PyJWKSetError("The JWK Set did not contain any keys")
+            raise Exception("The JWK Set did not contain any keys")
 
         for key in keys:
             k = PyJWK(key)
