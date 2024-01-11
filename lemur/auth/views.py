@@ -8,6 +8,7 @@
 
 import jwt
 import base64
+import logging
 import requests
 import time
 
@@ -15,7 +16,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 
-from dd_internal_authentication.jwt_authenticator import JWTAuthenticator
+from lemur.auth.vault_jwt_auth import JWTAuthenticator
 
 from flask import Blueprint, current_app
 
@@ -35,6 +36,8 @@ from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
 api = Api(mod)
+
+log = logging.getLogger("lemur.auth." + __name__)
 
 
 def exchange_for_access_token(
@@ -638,16 +641,18 @@ class Vault(Resource):
         self.reqparse.add_argument("id_token", type=str, required=True, location="json")
         args = self.reqparse.parse_args()
         id_token = args["id_token"]
-        profile = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
+        try:
+            profile = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
+        except Exception as ex:
+            log.info("vault.post recieved ex: " + str(ex))
 
-        token_for_valid_audience = profile["aud"] == current_app.config.get("VAULT_CLIENT_ID")
         user_in_authorized_group = False
         for group in current_app.config.get("VAULT_AUTHORIZED_GROUPS"):
             if group in profile['groups']:
                 user_in_authorized_group = True
                 break
 
-        if not token_for_valid_audience or not user_in_authorized_group:
+        if user_in_authorized_group:
             return dict(message="The supplied credentials are invalid"), 403
 
         user = user_service.get_by_email(profile["email"])
