@@ -643,13 +643,14 @@ class Vault(Resource):
         except Exception as ex:
             log.info("vault.post recieved ex: " + str(ex))
 
+        log.info("vault.post profile: " + str(profile))
         user_in_authorized_group = False
         for group in current_app.config.get("VAULT_AUTHORIZED_GROUPS"):
             if group in profile['groups']:
                 user_in_authorized_group = True
                 break
 
-        if user_in_authorized_group:
+        if not user_in_authorized_group:
             return dict(message="The supplied credentials are invalid"), 403
 
         user = user_service.get_by_email(profile["email"])

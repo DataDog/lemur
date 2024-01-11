@@ -11,12 +11,10 @@
 import jwt
 import json
 import binascii
-import logging
 
 from functools import wraps
 from datetime import datetime, timedelta
 
-from dd_internal_authentication.jwt_authenticator import JWTAuthenticator
 
 from flask import g, current_app, jsonify, request
 
@@ -32,8 +30,6 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from lemur.users import service as user_service
 from lemur.api_keys import service as api_key_service
 from lemur.auth.permissions import AuthorityCreatorNeed, RoleMemberNeed
-
-log = logging.getLogger("lemur.auth." + __name__)
 
 
 def get_rsa_public_key(n, e):
@@ -109,20 +105,10 @@ def login_required(f):
             header_data = fetch_token_header(token)
             payload = jwt.decode(token, current_app.config["LEMUR_TOKEN_SECRET"], algorithms=[header_data["alg"]])
         except jwt.DecodeError:
-            try:
-                log.info("DecodeError, will try treating token as a dd id_token")
-                data = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(token)
-                log.info("DD Authenticated Token Data: " + str(data))
-            except Exception as ex:
-                log.info("Exception authenticating token as dd token: " + str(ex))
-                return dict(message="Token is invalid"), 403
-
             return dict(message="Token is invalid"), 403
         except jwt.ExpiredSignatureError:
-            log.info("ExpiredSignatureError")
             return dict(message="Token has expired"), 403
         except jwt.InvalidTokenError:
-            log.info("InvalidTokenError")
             return dict(message="Token is invalid"), 403
 
         if "aid" in payload:
