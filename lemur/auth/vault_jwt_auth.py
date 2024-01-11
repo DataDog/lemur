@@ -16,11 +16,14 @@ _DEFAULT_RETRY_POLICY = Retry(
     total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504]
 )
 
+
 def format_url_for_issuer_internal_keys(issuer):
     return "{}/.well-known/keys".format(issuer.rstrip("/"))
 
+
 def format_url_for_issuer_token(issuer, name):
     return "{}/token/{}".format(issuer.rstrip("/"), name)
+
 
 def parse_cache_control_header(headers):
     header = (headers or {}).get("Cache-Control", "")
