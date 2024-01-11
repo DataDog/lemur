@@ -15,7 +15,6 @@ import binascii
 from functools import wraps
 from datetime import datetime, timedelta
 
-
 from flask import g, current_app, jsonify, request
 
 from flask_restful import Resource
