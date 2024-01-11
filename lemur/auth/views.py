@@ -624,13 +624,6 @@ class Google(Resource):
 class Vault(Resource):
     def __init__(self):
         self.reqparse = reqparse.RequestParser()
-
-        JWTAuthenticator.instance(
-            name="lemur_vault_authenticator",
-            audience=current_app.config.get("VAULT_CLIENT_ID"),
-            issuers=[current_app.config.get("VAULT_ISSUER_URL"),],
-            timeout=1,)
-
         super(Vault, self).__init__()
 
     def get(self):
@@ -641,7 +634,12 @@ class Vault(Resource):
         args = self.reqparse.parse_args()
         id_token = args["id_token"]
         try:
-            profile = JWTAuthenticator.instance("lemur_vault_authenticator").authenticate(id_token)
+            authenticator = JWTAuthenticator.instance(
+                name="lemur_vault_authenticator",
+                audience=current_app.config.get("VAULT_CLIENT_ID"),
+                issuers=[current_app.config.get("VAULT_ISSUER_URL"),],
+                timeout=1,)
+            profile = authenticator.authenticate(id_token)
         except Exception as ex:
             log.info("vault.post recieved ex: " + str(ex))
 
