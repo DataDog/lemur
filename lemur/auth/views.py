@@ -8,7 +8,6 @@
 
 import jwt
 import base64
-import logging
 import requests
 import time
 
@@ -36,8 +35,6 @@ from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
 api = Api(mod)
-
-log = logging.getLogger("lemur.auth." + __name__)
 
 
 def exchange_for_access_token(
@@ -633,27 +630,24 @@ class Vault(Resource):
         self.reqparse.add_argument("id_token", type=str, required=True, location="json")
         args = self.reqparse.parse_args()
         id_token = args["id_token"]
-        try:
-            authenticator = JWTAuthenticator.instance(
-                name="lemur_vault_authenticator",
-                audience=current_app.config.get("VAULT_CLIENT_ID"),
-                issuers=[current_app.config.get("VAULT_ISSUER_URL"),],
-                timeout=1,)
-            profile = authenticator.authenticate(id_token)
-        except Exception as ex:
-            log.info("vault.post recieved ex: " + str(ex))
+        authenticator = JWTAuthenticator.instance(
+            name="lemur_vault_authenticator",
+            audience=current_app.config.get("VAULT_CLIENT_ID"),
+            issuers=[current_app.config.get("VAULT_ISSUER_URL"),],
+            timeout=1,)
+        profile = authenticator.authenticate(id_token)
 
-        log.info("vault.post profile: " + str(profile))
+        user_has_authorized_email = profile['email'] in current_app.config.get("VAULT_AUTHORIZED_EMAILS")
         user_in_authorized_group = False
         for group in current_app.config.get("VAULT_AUTHORIZED_GROUPS"):
             if group in profile['groups']:
                 user_in_authorized_group = True
                 break
 
-        if not user_in_authorized_group:
+        if not user_has_authorized_email and not user_in_authorized_group:
             return dict(message="The supplied credentials are invalid"), 403
 
-        user = user_service.get_by_email(profile["email"])
+        user = user_service.get_by_email(profile['email'])
 
         roles = create_user_roles(profile)
         user = update_user(user, profile, roles)

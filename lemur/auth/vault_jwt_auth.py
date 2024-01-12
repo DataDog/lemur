@@ -168,7 +168,7 @@ class JWTAuthenticator(object):
 
     def _make_issuer_request(self, issuer):
         headers = {
-            "X-Vault-Request": "true",  # be compatible with emissary
+            "X-Vault-Request": "true",  # be compatible with Vault
         }
         response = self._session.get(
             format_url_for_issuer_internal_keys(issuer), headers=headers
