@@ -46,7 +46,7 @@ SQLAlchemy-Utils
 tabulate
 urllib3 == 1.26.18 # urllib3 is used by 'requests' package. Version restriction is required to avoid vulnerability in previous version (VULN-4806)
 vine
-werkzeug >= 3.0.1 # required to address vulnerability in older version (VULN-4844)
+werkzeug < 2.1.0 # requires a newer version of Flask
 xmltodict
 # Test requirements are needed to allow test docs to build
 -r requirements-tests.txt
