@@ -11,7 +11,7 @@ celery[redis]
 certbot
 certsrv
 CloudFlare
-cryptography >= 41.0.4 # Required to avoid vulnerability in previous version (VULN-4474)
+cryptography >= 41.0.6 # Required to avoid vulnerability in previous version (VULN-5135)
 dnspython3
 dyn
 Flask <= 1.1.2 # similar to Flask-Migrate
@@ -33,8 +33,9 @@ logmatic-python
 marshmallow-sqlalchemy == 0.23.1 #related to the marshmallow issue (to avoid conflicts, as newer versions require marshmallow>=3.0.0)
 sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226
 marshmallow<2.21.1 #schema duplicate issues https://github.com/marshmallow-code/marshmallow-sqlalchemy/issues/121
-paramiko  # required for the SFTP destination plugin
+paramiko >= 3.4.0 # required for the SFTP destination plugin
 pem
+pycryptodomex >= 3.19.1 # Required to address vulnerability in older version (VULN-5325)
 pyjks >= 19 # pyjks < 19 depends on pycryptodome, which conflicts with dyn's usage of pycrypto
 pyjwt
 pyOpenSSL
@@ -45,7 +46,7 @@ SQLAlchemy-Utils
 tabulate
 urllib3 == 1.26.18 # urllib3 is used by 'requests' package. Version restriction is required to avoid vulnerability in previous version (VULN-4806)
 vine
-werkzeug < 2.1.0 # requires a newer version of Flask
+werkzeug >= 3.0.1 # required to address vulnerability in older version (VULN-4844)
 xmltodict
 # Test requirements are needed to allow test docs to build
 -r requirements-tests.txt
