@@ -1,5 +1,5 @@
 variables:
-  CURRENT_CI_IMAGE: registry.ddbuild.io/lemur/ci:0.2.3
+  CURRENT_CI_IMAGE: registry.ddbuild.io/lemur-ci:v30236449-2d7d949-0.2.5
   KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: lemur
 
 stages:
