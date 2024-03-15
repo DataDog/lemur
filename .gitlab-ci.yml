@@ -47,7 +47,15 @@ build-stage-image:
     DDSIGN_ID_TOKEN:
       aud: image-integrity
   script:
-    - cd publish && METADATA_FILE=$(mktemp) docker buildx build --label target=staging --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag registry.ddbuild.io/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA --push --metadata-file ${METADATA_FILE} .
+    - cd publish
+    - METADATA_FILE=$(mktemp)
+    - docker buildx build
+      --label target=staging
+      --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA}
+      --tag registry.ddbuild.io/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA
+      --metadata-file ${METADATA_FILE}
+      --push
+      .
     - ddsign sign registry.ddbuild.io/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA --docker-metadata-file ${METADATA_FILE}
   except:
     - tags
@@ -67,7 +75,15 @@ build-prod-image:
     DDSIGN_ID_TOKEN:
       aud: image-integrity
   script:
-    - cd publish && METADATA_FILE=$(mktemp) docker buildx build --label target=prod --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA} --tag registry.ddbuild.io/lemur:$CI_COMMIT_TAG --push --metadata-file ${METADATA_FILE} .
+    - cd publish
+    - METADATA_FILE=$(mktemp)
+    - docker buildx build
+      --label target=staging
+      --build-arg CI_COMMIT_SHA=${CI_COMMIT_SHA}
+      --tag registry.ddbuild.io/lemur:v$CI_PIPELINE_ID-$CI_COMMIT_SHORT_SHA
+      --metadata-file ${METADATA_FILE}
+      --push
+      .
     - ddsign sign registry.ddbuild.io/lemur:$CI_COMMIT_TAG --docker-metadata-file ${METADATA_FILE}
   only:
     - tags
