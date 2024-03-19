@@ -46,7 +46,7 @@ build-stage-image:
     DDSIGN_ID_TOKEN:
       aud: image-integrity
   script:
-    - GBILITE_ENV=staging GBILITE_IMAGE_TO_BUILD="lemur:$CI_COMMIT_SHA" /bin/bash .campaigns/build_and_push_image.sh
+    - CHECKOUT_REF=$CI_COMMIT_SHA GBILITE_ENV=staging GBILITE_IMAGE_TO_BUILD="lemur:v${CI_PIPELINE_ID}-${CI_COMMIT_SHORT_SHA}" /bin/bash .campaigns/build_and_push_image.sh
   except:
     - tags
 

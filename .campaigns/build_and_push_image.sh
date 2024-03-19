@@ -9,7 +9,7 @@ IMAGE_TAG=$(echo $GBILITE_IMAGE_TO_BUILD | cut -d ':' -f 2)
 if [[ $GBILITE_IMAGE_TO_BUILD == "lemur:latest" ]]; then
   LATEST_RELEASE_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
   CHECKOUT_REF=$LATEST_RELEASE_TAG
-else
+elif [[ -z "$CHECKOUT_REF" ]]; then
   CHECKOUT_REF=$IMAGE_TAG
 fi
 
