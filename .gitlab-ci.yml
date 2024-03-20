@@ -82,7 +82,7 @@ gbilite-get-images:
   tags: ["arch:amd64"]
   rules:
     - if: $GBILITE_GITLAB_ACTION == "gbilite-get-images"
-      when: manual
+      when: on_success
   script:
     - /bin/bash .campaigns/get_images.sh > .campaigns/allimages.txt
   artifacts:
@@ -96,7 +96,7 @@ gbilite-build-image:
   tags: ["arch:amd64"]
   rules:
     - if: $GBILITE_GITLAB_ACTION == "gbilite-build-image"
-      when: manual
+      when: on_success
   script:
     - /bin/bash .campaigns/build_and_push_image.sh
   id_tokens:
