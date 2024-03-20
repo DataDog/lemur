@@ -13,9 +13,6 @@ test:
   stage: test
   timeout: 30m
   tags: ["arch:amd64"]
-  rules:
-    - if: $GBILITE_GITLAB_ACTION == "gbilite-get-images"
-      when: never
   variables:
     POSTGRES_DB: lemur
     POSTGRES_USER: lemur
@@ -36,6 +33,9 @@ test:
     - make test
     - bandit -r . -ll -ii -x lemur/tests/,docs
     - xvfb-run make test-js
+  except:
+    variables:
+      - $GBILITE_GITLAB_ACTION == "gbilite-get-images"
 
 build-stage-image:
   image: $CURRENT_CI_IMAGE
@@ -43,11 +43,6 @@ build-stage-image:
   when: on_success
   timeout: 2h
   tags: ["arch:amd64"]
-  rules:
-    - if: $GBILITE_GITLAB_ACTION
-      when: never
-    - if: $CI_COMMIT_TAG
-      when: never
   variables:
     CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
   id_tokens:
@@ -55,6 +50,8 @@ build-stage-image:
       aud: image-integrity
   script:
     - CHECKOUT_REF=$CI_COMMIT_SHA GBILITE_ENV=staging GBILITE_IMAGE_TO_BUILD="lemur:v${CI_PIPELINE_ID}-${CI_COMMIT_SHORT_SHA}" /bin/bash .campaigns/build_and_push_image.sh
+  except:
+    - tags
 
 # build a prod image when we create a new tag
 build-prod-image:
@@ -74,6 +71,8 @@ build-prod-image:
       aud: image-integrity
   script:
     - GBILITE_ENV=prod GBILITE_IMAGE_TO_BUILD="lemur:$CI_COMMIT_TAG" /bin/bash .campaigns/build_and_push_image.sh
+  only:
+    - tags
 
 gbilite-get-images:
   image: $CURRENT_CI_IMAGE
@@ -86,6 +85,9 @@ gbilite-get-images:
   artifacts:
     paths:
       - .campaigns/allimages.txt
+  only:
+    variables:
+      - $GBILITE_GITLAB_ACTION == "gbilite-get-images"
 
 gbilite-build-image:
   image: $CURRENT_CI_IMAGE
@@ -102,3 +104,6 @@ gbilite-build-image:
   artifacts:
     paths:
       - .campaigns/image_info.txt
+  only:
+    variables:
+      - $GBILITE_GITLAB_ACTION == "gbilite-build-image"
