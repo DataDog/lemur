@@ -40,6 +40,9 @@ build-stage-image:
   when: on_success
   timeout: 2h
   tags: ["arch:amd64"]
+  rules:
+    - if: $GBILITE_GITLAB_ACTION
+      when: never
   variables:
     CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
   id_tokens:
@@ -57,6 +60,9 @@ build-prod-image:
   when: on_success
   timeout: 2h
   tags: ["arch:amd64"]
+  rules:
+    - if: $GBILITE_GITLAB_ACTION
+      when: never
   variables:
     CI_ENABLE_CONTAINER_IMAGE_BUILDS: "true"
   id_tokens:
