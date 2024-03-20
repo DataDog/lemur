@@ -81,7 +81,6 @@ gbilite-get-images:
   tags: ["arch:amd64"]
   rules:
     - if: $GBILITE_GITLAB_ACTION == "gbilite-get-images"
-      when: on_success
   script:
     - /bin/bash .campaigns/get_images.sh > .campaigns/allimages.txt
   artifacts:
