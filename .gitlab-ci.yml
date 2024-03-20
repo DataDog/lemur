@@ -74,8 +74,6 @@ gbilite-get-images:
   image: $CURRENT_CI_IMAGE
   stage: gbilite
   tags: ["arch:amd64"]
-  rules:
-    - if: $GBILITE_GITLAB_ACTION == "gbilite-get-images"
   script:
     - /bin/bash .campaigns/get_images.sh > .campaigns/allimages.txt
   artifacts:
@@ -90,8 +88,6 @@ gbilite-build-image:
   stage: gbilite
   timeout: 2h
   tags: ["arch:amd64"]
-  rules:
-    - if: $GBILITE_GITLAB_ACTION == "gbilite-build-image"
   script:
     - /bin/bash .campaigns/build_and_push_image.sh
   id_tokens:
