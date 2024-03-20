@@ -1,15 +1,16 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 
 # The user that clones the repository (root) is different from the user performing git commands
 git config --global --add safe.directory /go/src/github.com/DataDog/lemur
 
 # Determine the specific commit or release to build an image for
 IMAGE_TAG=$(echo $GBILITE_IMAGE_TO_BUILD | cut -d ':' -f 2)
-CHECKOUT_REF=$IMAGE_TAG
 if [[ $GBILITE_IMAGE_TO_BUILD == "lemur:latest" ]]; then
   LATEST_RELEASE_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
   CHECKOUT_REF=$LATEST_RELEASE_TAG
+elif [[ -z "$CHECKOUT_REF" ]]; then
+  CHECKOUT_REF=$IMAGE_TAG
 fi
 
 # Build and sign the image
