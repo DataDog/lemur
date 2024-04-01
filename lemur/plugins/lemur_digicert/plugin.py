@@ -403,6 +403,21 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         base_url = current_app.config.get("DIGICERT_URL")
         cert_type = current_app.config.get("DIGICERT_ORDER_TYPE")
 
+        # TODO: If an order with an EXACT match with both the CSR's CN and SANs exists,
+        # then "duplicate" the certificate associated with that order ID. If multiple orders
+        # match this criteria, then select only one based on some heuristic, e.g. the date when
+        # the order was last created and/or which ever one has the most duplicates/reissued certs
+        # associated with it. "duplicating" instead of "reissuing" provides strong guarantees that the
+        # original certs will not be revoked.
+        #
+        # If the selected order has an expiry date <=35 days (or whatever the rotation policy
+        # for the cert is set to) then the order must instead be renewed by submitting a new order with
+        # `renewal_of_order_id` set.
+        #
+        # If there are no orders that match, then a new order must be submitted. Note that this follows
+        # the same procedure as above, except that `renewal_of_order_id` will be *unset*.
+
+
         # make certificate request
         determinator_url = "{0}/services/v2/order/certificate/{1}".format(
             base_url, cert_type
