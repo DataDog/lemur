@@ -265,6 +265,41 @@ def get_certificate_id(session, base_url, order_id):
 
 
 @retry(stop_max_attempt_number=10, wait_fixed=1000)
+def get_certificate_orders(session, base_url):
+    """Fetch all Digicert certificate orders."""
+    search_url = f"{base_url}/services/v2/order/certificate"
+    orders = []
+    offset = 0
+    limit = 40
+
+    while True:
+        response = session.get(
+            search_url, params={
+                "filters[status]": "issued",
+                "offset": offset,
+                "limit": limit
+            }
+        )
+
+        data = handle_response(response)
+
+        for o in data["orders"]:
+            # https://dev.digicert.com/en/certcentral-apis/services-api/glossary.html#certificate-formats
+            # ID 29 => pem_all
+            if o["status"] == "issued":
+                order = {
+                    "id": str(o["id"]),
+                    "certificate": o["certificate"],
+                }
+                orders.append(orders)
+
+        offset += limit
+        if offset >= data["page"]["total"]:
+            break
+    return orders
+
+
+@retry(stop_max_attempt_number=10, wait_fixed=1000)
 def get_cis_certificate(session, base_url, order_id):
     """Retrieve certificate order id from Digicert API, including the chain"""
     certificate_url = "{0}/platform/cis/certificate/{1}/download".format(base_url, order_id)
