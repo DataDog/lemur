@@ -14,11 +14,11 @@ class VaultTokenCredential(TokenCredential):
         self.role_name = role_name
 
     def get_token(self, *scopes, claims=None, tenant_id=None, **kwargs):
-        client = hvac.Client(url=os.environ["VAULT_ADDR"])
-        return client.read(path="{mount_point}/token/{role_name}".format(
-            mount_point=self.mount_point,
-            role_name=self.role_name
-        ))['data']['access_token']
+        return self.client.read(
+            path="{mount_point}/token/{role_name}".format(
+                mount_point=self.mount_point, role_name=self.role_name
+            )
+        )["data"]["access_token"]
 
 
 def get_azure_credential(plugin, options):
