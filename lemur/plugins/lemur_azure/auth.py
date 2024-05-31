@@ -24,12 +24,13 @@ class VaultTokenCredential(TokenCredential):
         )
 
     def get_token(self, *scopes, claims=None, tenant_id=None, **kwargs):
-        data = self.client.read(
-            path="{mount_point}/token/{role_name}?resource={audience}".format(
-                audience=self.audience,
+        payload = {"resource": self.audience}
+        data = self.client.adapter.get(
+            "/v1/{mount_point}/token/{role_name}".format(
                 mount_point=self.mount_point,
                 role_name=self.role_name,
-            )
+            ),
+            params=payload,
         )["data"]
         return AccessToken(
             token=data["access_token"],
@@ -57,7 +58,10 @@ def get_azure_credential(audience, plugin, options):
         client = hvac.Client(url=os.environ["VAULT_ADDR"])
 
         plugin.credential = VaultTokenCredential(
-            audience, client, mount_point, role_name
+            audience=audience,
+            client=client,
+            mount_point=mount_point,
+            role_name=role_name,
         )
         return plugin.credential
     elif auth_method == "azureApp":

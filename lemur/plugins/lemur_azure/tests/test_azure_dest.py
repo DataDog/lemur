@@ -130,7 +130,7 @@ class TestAzureDestination(unittest.TestCase):
                 {"name": "azureTenant", "value": "mockedTenant"},
                 {"name": "authenticationMethod", "value": "hashicorpVault"},
                 {"name": "hashicorpVaultRoleName", "value": "mockedRole"},
-                {"name": "hashicorpVaultMountPoint", "value": "/azure"},
+                {"name": "hashicorpVaultMountPoint", "value": "azure"},
             ]
             subject.upload(name, body, private_key, cert_chain, options)
             _assert_certificate_imported()

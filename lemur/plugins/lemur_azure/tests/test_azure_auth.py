@@ -21,7 +21,7 @@ class TestAzureAuth(unittest.TestCase):
     @patch("hvac.Client")
     def test_get_azure_credential(self, hvac_client_mock):
         client = hvac_client_mock()
-        client.read.return_value = {
+        client.adapter.get.return_value = {
             "request_id": "f7dcd09c-dde9-fa0d-e98e-e4f238dfe66e",
             "lease_id": "",
             "renewable": False,
@@ -45,20 +45,21 @@ class TestAzureAuth(unittest.TestCase):
             {"name": "azureTenant", "value": "mockedTenant"},
             {"name": "authenticationMethod", "value": "hashicorpVault"},
             {"name": "hashicorpVaultRoleName", "value": "mockedRole"},
-            {"name": "hashicorpVaultMountPoint", "value": "/azure"},
+            {"name": "hashicorpVaultMountPoint", "value": "azure"},
         ]
         cred = get_azure_credential(
-            audience="https://management.azure.com/", plugin=plugin, options=options
+            audience="https://management.azure.com", plugin=plugin, options=options
         )
         assert cred == VaultTokenCredential(
-            audience="https://management.azure.com/",
+            audience="https://management.azure.com",
             client=client,
-            mount_point="/azure",
+            mount_point="azure",
             role_name="mockedRole",
         )
         access_token = cred.get_token()
-        client.read.assert_called_with(
-            path="/azure/token/mockedRole?resource=https://management.azure.com/"
+        client.adapter.get.assert_called_with(
+            "/v1/azure/token/mockedRole",
+            params={"resource": "https://management.azure.com"},
         )
         assert access_token == AccessToken(
             token="faketoken123",
