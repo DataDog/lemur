@@ -8,7 +8,11 @@ import os
 
 
 class VaultTokenCredential(TokenCredential):
-    def __init__(self, client, mount_point, role_name):
+    def __init__(self, audience, client, mount_point, role_name):
+        if not audience:
+            self.audience="https://management.azure.com/.default"
+        else:
+            self.audience = audience
         self.client = client
         self.mount_point = mount_point
         self.role_name = role_name

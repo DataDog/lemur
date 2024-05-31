@@ -39,11 +39,12 @@ class TestAzureAuth(unittest.TestCase):
             "auth": None,
         }
         access_token = VaultTokenCredential(
+            audience="https://vault.azure.net/.default",
             client=client,
             mount_point="/azure",
             role_name="mockedRole",
         ).get_token()
-        client.read.assert_called_with(path="/azure/token/mockedRole")
+        client.read.assert_called_with(path="/azure/token/mockedRole?resource=https://vault.azure.net/.default")
         assert access_token == AccessToken(
             token="faketoken123",
             expires_on=1717182214,
