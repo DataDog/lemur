@@ -49,19 +49,6 @@ def get_azure_credential(audience, plugin, options):
     :param options: options set for the plugin
     :return: an Azure credential
     """
-
-    if plugin.credential:
-        try:
-            plugin.credential.get_token(
-                "https://management.azure.com/.default"
-            )  # Try to dispense a valid token.
-            return plugin.credential
-        except (CredentialUnavailableError, ClientAuthenticationError) as e:
-            current_app.logger.warning(
-                f"Failed to re-use existing Azure credential, another one will attempt to "
-                f"be re-generated: {e}"
-            )
-
     tenant = plugin.get_option("azureTenant", options)
     auth_method = plugin.get_option("authenticationMethod", options)
 
