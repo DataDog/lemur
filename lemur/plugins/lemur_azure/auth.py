@@ -1,5 +1,5 @@
 from azure.core.credentials import AccessToken, TokenCredential
-from azure.identity import ClientSecretCredential, CredentialUnavailableError
+from azure.identity import ClientSecretCredential
 
 import hvac
 import os
