@@ -2,7 +2,8 @@ import os
 import unittest
 from unittest.mock import patch
 from azure.core.credentials import AccessToken
-from lemur.plugins.lemur_azure.auth import VaultTokenCredential
+from lemur.plugins.lemur_azure.auth import VaultTokenCredential, get_azure_credential
+from lemur.plugins.lemur_azure.plugin import AzureDestinationPlugin
 from flask import Flask
 
 
@@ -18,7 +19,7 @@ class TestAzureAuth(unittest.TestCase):
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
     @patch("hvac.Client")
-    def test_vault_token_credential(self, hvac_client_mock):
+    def test_get_azure_credential(self, hvac_client_mock):
         client = hvac_client_mock()
         client.read.return_value = {
             "request_id": "f7dcd09c-dde9-fa0d-e98e-e4f238dfe66e",
@@ -38,13 +39,27 @@ class TestAzureAuth(unittest.TestCase):
             "warnings": None,
             "auth": None,
         }
-        access_token = VaultTokenCredential(
-            audience="https://vault.azure.net/.default",
+        plugin = AzureDestinationPlugin()
+        options = [
+            {"name": "azureKeyVaultUrl", "value": "https://couldbeanyvalue.com"},
+            {"name": "azureTenant", "value": "mockedTenant"},
+            {"name": "authenticationMethod", "value": "hashicorpVault"},
+            {"name": "hashicorpVaultRoleName", "value": "mockedRole"},
+            {"name": "hashicorpVaultMountPoint", "value": "/azure"},
+        ]
+        cred = get_azure_credential(
+            audience="https://management.azure.com/", plugin=plugin, options=options
+        )
+        assert cred == VaultTokenCredential(
+            audience="https://management.azure.com/",
             client=client,
             mount_point="/azure",
             role_name="mockedRole",
-        ).get_token()
-        client.read.assert_called_with(path="/azure/token/mockedRole?resource=https://vault.azure.net/.default")
+        )
+        access_token = cred.get_token()
+        client.read.assert_called_with(
+            path="/azure/token/mockedRole?resource=https://management.azure.com/"
+        )
         assert access_token == AccessToken(
             token="faketoken123",
             expires_on=1717182214,
