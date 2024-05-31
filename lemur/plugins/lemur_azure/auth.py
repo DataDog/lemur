@@ -1,4 +1,4 @@
-from azure.core.credentials import TokenCredential
+from azure.core.credentials import AccessToken, TokenCredential
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import ClientSecretCredential, CredentialUnavailableError
 from flask import current_app
@@ -14,11 +14,15 @@ class VaultTokenCredential(TokenCredential):
         self.role_name = role_name
 
     def get_token(self, *scopes, claims=None, tenant_id=None, **kwargs):
-        return self.client.read(
+        data = self.client.read(
             path="{mount_point}/token/{role_name}".format(
                 mount_point=self.mount_point, role_name=self.role_name
             )
-        )["data"]["access_token"]
+        )["data"]
+        return AccessToken(
+            token=data["access_token"],
+            expires_on=data["expires_on"],
+        )
 
 
 def get_azure_credential(plugin, options):
