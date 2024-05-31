@@ -31,7 +31,7 @@ class TestAzureAuth(unittest.TestCase):
                 "expires_on": 1717182214,
                 "not_before": 1717167514,
                 "refresh_token": "",
-                "resource": "https://management.azure.com/",
+                "resource": "https://vault.azure.net/",
                 "token_type": "Bearer",
             },
             "wrap_info": None,

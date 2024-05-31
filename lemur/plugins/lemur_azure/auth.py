@@ -29,7 +29,7 @@ class VaultTokenCredential(TokenCredential):
         )
 
 
-def get_azure_credential(plugin, options):
+def get_azure_credential(audience, plugin, options):
     """
     Fetches a credential used for authenticating with the Azure API.
     A new credential will be created if one does not already exist.
@@ -40,14 +40,6 @@ def get_azure_credential(plugin, options):
     :param options: options set for the plugin
     :return: an Azure credential
     """
-    if plugin.credential:
-        try:
-            plugin.credential.get_token("https://management.azure.com/.default")  # Try to dispense a valid token.
-            return plugin.credential
-        except (CredentialUnavailableError, ClientAuthenticationError) as e:
-            current_app.logger.warning(f"Failed to re-use existing Azure credential, another one will attempt to "
-                                       f"be re-generated: {e}")
-
     tenant = plugin.get_option("azureTenant", options)
     auth_method = plugin.get_option("authenticationMethod", options)
 
@@ -56,7 +48,7 @@ def get_azure_credential(plugin, options):
         role_name = plugin.get_option("hashicorpVaultRoleName", options)
         client = hvac.Client(url=os.environ["VAULT_ADDR"])
 
-        plugin.credential = VaultTokenCredential(client, mount_point, role_name)
+        plugin.credential = VaultTokenCredential(audience, client, mount_point, role_name)
         return plugin.credential
     elif auth_method == "azureApp":
         app_id = plugin.get_option("azureAppID", options)
