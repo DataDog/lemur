@@ -19,8 +19,8 @@ class VaultTokenCredential(TokenCredential):
 
     def get_token(self, *scopes, claims=None, tenant_id=None, **kwargs):
         data = self.client.read(
-            path="{mount_point}/token/{role_name}".format(
-                mount_point=self.mount_point, role_name=self.role_name
+            path="{mount_point}/token/{role_name}?resource={audience}".format(
+                audience=self.audience, mount_point=self.mount_point, role_name=self.role_name
             )
         )["data"]
         return AccessToken(
