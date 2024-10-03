@@ -28,7 +28,7 @@ RUN apk --update add --virtual build-dependencies \
                 nasm  \
                 zlib-dev \
                 postgresql-dev \
-                # libressl-dev  \
+                # libressl-dev  \ # fails
                 libffi-dev \
                 cyrus-sasl-dev \
                 openldap-dev
