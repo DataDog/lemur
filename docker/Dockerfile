@@ -38,8 +38,8 @@ COPY lemur-dev.tar.gz /opt/lemur
 WORKDIR /opt/lemur
 RUN tar -xvzf lemur-dev.tar.gz
 
-RUN pip3 install --upgrade pip
-RUN pip3 install --upgrade setuptools
+RUN pip3 install --no-cache-dir --upgrade pip
+RUN pip3 install --no-cache-dir --upgrade setuptools
 RUN mkdir -p /run/nginx/ /etc/nginx/ssl/
 RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
 
@@ -52,7 +52,7 @@ COPY nginx/default-ssl.conf /etc/nginx/conf.d/
 RUN echo "Running with python:" && python -c 'import platform; print(platform.python_version())'
 RUN echo "Running with nodejs:" && node -v
 RUN npm install --unsafe-perm
-RUN pip3 install -e .
+RUN pip3 install --no-cache-dir -e .
 RUN node_modules/.bin/gulp build
 RUN node_modules/.bin/gulp package --urlContextPath=${URLCONTEXT}
 RUN apk del build-dependencies
