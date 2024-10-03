@@ -18,6 +18,8 @@ endif
 	pip install -e "file://`pwd`#egg=lemur[tests]"
 	node_modules/.bin/gulp build
 	node_modules/.bin/gulp package --urlContextPath=$(urlContextPath)
+	tar --exclude-ignore=.tarignore -cvzf ./.tmp/lemur-dev.tar.gz . 1>/dev/null
+	mv ./.tmp/lemur-dev.tar.gz ./docker/
 	@echo ""
 
 release:
