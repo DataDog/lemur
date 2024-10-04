@@ -12,26 +12,25 @@ RUN addgroup -S ${group} -g ${gid}
 RUN adduser -D -S ${user} -G ${group} -u ${uid}
 RUN apk add --no-cache --update python3 py-pip libldap postgresql-client nginx supervisor curl tzdata openssl bash build-base libstdc++ libc6-compat
 RUN apk --update add --virtual build-dependencies \
-                git \
-                tar \
-                curl \
-                python3-dev \
-                npm \
-                bash \
-                musl-dev \
-                cargo \
-                gcc \
                 autoconf \
                 automake \
+                bash \
+                cargo \
+                curl \
+                cyrus-sasl-dev \
+                gcc \
+                git \
+                libffi-dev \
                 libtool \
                 make \
+                musl-dev \
                 nasm  \
-                zlib-dev \
+                npm \
+                openldap-dev \
                 postgresql-dev \
-                # libressl-dev  \ # fails
-                libffi-dev \
-                cyrus-sasl-dev \
-                openldap-dev
+                python3-dev \
+                tar \
+                zlib-dev
 USER root
 RUN mkdir -p /opt/lemur /home/lemur/.lemur
 COPY lemur-dev.tar.gz /opt/lemur
