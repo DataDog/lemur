@@ -11,23 +11,27 @@ ENV group lemur
 RUN addgroup -S ${group} -g ${gid}
 RUN adduser -D -S ${user} -G ${group} -u ${uid}
 RUN apk add --no-cache --update python3 py-pip libldap postgresql-client nginx supervisor curl tzdata openssl bash build-base libstdc++ libc6-compat
-RUN apk --update add --virtual build-dependencies \
-                autoconf \
+RUN apk --update add autoconf \
                 automake \
                 bash \
+                busybox-extras \
                 cargo \
                 curl \
                 cyrus-sasl-dev \
                 gcc \
                 git \
                 libffi-dev \
+                libpq-dev \
                 libtool \
+                libtool \
+                libxml2-dev \
                 make \
                 musl-dev \
                 nasm  \
                 npm \
                 openldap-dev \
                 postgresql-dev \
+                python3-dev \
                 python3-dev \
                 tar \
                 zlib-dev
