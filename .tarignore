@@ -58,3 +58,9 @@ lemur/tests/tmp
 ./ENV
 ./env.bak
 ./venv.bak
+
+# VSCode files
+./.vscode
+
+# Git repo metadata
+./.git
