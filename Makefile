@@ -11,7 +11,7 @@ ifeq ($(USER), root)
 else
 	npm install
 endif
-	pip install "setuptools>=0.9.8"
+	pip install setuptools
 	# order matters here, base package must install first
 	pip install -e .
 	pip install -e "file://`pwd`#egg=lemur[dev]"
@@ -47,6 +47,7 @@ endif
 		--exclude='lemur/tests/tmp' \
 		-cvzf ./.tmp/lemur-dev.tar.gz . 1>/dev/null 1>/dev/null
 	mv ./.tmp/lemur-dev.tar.gz ./docker/
+	rm -rf build/
 	@echo ""
 
 release:

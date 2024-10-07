@@ -14,3 +14,4 @@ COPY . /app/
 RUN pip install -e .
 RUN pip install "file://`pwd`#egg=lemur[dev]"
 RUN pip install "file://`pwd`#egg=lemur[tests]"
+
