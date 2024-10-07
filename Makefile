@@ -18,7 +18,34 @@ endif
 	pip install -e "file://`pwd`#egg=lemur[tests]"
 	node_modules/.bin/gulp build
 	node_modules/.bin/gulp package --urlContextPath=$(urlContextPath)
-	tar --exclude-ignore=.tarignore -cvzf ./.tmp/lemur-dev.tar.gz . 1>/dev/null
+	tar --exclude='htmlcov' \
+		--exclude='cover' \
+		--exclude='build' \
+		--exclude='dist' \
+		--exclude='node_modules' \
+		--exclude='bower_components' \
+		--exclude='docs/html' \
+		--exclude='docs/doctrees' \
+		--exclude='lemur/static/dist' \
+		--exclude='lemur/static/app/vendor' \
+		--exclude='wheelhouse' \
+		--exclude='lemur/lib' \
+		--exclude='lemur/bin' \
+		--exclude='lemur/lib64' \
+		--exclude='lemur/include' \
+		--exclude='docs/_build' \
+		--exclude='lemur/tests/tmp' \
+		--exclude='docker/lemur.dev.tar.gz' \
+		--exclude='env' \
+		--exclude='venv' \
+		--exclude='ENV' \
+		--exclude='.vscode' \
+		--exclude='.git' \
+		--exclude='.tmp/lemur-dev.tar.gz' \
+		--exclude='docker/lemur-dev.tar.gz' \
+		--exclude='docs/_build' \
+		--exclude='lemur/tests/tmp' \
+		-cvzf ./.tmp/lemur-dev.tar.gz . 1>/dev/null 1>/dev/null
 	mv ./.tmp/lemur-dev.tar.gz ./docker/
 	@echo ""
 
