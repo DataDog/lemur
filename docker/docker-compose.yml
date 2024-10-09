@@ -14,7 +14,8 @@ services:
     image: "lemur:local-dev"
     restart: on-failure
     build:
-      context: .
+      context: ../
+      dockerfile: ./docker/Dockerfile
     depends_on:
       - postgres
       - redis
