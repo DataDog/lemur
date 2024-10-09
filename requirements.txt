@@ -224,6 +224,7 @@ grpc-google-iam-v1==0.13.1
     # via google-cloud-private-ca
 grpcio==1.66.2
     # via
+    #   -r requirements.in
     #   cert-orchestration-adapter
     #   google-api-core
     #   googleapis-common-protos
@@ -514,6 +515,7 @@ tzdata==2024.2
     #   kombu
 urllib3==1.26.20
     # via
+    #   -r requirements.in
     #   botocore
     #   cert-orchestration-adapter
     #   requests
@@ -542,6 +544,7 @@ xmltodict==0.14.0
     #   ddtrace
 zipp==3.20.2
     # via
+    #   -r requirements.in
     #   importlib-metadata
     #   importlib-resources
 

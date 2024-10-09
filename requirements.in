@@ -1,8 +1,8 @@
 # Run `make up-reqs` to update pinned dependencies in requirement text files
 
 acme
-anyio==4.5.0
 alembic-autogenerate-enums
+anyio==4.5.0
 arrow
 asyncpool
 azure-identity >= 1.16.1 # (VUNL-7150)
@@ -14,7 +14,6 @@ boto3
 botocore
 celery[redis]
 cert_manager
-https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.0.3-py3-none-any.whl
 certbot
 certifi
 certsrv[ntlm]
@@ -23,7 +22,7 @@ cryptography
 dnspython3
 dyn
 Flask-Bcrypt
-Flask-Cors
+Flask-Cors >= 4.0.0 # (VULN-6645)
 Flask-Limiter
 Flask-Mail
 Flask-Migrate <= 2.7.0
@@ -36,11 +35,13 @@ flask_replicated
 future
 google-cloud-compute
 google-cloud-private-ca
+grpcio >= 1.53.2 # (VULN-7774)
 gunicorn
+https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.0.3-py3-none-any.whl
 hvac # required for the vault destination plugin
 inflection
 itsdangerous
-jinja2
+jinja2 >= 3.1.4 # (VULN-6686)
 lockfile
 logmatic-python
 marshmallow-sqlalchemy == 0.23.1 #related to the marshmallow issue (to avoid conflicts)
@@ -56,15 +57,17 @@ pyOpenSSL
 python_ldap
 pyyaml
 redis
-requests
+requests >= 2.32.0 # (VULN-6901)
 retrying
-sentry-sdk
+sentry-sdk >= 2.8.0 # (VULN-7698)
 simplejson
 six
 sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226tabulate
 SQLAlchemy-Utils
 tabulate
 types-protobuf
+urllib3 >= 1.26.19 # (VULN-7275)
 validators
-werkzeug
+werkzeug >= 3.0.3 # (VULN-6679)
 xmltodict
+zipp >= 3.19.1 # (VULN-7514)
