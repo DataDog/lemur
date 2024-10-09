@@ -253,7 +253,7 @@ distro==1.9.0
     #   -r requirements-tests.txt
     #   certbot
     #   cloudflare
-dnspython==2.7.0
+dnspython==2.6.1
     # via
     #   -r requirements-docs.in
     #   -r requirements-tests.txt
@@ -909,7 +909,7 @@ sphinx==7.4.7
     #   sphinx-rtd-theme
     #   sphinxcontrib-httpdomain
     #   sphinxcontrib-jquery
-sphinx-rtd-theme==3.0.0
+sphinx-rtd-theme==3.0.1
     # via -r requirements-docs.in
 sphinxcontrib-applehelp==2.0.0
     # via sphinx
