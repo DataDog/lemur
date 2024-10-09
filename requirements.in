@@ -53,7 +53,7 @@ pem
 protobuf
 psycopg2
 pyjks
-pyjwt
+pyjwt >= 2.4.0 # (CVE-2022-29217)
 pyOpenSSL
 python_ldap
 pyyaml
