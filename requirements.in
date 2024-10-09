@@ -19,6 +19,7 @@ certifi
 certsrv[ntlm]
 CloudFlare
 cryptography
+dnspython >= 2.6.0
 dnspython3
 dyn
 Flask-Bcrypt
