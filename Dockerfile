@@ -1,4 +1,4 @@
-FROM python:3.8-bookworm
+FROM python:3.9-bookworm
 SHELL ["/bin/bash", "-c"]
 RUN apt-get update
 RUN apt-get install -y make software-properties-common curl
