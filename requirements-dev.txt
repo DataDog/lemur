@@ -320,7 +320,7 @@ freezegun==1.5.1
     # via -r requirements-tests.txt
 future==1.0.0
     # via -r requirements-tests.txt
-google-api-core[grpc]==2.20.0
+google-api-core[grpc]==2.21.0
     # via
     #   -r requirements-tests.txt
     #   google-cloud-compute
@@ -501,7 +501,7 @@ markdown-it-py==3.0.0
     # via
     #   -r requirements-tests.txt
     #   rich
-markupsafe==3.0.1
+markupsafe==2.1.5
     # via
     #   -r requirements-tests.txt
     #   jinja2
