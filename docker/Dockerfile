@@ -11,7 +11,7 @@ ENV group lemur
 RUN addgroup -S ${group} -g ${gid}
 RUN adduser -D -S ${user} -G ${group} -u ${uid}
 RUN apk add --no-cache --update python3 py-pip libldap postgresql-client nginx supervisor curl tzdata openssl bash build-base libstdc++ libc6-compat
-RUN apk --update add autoconf \
+RUN apk --update add --virtual build-dependencies autoconf \
                 automake \
                 bash \
                 busybox-extras \
@@ -41,8 +41,6 @@ COPY lemur-dev.tar.gz /opt/lemur
 WORKDIR /opt/lemur
 RUN tar -xvzf lemur-dev.tar.gz
 
-RUN pip3 install --no-cache-dir --upgrade pip
-RUN pip3 install --no-cache-dir --upgrade setuptools
 RUN mkdir -p /run/nginx/ /etc/nginx/ssl/
 RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
 
@@ -54,6 +52,8 @@ COPY nginx/default-ssl.conf /etc/nginx/conf.d/
 
 RUN echo "Running with python:" && python -c 'import platform; print(platform.python_version())'
 RUN echo "Running with nodejs:" && node -v
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
 RUN npm install --unsafe-perm
 RUN pip3 install --no-cache-dir -e .
 RUN node_modules/.bin/gulp build
@@ -62,7 +62,6 @@ RUN apk del build-dependencies
 
 COPY src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
 RUN echo ${PWD} && ls -lR
-RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
 
 RUN chmod +x /entrypoint
 WORKDIR /

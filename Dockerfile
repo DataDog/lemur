@@ -1,4 +1,4 @@
-FROM python:3.8-bookworm
+FROM python:3.9-bookworm
 SHELL ["/bin/bash", "-c"]
 RUN apt-get update
 RUN apt-get install -y make software-properties-common curl
@@ -12,6 +12,6 @@ RUN pip install coveralls bandit
 WORKDIR /app
 COPY . /app/
 RUN pip install -e .
-RUN pip install "file://`pwd`#egg=lemur[dev]"
-RUN pip install "file://`pwd`#egg=lemur[tests]"
+RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[dev]"
+RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[tests]"
 
