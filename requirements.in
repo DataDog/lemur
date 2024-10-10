@@ -73,3 +73,4 @@ validators
 werkzeug >= 3.0.3 # (VULN-6679)
 xmltodict
 zipp >= 3.19.1 # (VULN-7514)
+setuptools >= 70.0.0 # (VULN-7636)
