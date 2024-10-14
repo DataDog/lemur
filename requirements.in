@@ -63,7 +63,6 @@ redis
 requests >= 2.32.0 # (VULN-6901)
 retrying
 sentry-sdk >= 2.8.0 # (VULN-7698)
-setuptools >= 70.0.0 # (VULN-7636)
 simplejson
 six
 sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226tabulate
