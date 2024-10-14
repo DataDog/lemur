@@ -36,31 +36,45 @@ RUN apk --update add --virtual build-dependencies autoconf \
                 tar \
                 zlib-dev
 USER root
-RUN mkdir -p /opt/lemur /home/lemur/.lemur
-COPY lemur-dev.tar.gz /opt/lemur
+RUN mkdir -p /opt/lemur /opt/lemur/lemur /home/lemur/.lemur
+COPY docker/lemur-dev.tar.gz /opt/lemur
+
 WORKDIR /opt/lemur
 RUN tar -xvzf lemur-dev.tar.gz
 
 RUN mkdir -p /run/nginx/ /etc/nginx/ssl/
 RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
 
-COPY entrypoint /
-COPY supervisor.conf /
-COPY nginx/nginx.conf /etc/nginx/
-COPY nginx/default.conf /etc/nginx/conf.d/
-COPY nginx/default-ssl.conf /etc/nginx/conf.d/
+# COPY package.json /opt/lemur
+# COPY bower.json /opt/lemur
+# COPY setup.cfg /opt/lemur
+# COPY setup.py /opt/lemur
+# COPY README.rst /opt/lemur
+# COPY requirement* /opt/lemur
+# COPY ./lemur /opt/lemur/lemur
+# COPY . /opt/lemur
+COPY docker/entrypoint /
+COPY docker/supervisor.conf /
+COPY docker/nginx/nginx.conf /etc/nginx/
+COPY docker/nginx/default.conf /etc/nginx/conf.d/
+COPY docker/nginx/default-ssl.conf /etc/nginx/conf.d/
 
 RUN echo "Running with python:" && python -c 'import platform; print(platform.python_version())'
 RUN echo "Running with nodejs:" && node -v
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
+CMD ["tail", "-f", "/dev/null"]
+
+WORKDIR /opt/lemur
 RUN npm install --unsafe-perm
 RUN pip3 install --no-cache-dir -e .
 RUN node_modules/.bin/gulp build
 RUN node_modules/.bin/gulp package --urlContextPath=${URLCONTEXT}
 RUN apk del build-dependencies
+RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[dev]"
+RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[tests]"
 
-COPY src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
+COPY docker/src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
 RUN echo ${PWD} && ls -lR
 
 RUN chmod +x /entrypoint
