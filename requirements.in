@@ -2,7 +2,7 @@
 
 acme
 alembic-autogenerate-enums
-anyio==4.5.0
+anyio == 4.5.0
 arrow
 asyncpool
 azure-identity >= 1.16.1 # (VUNL-7150)
@@ -12,7 +12,7 @@ azure-mgmt-network
 azure-mgmt-subscription
 boto3
 botocore
-celery[redis]
+celery[redis] >= 5.2.0
 cert_manager
 certbot
 certifi
@@ -38,7 +38,7 @@ google-cloud-compute
 google-cloud-private-ca
 grpcio >= 1.62.0 # (VULN-7774)
 gunicorn
-https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.5-py3-none-any.whl
+# https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.7-py3-none-any.whl
 hvac # required for the vault destination plugin
 importlib-metadata==8.5.0
 inflection
