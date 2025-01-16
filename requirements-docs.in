@@ -5,7 +5,7 @@
 # Without including these dependencies, the docs are unable to include generated autodocs
 acme
 arrow
-boto3
+# boto3
 botocore
 celery[redis]
 certbot
