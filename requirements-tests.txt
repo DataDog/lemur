@@ -90,7 +90,7 @@ azure-mgmt-network==28.1.0
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
 azure-mgmt-subscription==3.1.1
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
-bandit==1.8.0
+bandit==1.8.2
     # via -r requirements-tests.in
 bcrypt==4.2.1
     # via
@@ -106,24 +106,31 @@ black==24.10.0
 blinker==1.9.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.35.96
+boto3==1.36.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   aws-sam-translator
     #   moto
-botocore==1.35.96
+botocore==1.36.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   aws-xray-sdk
     #   boto3
     #   moto
     #   s3transfer
+bytecode==0.16.0
+    # via
+    #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
+    #   ddtrace
 cachetools==5.5.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   google-auth
 celery[redis]==5.4.0
     # via
@@ -131,11 +138,14 @@ celery[redis]==5.4.0
     #   -r requirements-tests.in
 cert-manager==2.4.0
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+cert-orchestration-adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.8-py3-none-any.whl
+    # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
 certbot==3.1.0
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
 certifi==2024.12.14
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   httpcore
     #   httpx
     #   msrest
@@ -146,19 +156,22 @@ certsrv[ntlm]==2.1.1
 cffi==1.17.1
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   cryptography
     #   pynacl
-cfn-lint==1.22.4
+cfn-lint==1.22.5
     # via moto
 charset-normalizer==3.4.1
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   requests
 click==8.1.8
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   black
     #   celery
+    #   cert-orchestration-adapter
     #   click-didyoumean
     #   click-plugins
     #   click-repl
@@ -175,7 +188,7 @@ click-repl==0.3.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   celery
-cloudflare==3.1.1
+cloudflare==4.0.0
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
 configargparse==1.7
     # via
@@ -193,6 +206,7 @@ cryptography==44.0.0
     #   acme
     #   azure-identity
     #   azure-keyvault-keys
+    #   cert-orchestration-adapter
     #   certbot
     #   josepy
     #   moto
@@ -207,10 +221,16 @@ cryptography==44.0.0
     #   types-paramiko
     #   types-pyopenssl
     #   types-redis
+ddtrace==2.18.2
+    # via
+    #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
 deprecated==1.2.15
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   limits
+    #   opentelemetry-api
 distro==1.9.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
@@ -229,6 +249,11 @@ ecdsa==0.19.0
     #   moto
     #   python-jose
     #   sshpubkeys
+envier==0.6.1
+    # via
+    #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
+    #   ddtrace
 exceptiongroup==1.2.2
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
@@ -236,7 +261,7 @@ exceptiongroup==1.2.2
     #   pytest
 factory-boy==3.3.1
     # via -r requirements-tests.in
-faker==33.3.0
+faker==33.3.1
     # via
     #   -r requirements-tests.in
     #   factory-boy
@@ -245,6 +270,7 @@ fakeredis==2.26.2
 flask==2.3.3
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   flask-bcrypt
     #   flask-cors
     #   flask-limiter
@@ -311,11 +337,12 @@ grpc-google-iam-v1==0.14.0
 grpcio==1.69.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   google-api-core
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.69.0
+grpcio-status==1.48.2
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   google-api-core
@@ -329,7 +356,7 @@ httpcore==1.0.7
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   httpx
-httpx==0.27.2
+httpx==0.28.1
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   cloudflare
@@ -339,13 +366,16 @@ idna==3.10
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   anyio
+    #   cert-orchestration-adapter
     #   httpx
     #   requests
 importlib-metadata==8.5.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   certbot
     #   flask
+    #   opentelemetry-api
 inflection==0.5.1
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
 iniconfig==2.0.0
@@ -362,6 +392,7 @@ isodate==0.7.2
 itsdangerous==2.2.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   flask
 javaobj-py3==0.4.4
     # via
@@ -370,6 +401,7 @@ javaobj-py3==0.4.4
 jinja2==3.1.5
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   flask
     #   moto
 jmespath==1.0.1
@@ -395,7 +427,7 @@ jsonschema==4.23.0
     #   openapi-spec-validator
 jsonschema-path==0.3.3
     # via openapi-spec-validator
-jsonschema-specifications==2023.12.1
+jsonschema-specifications==2024.10.1
     # via
     #   jsonschema
     #   openapi-schema-validator
@@ -424,6 +456,7 @@ markdown-it-py==3.0.0
 markupsafe==2.1.5
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   jinja2
     #   mako
     #   werkzeug
@@ -472,12 +505,17 @@ oauthlib==3.2.2
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   requests-oauthlib
-openapi-schema-validator==0.6.2
+openapi-schema-validator==0.6.3
     # via openapi-spec-validator
 openapi-spec-validator==0.7.1
     # via
     #   -r requirements-tests.in
     #   moto
+opentelemetry-api==1.29.0
+    # via
+    #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
+    #   ddtrace
 ordered-set==4.1.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
@@ -495,7 +533,7 @@ parsedatetime==2.6
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   certbot
-pathable==0.4.3
+pathable==0.4.4
     # via jsonschema-path
 pathspec==0.12.1
     # via black
@@ -521,9 +559,11 @@ proto-plus==1.25.0
     #   google-api-core
     #   google-cloud-compute
     #   google-cloud-private-ca
-protobuf==5.29.3
+protobuf==3.20.3
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
+    #   ddtrace
     #   google-api-core
     #   google-cloud-compute
     #   google-cloud-private-ca
@@ -553,17 +593,18 @@ pyasn1-modules==0.4.1
 pycparser==2.22
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   cffi
 pycryptodomex==3.21.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   pyjks
-pydantic==2.9.2
+pydantic==2.10.5
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   aws-sam-translator
     #   cloudflare
-pydantic-core==2.23.4
+pydantic-core==2.27.2
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   pydantic
@@ -578,12 +619,13 @@ pyjks==20.0.0
 pyjwt[crypto]==2.10.1
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   msal
 pynacl==1.5.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   paramiko
-pyopenssl==24.3.0
+pyopenssl==25.0.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   acme
@@ -659,6 +701,7 @@ requests==2.32.3
     #   acme
     #   azure-core
     #   cert-manager
+    #   cert-orchestration-adapter
     #   certsrv
     #   docker
     #   google-api-core
@@ -681,8 +724,11 @@ requests-oauthlib==2.0.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   msrest
-responses==0.25.3
-    # via moto
+responses==0.25.6
+    # via
+    #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
+    #   moto
 retrying==1.3.4
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
 rfc3339-validator==0.1.4
@@ -701,20 +747,22 @@ rsa==4.9
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   google-auth
     #   python-jose
-s3transfer==0.10.4
+s3transfer==0.11.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   boto3
-sentry-sdk==2.19.2
+sentry-sdk==2.20.0
     # via -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
 simplejson==3.19.3
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   -r requirements-tests.in
+    #   cert-orchestration-adapter
 six==1.17.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   azure-core
+    #   cert-orchestration-adapter
     #   ecdsa
     #   flask-restful
     #   python-dateutil
@@ -725,7 +773,6 @@ sniffio==1.3.1
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   anyio
     #   cloudflare
-    #   httpx
 sortedcontainers==2.4.0
     # via fakeredis
 sqlalchemy==1.3.24
@@ -805,8 +852,11 @@ typing-extensions==4.12.2
     #   azure-keyvault-secrets
     #   azure-mgmt-network
     #   black
+    #   bytecode
+    #   cert-orchestration-adapter
     #   cfn-lint
     #   cloudflare
+    #   ddtrace
     #   faker
     #   fakeredis
     #   flask-limiter
@@ -816,6 +866,7 @@ typing-extensions==4.12.2
     #   mypy
     #   pydantic
     #   pydantic-core
+    #   pyopenssl
     #   python-json-logger
     #   rich
 tzdata==2024.2
@@ -827,6 +878,7 @@ urllib3==1.26.20
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   botocore
+    #   cert-orchestration-adapter
     #   docker
     #   requests
     #   responses
@@ -846,21 +898,27 @@ wcwidth==0.2.13
 werkzeug==3.1.3
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   flask
     #   moto
     #   pytest-flask
-wrapt==1.17.0
+wrapt==1.17.2
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
     #   aws-xray-sdk
+    #   cert-orchestration-adapter
+    #   ddtrace
     #   deprecated
 xmltodict==0.14.2
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
+    #   ddtrace
     #   moto
 zipp==3.21.0
     # via
     #   -r /home/francesco.marabotto/go/src/github.com/DataDog/lemur/requirements.txt
+    #   cert-orchestration-adapter
     #   importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:

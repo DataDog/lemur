@@ -71,27 +71,37 @@ billiard==4.2.1
     # via celery
 blinker==1.9.0
     # via
+    #   cert-orchestration-adapter
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.35.96
+boto3==1.36.0
     # via -r requirements.in
-botocore==1.35.96
+botocore==1.36.0
     # via
     #   -r requirements.in
     #   boto3
     #   s3transfer
+bytecode==0.16.0
+    # via
+    #   cert-orchestration-adapter
+    #   ddtrace
 cachetools==5.5.0
-    # via google-auth
+    # via
+    #   cert-orchestration-adapter
+    #   google-auth
 celery[redis]==5.4.0
     # via -r requirements.in
 cert-manager==2.4.0
+    # via -r requirements.in
+cert-orchestration-adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.8-py3-none-any.whl
     # via -r requirements.in
 certbot==3.1.0
     # via -r requirements.in
 certifi==2024.12.14
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   httpcore
     #   httpx
     #   msrest
@@ -101,13 +111,17 @@ certsrv[ntlm]==2.1.1
     # via -r requirements.in
 cffi==1.17.1
     # via
+    #   cert-orchestration-adapter
     #   cryptography
     #   pynacl
 charset-normalizer==3.4.1
-    # via requests
+    # via
+    #   cert-orchestration-adapter
+    #   requests
 click==8.1.8
     # via
     #   celery
+    #   cert-orchestration-adapter
     #   click-didyoumean
     #   click-plugins
     #   click-repl
@@ -118,7 +132,7 @@ click-plugins==1.1.1
     # via celery
 click-repl==0.3.0
     # via celery
-cloudflare==3.1.1
+cloudflare==4.0.0
     # via -r requirements.in
 configargparse==1.7
     # via certbot
@@ -130,6 +144,7 @@ cryptography==44.0.0
     #   acme
     #   azure-identity
     #   azure-keyvault-keys
+    #   cert-orchestration-adapter
     #   certbot
     #   josepy
     #   msal
@@ -138,8 +153,13 @@ cryptography==44.0.0
     #   pyopenssl
     #   pyspnego
     #   requests-ntlm
+ddtrace==2.18.2
+    # via cert-orchestration-adapter
 deprecated==1.2.15
-    # via limits
+    # via
+    #   cert-orchestration-adapter
+    #   limits
+    #   opentelemetry-api
 distro==1.9.0
     # via
     #   certbot
@@ -150,11 +170,16 @@ dnspython3==1.12.0
     # via -r requirements.in
 dyn==1.8.6
     # via -r requirements.in
+envier==0.6.1
+    # via
+    #   cert-orchestration-adapter
+    #   ddtrace
 exceptiongroup==1.2.2
     # via anyio
 flask==2.3.3
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   flask-bcrypt
     #   flask-cors
     #   flask-limiter
@@ -211,11 +236,12 @@ grpc-google-iam-v1==0.14.0
 grpcio==1.69.0
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   google-api-core
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.69.0
+grpcio-status==1.48.2
     # via google-api-core
 gunicorn==23.0.0
     # via -r requirements.in
@@ -223,20 +249,23 @@ h11==0.14.0
     # via httpcore
 httpcore==1.0.7
     # via httpx
-httpx==0.27.2
+httpx==0.28.1
     # via cloudflare
 hvac==2.3.0
     # via -r requirements.in
 idna==3.10
     # via
     #   anyio
+    #   cert-orchestration-adapter
     #   httpx
     #   requests
 importlib-metadata==8.5.0
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   certbot
     #   flask
+    #   opentelemetry-api
 inflection==0.5.1
     # via -r requirements.in
 isodate==0.7.2
@@ -250,12 +279,14 @@ isodate==0.7.2
 itsdangerous==2.2.0
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   flask
 javaobj-py3==0.4.4
     # via pyjks
 jinja2==3.1.5
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   flask
 jmespath==1.0.1
     # via
@@ -280,6 +311,7 @@ markdown-it-py==3.0.0
 markupsafe==2.1.5
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   jinja2
     #   mako
     #   werkzeug
@@ -303,6 +335,10 @@ ndg-httpsclient==0.5.1
     # via -r requirements.in
 oauthlib==3.2.2
     # via requests-oauthlib
+opentelemetry-api==1.29.0
+    # via
+    #   cert-orchestration-adapter
+    #   ddtrace
 ordered-set==4.1.0
     # via flask-limiter
 packaging==24.2
@@ -324,9 +360,11 @@ proto-plus==1.25.0
     #   google-api-core
     #   google-cloud-compute
     #   google-cloud-private-ca
-protobuf==5.29.3
+protobuf==3.20.3
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
+    #   ddtrace
     #   google-api-core
     #   google-cloud-compute
     #   google-cloud-private-ca
@@ -349,12 +387,14 @@ pyasn1-modules==0.4.1
     #   pyjks
     #   python-ldap
 pycparser==2.22
-    # via cffi
+    # via
+    #   cert-orchestration-adapter
+    #   cffi
 pycryptodomex==3.21.0
     # via pyjks
-pydantic==2.9.2
+pydantic==2.10.5
     # via cloudflare
-pydantic-core==2.23.4
+pydantic-core==2.27.2
     # via pydantic
 pygments==2.19.1
     # via rich
@@ -363,10 +403,11 @@ pyjks==20.0.0
 pyjwt[crypto]==2.10.1
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   msal
 pynacl==1.5.0
     # via paramiko
-pyopenssl==24.3.0
+pyopenssl==25.0.0
     # via
     #   -r requirements.in
     #   acme
@@ -393,7 +434,9 @@ pytz==2024.2
     #   certbot
     #   flask-restful
 pyyaml==6.0.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   responses
 redis==5.2.1
     # via
     #   -r requirements.in
@@ -404,6 +447,7 @@ requests==2.32.3
     #   acme
     #   azure-core
     #   cert-manager
+    #   cert-orchestration-adapter
     #   certsrv
     #   google-api-core
     #   hvac
@@ -411,26 +455,32 @@ requests==2.32.3
     #   msrest
     #   requests-ntlm
     #   requests-oauthlib
+    #   responses
 requests-ntlm==1.3.0
     # via certsrv
 requests-oauthlib==2.0.0
     # via msrest
+responses==0.25.6
+    # via cert-orchestration-adapter
 retrying==1.3.4
     # via -r requirements.in
 rich==13.9.4
     # via flask-limiter
 rsa==4.9
     # via google-auth
-s3transfer==0.10.4
+s3transfer==0.11.0
     # via boto3
-sentry-sdk==2.19.2
+sentry-sdk==2.20.0
     # via -r requirements.in
 simplejson==3.19.3
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   cert-orchestration-adapter
 six==1.17.0
     # via
     #   -r requirements.in
     #   azure-core
+    #   cert-orchestration-adapter
     #   flask-restful
     #   python-dateutil
     #   retrying
@@ -438,7 +488,6 @@ sniffio==1.3.1
     # via
     #   anyio
     #   cloudflare
-    #   httpx
 sqlalchemy==1.3.24
     # via
     #   -r requirements.in
@@ -468,12 +517,16 @@ typing-extensions==4.12.2
     #   azure-keyvault-keys
     #   azure-keyvault-secrets
     #   azure-mgmt-network
+    #   bytecode
+    #   cert-orchestration-adapter
     #   cloudflare
+    #   ddtrace
     #   flask-limiter
     #   kombu
     #   limits
     #   pydantic
     #   pydantic-core
+    #   pyopenssl
     #   python-json-logger
     #   rich
 tzdata==2024.2
@@ -484,7 +537,9 @@ urllib3==1.26.20
     # via
     #   -r requirements.in
     #   botocore
+    #   cert-orchestration-adapter
     #   requests
+    #   responses
     #   sentry-sdk
 validators==0.34.0
     # via -r requirements.in
@@ -498,12 +553,20 @@ wcwidth==0.2.13
 werkzeug==3.1.3
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   flask
-wrapt==1.17.0
-    # via deprecated
+wrapt==1.17.2
+    # via
+    #   cert-orchestration-adapter
+    #   ddtrace
+    #   deprecated
 xmltodict==0.14.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   cert-orchestration-adapter
+    #   ddtrace
 zipp==3.21.0
     # via
     #   -r requirements.in
+    #   cert-orchestration-adapter
     #   importlib-metadata
