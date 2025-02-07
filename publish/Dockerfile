@@ -41,6 +41,8 @@ RUN npm config set registry http://registry.npmjs.org/ && \
 # Lemur Application
 FROM registry.ddbuild.io/images/base/gbi-ubuntu_2204-fips:release
 
+LABEL is_fips=true
+
 USER root
 
 RUN apt-get update && apt-get -y install jq
