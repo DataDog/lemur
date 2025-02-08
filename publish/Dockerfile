@@ -1,5 +1,8 @@
+# Base Image Selection
+ARG BASE_IMAGE=registry.ddbuild.io/images/base/gbi-ubuntu_2204:release
+
 # Lemur Builder
-FROM registry.ddbuild.io/images/base/gbi-ubuntu_2204-fips:release as builder
+FROM $BASE_IMAGE as builder
 
 ARG CI_COMMIT_SHA
 
@@ -39,9 +42,11 @@ RUN npm config set registry http://registry.npmjs.org/ && \
     rm -rf node_modules
 
 # Lemur Application
-FROM registry.ddbuild.io/images/base/gbi-ubuntu_2204-fips:release
+FROM $BASE_IMAGE
 
-LABEL is_fips=true
+# FIPS mode
+ARG FIPS_ENABLED=false
+LABEL IS_FIPS=$FIPS_ENABLED
 
 USER root
 
@@ -52,5 +57,7 @@ COPY --from=builder /opt/venv /opt/venv
 
 RUN clean-apt install python3 python3-distutils haveged curl postgresql-client openssl &&\
     chown -R dog:dog /opt
+
+ENV FIPS_ENABLED=$FIPS_ENABLED
 
 USER dog
