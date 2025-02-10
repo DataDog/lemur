@@ -59,7 +59,7 @@ manager.add_option("-c", "--config", dest="config_path", required=False)
 
 migrate = Migrate(create_app)
 
-fips.instance.maybe_enable_fips()
+fips.instance.must_enable_fips_if_needed()
 
 REQUIRED_VARIABLES = [
     "LEMUR_SECURITY_TEAM_EMAIL",

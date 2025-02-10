@@ -214,14 +214,35 @@ class OpensslFipsStatus:
         """Enables FIPS mode for the current OpenSSL (as dynamically loaded by Python)."""
         return self._load_fips_provider() and self._default_properties_enable_fips()
 
-    def maybe_enable_fips(self) -> bool:
+    def must_enable_fips_if_needed(self) -> bool:
         """Enables FIPS mode for the current OpenSSL if FIPS_ENABLED env var is set to true."""
-        if os.environ.get("FIPS_ENABLED", "false").lower().strip() == "true":
-            self.enable_fips()
-        if self.check_fips_enabled():
-            logging.info("FIPS mode enabled")
-            return True
-        return False
+        logging.info("Enabling FIPS mode on OpenSSL if needed...")
+
+        version_info_debug = self.debug_openssl_version()
+        logging.info("openssl_version_info = [%s]", version_info_debug)
+
+        fips_status_debug = self.debug_fips_status()
+        logging.info("openssl_fips_status = [%s]", fips_status_debug)
+
+        must_enable_fips = os.environ.get("FIPS_ENABLED", "false").lower().strip() == "true"
+        if must_enable_fips:
+            logging.info(
+                "Detected that FIPS mode on OpenSSL is needed, attempting to enable..."
+            )
+            enable_fips_result = self.enable_fips()
+            logging.info("enable_fips_result = [%s]", enable_fips_result)
+            if enable_fips_result:
+                logging.info("FIPS mode on OpenSSL successfully enabled")
+                fips_status_debug = self.debug_fips_status()
+                logging.info("openssl_fips_status = [%s]", fips_status_debug)
+                return True
+            logging.error(
+                "Failed to enable FIPS mode on OpenSSL. Potentially unsafe and inconsistent state. Exiting."
+            )
+            sys.exit(1)
+        else:
+            logging.info("FIPS mode on OpenSSL is NOT needed, it will NOT be enabled...")
+            return False
 
 
 instance = OpensslFipsStatus()
