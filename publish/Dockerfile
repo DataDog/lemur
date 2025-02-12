@@ -28,7 +28,7 @@ RUN npm config set registry http://registry.npmjs.org/ && \
     npm install npm -g && \
     echo "Running with nodejs:" && node -v && \
     python3 -m venv /opt/venv && \
-    echo "Running with python:" && /opt/venv/bin/python3 -c 'import platform; print(platform.python_version())' && \
+    echo "Running with python:" && /opt/venv/bin/python3 -c 'import sys, platform; print("sys.platform == {}, platform.machine == {}, platform.python_version == {}".format(sys.platform, platform.machine(), platform.python_version()))' && \
     /opt/venv/bin/python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
     # ddtrace is required to automatically instrument lemur to emit traces
     /opt/venv/bin/python3 -m pip install --no-cache-dir ddtrace && \
@@ -40,6 +40,10 @@ RUN npm config set registry http://registry.npmjs.org/ && \
     node_modules/.bin/gulp --cwd /opt/lemur package && \
     npm cache clean --force && \
     rm -rf node_modules
+
+# Install requirement overrides. Required for FIPS mode.
+RUN echo "Installing requirement overrides:" && /opt/venv/bin/python3 -c 'import sys, platform; print("sys.platform == {}, platform.machine == {}, platform.python_version == {}".format(sys.platform, platform.machine(), platform.python_version()))'
+RUN /opt/venv/bin/python3 -m pip install --no-cache-dir --no-deps --force-reinstall -r requirements-overrides.txt
 
 # Lemur Application
 FROM $BASE_IMAGE
