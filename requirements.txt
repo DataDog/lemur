@@ -148,6 +148,8 @@ cryptography==43.0.1
     #   requests-ntlm
 ddtrace==2.16.0
     # via cert-orchestration-adapter
+dd_internal_authentication==1.7.1
+    # via cert-orchestration-adapter
 deprecated==1.2.14
     # via
     #   limits
