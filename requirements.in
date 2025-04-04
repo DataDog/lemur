@@ -14,11 +14,13 @@ boto3
 botocore
 celery[redis]
 cert_manager
+cert_orchestration_adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.17-py3-none-any.whl
 certbot
 certifi
 certsrv[ntlm]
 CloudFlare
 cryptography==43.0.1 # Must keep `cryptography` pinned to the same version as `requirements-overrides.txt` for FIPS support.
+dd_internal_authentication @ https://binaries.ddbuild.io/dd-source/python/dd_internal_authentication-1.7.1-py2.py3-none-any.whl
 dnspython == 2.6.1
 dnspython3
 dyn
@@ -38,7 +40,6 @@ google-cloud-compute
 google-cloud-private-ca
 grpcio >= 1.62.0 # (VULN-7774)
 gunicorn
-https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.17-py3-none-any.whl
 hvac # required for the vault destination plugin
 importlib-metadata==8.5.0
 inflection
