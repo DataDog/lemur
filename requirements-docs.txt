@@ -243,10 +243,6 @@ ddtrace==2.16.0
     # via
     #   -r requirements-tests.txt
     #   cert-orchestration-adapter
-dd_internal_authentication==1.7.1
-    # via
-    #   -r requirements-tests.txt
-    #   cert-orchestration-adapter
 deprecated==1.2.14
     # via
     #   -r requirements-tests.txt
