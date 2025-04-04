@@ -35,6 +35,7 @@ RUN npm config set registry http://registry.npmjs.org/ && \
     /opt/venv/bin/python3 -m pip install --no-cache-dir -e . && \
     # install the statsd plugin required to emit metrics to datadog
     /opt/venv/bin/python3 -m pip install --no-cache-dir -e /opt/lemur/lemur/plugins/lemur_statsd && \
+    /opt/venv/bin/python3 -m pip install --no-cache-dir dd_internal_authentication && \
     npm install --unsafe-perm && \
     node_modules/.bin/gulp --cwd /opt/lemur build && \
     node_modules/.bin/gulp --cwd /opt/lemur package && \
