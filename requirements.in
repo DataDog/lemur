@@ -71,5 +71,5 @@ types-protobuf
 urllib3 >= 1.26.19 # (VULN-7275)
 validators
 werkzeug >= 3.0.3 # (VULN-6679)
-xmltodict
+xmltodict # testing
 zipp >= 3.19.1 # (VULN-7514)
