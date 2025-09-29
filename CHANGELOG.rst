@@ -1,6 +1,12 @@
 Changelog
 =========
 
+1.2.4 - `2025-09-29`
+~~~~~~~~~~~~~~~~~~~~
+
+Re-ran precommits and fixing issues with getting images signed.
+
+
 1.2.3 - `2024-11-12`
 ~~~~~~~~~~~~~~~~~~~~
 
