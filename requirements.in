@@ -33,7 +33,6 @@ flask-Script==2.0.5
 Flask-SQLAlchemy
 Flask<3  # until https://github.com/pytest-dev/pytest-flask/pull/168 is released
 flask_replicated
-future
 google-cloud-compute
 google-cloud-private-ca
 grpcio >= 1.62.0 # (VULN-7774)
@@ -72,5 +71,5 @@ types-protobuf
 urllib3 >= 1.26.19 # (VULN-7275)
 validators
 werkzeug >= 3.0.3 # (VULN-6679)
-xmltodict
+xmltodict # testing
 zipp >= 3.19.1 # (VULN-7514)
