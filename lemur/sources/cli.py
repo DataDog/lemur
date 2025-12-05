@@ -394,7 +394,7 @@ def sync_source_destination(labels):
     """
     destinations = validate_destinations(labels)
     for destination in destinations:
-        if source_service.add_aws_destination_to_sources(destination):
+        if source_service.add_destination_to_sources(destination):
             info_text = f"[+] New source added: {destination.label}.\n"
             print(info_text)
             current_app.logger.warning(info_text)
@@ -464,3 +464,22 @@ def enable_cloudfront(source_label):
     except ValidationError as e:
         print(f"[+] Error: {str(e)}")
         sys.exit(1)
+
+
+def recreate_sources_from_destinations():
+    """
+    This command will recreate all sources from destinations.
+    """
+    sources = source_service.get_all()
+    for source in sources:
+        if source_service.delete(source.id):
+            info_text = f"[+] Source deleted: {source.label}.\n"
+            print(info_text)
+            current_app.logger.warning(info_text)
+
+    destinations = dest_service.get_all()
+    for destination in destinations:
+        if source_service.add_destination_to_sources(destination):
+            info_text = f"[+] New source added: {destination.label}.\n"
+            print(info_text)
+            current_app.logger.warning(info_text)
