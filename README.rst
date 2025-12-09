@@ -31,3 +31,45 @@ Project resources
 - `Source code <https://github.com/netflix/lemur>`_
 - `Issue tracker <https://github.com/netflix/lemur/issues>`_
 - `Docker <https://github.com/Netflix/lemur-docker>`_
+
+
+Local Development and Testing
+==============================
+
+Prerequisites
+-------------
+
+- Python 3.9
+- Node.js and npm (for frontend build)
+- Docker (for PostgreSQL database)
+
+Setup
+-----
+
+1. Create and activate a virtual environment::
+
+    python3 -m venv venv
+    source venv/bin/activate
+
+2. Start PostgreSQL database::
+
+    docker compose up -d postgres
+
+3. Install dependencies and build frontend::
+
+    make develop
+
+   This command will install npm dependencies, Python dependencies in development mode, and build frontend assets with gulp.
+
+Running Tests
+-------------
+
+Set the database connection string and run tests::
+
+    export SQLALCHEMY_DATABASE_URI=postgresql://lemur:lemur@localhost:5432/lemur
+    pytest lemur/tests/test_sources.py -v
+
+Run the full test suite::
+
+    export SQLALCHEMY_DATABASE_URI=postgresql://lemur:lemur@localhost:5432/lemur
+    make test-python
