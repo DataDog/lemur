@@ -99,7 +99,6 @@ gulp.task('dev:styles', function () {
   let fileList = [
     'bower_components/bootswatch/sandstone/bootswatch.less',
     'bower_components/fontawesome/css/font-awesome.css',
-    'bower_components/angular-chart.js/dist/angular-chart.css',
     'bower_components/angular-loading-bar/src/loading-bar.css',
     'bower_components/angular-ui-switch/angular-ui-switch.css',
     'bower_components/angular-wizard/dist/angular-wizard.css',
