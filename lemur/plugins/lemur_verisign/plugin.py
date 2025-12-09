@@ -169,7 +169,6 @@ def handle_response(content):
     :return: :raise Exception:
     """
     d = xmltodict.parse(content)
-    global VERISIGN_ERRORS
     if d.get("Error"):
         status_code = d["Error"]["StatusCode"]
     elif d.get("Response"):
