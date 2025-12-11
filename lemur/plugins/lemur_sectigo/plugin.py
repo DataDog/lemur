@@ -4,7 +4,7 @@ import requests
 
 from cert_manager import Client, Organization, PendingError, SSL
 from flask import current_app
-from lemur.common.utils import validate_conf
+from lemur.common.utils import validate_conf, parse_certificate
 from lemur.plugins.bases import IssuerPlugin
 from retrying import retry
 
@@ -119,10 +119,11 @@ def _collect_certificate(cert_id, ssl_client):
         current_app.logger.info({"message": "Collecting certificate from Sectigo..."})
         cert_pem = ssl_client.collect(cert_id=cert_id, cert_format="pem")
         parts = pem.parse(cert_pem.encode("utf-8"))
-        ca_bundle = [str(c) for c in parts[:-1]]
-        ca_bundle.reverse()
-        ca_bundle = "".join(ca_bundle)
-        issued_cert = str(parts[-1])
+        parts = [str(c) for c in parts]
+        issued_cert = parts.pop()
+        parts.reverse()
+        # Don't include any self-signed (anchor/root CA) certs in the bundle
+        ca_bundle = "".join([c for c in parts if parse_certificate(c).issuer != parse_certificate(c).subject])
 
         return (
             issued_cert,
