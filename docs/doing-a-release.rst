@@ -3,8 +3,8 @@ Doing a release
 
 Doing a release of ``lemur`` is now mostly automated and consists of the following steps:
 
-* Raise a PR to add the release date and summary in the :doc:`/changelog`
-* Merge above PR and create a new `Github release <https://github.com/Datadog/lemur/releases>`_: set the tag starting with v, e.g., v0.9.0
+* Raise a PR to add the release date and summary in the [doc](../CHANGELOG.rst)
+* Merge above PR and create a new `Github release <https://github.com/Datadog/lemur/releases>`_: setting the tag like `1.0.0-dd.40`.
 * Change the Helm chart to pick up the new version
 
 Configuring Conductor/SDP to pick up the new version
