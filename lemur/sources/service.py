@@ -6,6 +6,7 @@
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
 
+from typing import Any
 import arrow
 from datetime import timedelta
 import copy
@@ -24,6 +25,7 @@ from lemur.endpoints import service as endpoint_service
 from lemur.endpoints.models import Endpoint
 from lemur.extensions import metrics
 from lemur.destinations import service as destination_service
+
 from lemur.certificates.schemas import CertificateUploadInputSchema
 from lemur.common.utils import find_matching_certificates_by_hash, parse_certificate
 from lemur.common.defaults import serial
@@ -551,23 +553,31 @@ def add_destination_to_sources(dst):
     source_titles = set()
     sources = get_all()
     for src in sources:
-        source_titles.add(src.title)
-
-    if destination_plugin.title in source_titles:
-        return False
-
-    destination_plugin = plugins.get(dst.plugin_name)
-    src_options = copy.deepcopy(
-        plugins.get(destination_plugin.sync_as_source_name).options
-    )
-    for option in src_options:
-        set_plugin_option(
-            option.name, get_plugin_option(option.name, dst.options), src_options
+        src_account_paths.add(
+            (
+                get_plugin_option("accountNumber", src.options),
+                get_plugin_option("path", src.options),
+            )
         )
-    create(
-        label=dst.label,
-        plugin_name=destination_plugin.sync_as_source_name,
-        options=src_options,
-        description=dst.description,
-    )
-    return True
+
+    if (account_number, path) not in src_account_paths:
+        src_options = copy.deepcopy(
+            plugins.get(destination_plugin.sync_as_source_name).options
+        )
+        set_plugin_option("accountNumber", account_number, src_options)
+        set_plugin_option("path", path, src_options)
+        # Set the right endpointType for cloudfront sources.
+        if (
+            get_plugin_option("endpointType", src_options) is not None
+            and path == "/cloudfront/"
+        ):
+            set_plugin_option("endpointType", "cloudfront", src_options)
+        create(
+            label=dst.label,
+            plugin_name=destination_plugin.sync_as_source_name,
+            options=src_options,
+            description=dst.description,
+        )
+        return True
+
+    return False
