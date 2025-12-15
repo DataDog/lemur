@@ -60,8 +60,36 @@ This repository contains multiple Dockerfiles for different purposes:
     Controlled by ``.gitlab-ci.yml`` via ``.campaigns/build_and_push_image.sh``
 
 
+Local Development and Testing
+==============================
+
+Prerequisites
+-------------
+
+- Python 3.10
+- Node.js and npm (for frontend build)
+- Docker (for PostgreSQL database)
+
+Setup
+-----
+
+1. Create and activate a virtual environment::
+
+    python3 -m venv venv
+    source venv/bin/activate
+
+2. Start PostgreSQL database::
+
+    docker compose up -d postgres
+
+3. Install dependencies and build frontend::
+
+    make develop
+
+   This command will install npm dependencies, Python dependencies in development mode, and build frontend assets with gulp.
+
 Running Tests
-=============
+-------------
 
 **With Docker:**
 
@@ -71,10 +99,13 @@ Running Tests
 
 **Without Docker:**
 
-.. code-block:: bash
+Set the database connection string and run tests::
 
-    # Requires PostgreSQL running locally
+    export SQLALCHEMY_DATABASE_URI=postgresql://lemur:lemur@localhost:5432/lemur
+    pytest lemur/tests/test_sources.py -v
+
+Run the full test suite::
+
     export SQLALCHEMY_DATABASE_URI=postgresql://lemur:lemur@localhost:5432/lemur
     make test            # Run linting and tests
     make test-python     # Run Python tests only
-    pytest -v            # Run tests with verbose output
