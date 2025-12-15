@@ -63,49 +63,62 @@ This repository contains multiple Dockerfiles for different purposes:
 Local Development and Testing
 ==============================
 
-Prerequisites
--------------
+Development with Docker (Recommended)
+--------------------------------------
 
-- Python 3.10
-- Node.js and npm (for frontend build)
-- Docker (for PostgreSQL database)
+The fastest way to get started. Uses containerized environments matching production.
 
-Setup
------
-
-1. Create and activate a virtual environment::
-
-    python3 -m venv venv
-    source venv/bin/activate
-
-2. Start PostgreSQL database::
-
-    docker compose up -d postgres
-
-3. Install dependencies and build frontend::
-
-    make develop
-
-   This command will install npm dependencies, Python dependencies in development mode, and build frontend assets with gulp.
-
-Running Tests
--------------
-
-**With Docker:**
+**Run tests:**
 
 .. code-block:: bash
 
     docker compose up test
 
-**Without Docker:**
+**Start local dev environment:**
 
-Set the database connection string and run tests::
+.. code-block:: bash
 
-    export SQLALCHEMY_DATABASE_URI=postgresql://lemur:lemur@localhost:5432/lemur
-    pytest lemur/tests/test_sources.py -v
+    cd docker && docker compose up
 
-Run the full test suite::
+Access at http://localhost:8087 (HTTP) or https://localhost:8447 (HTTPS)
+
+Development without Docker
+---------------------------
+
+For local development without containers. Requires Python 3.10 installed on your system.
+
+**Prerequisites:**
+
+- Python 3.10 (verify with ``python3 --version``)
+- Node.js 18 and npm (for frontend build)
+- PostgreSQL (can use Docker for just the database)
+
+**Setup:**
+
+1. Create and activate a virtual environment with Python 3.10::
+
+    python3 -m venv venv
+    source venv/bin/activate
+
+2. Verify Python version::
+
+    python --version  # Should show Python 3.10.x
+
+3. Start PostgreSQL database::
+
+    docker compose up -d postgres
+
+4. Install dependencies and build frontend::
+
+    make develop
+
+   This installs npm dependencies, Python dependencies in development mode, and builds frontend assets with gulp.
+
+**Run tests:**
+
+.. code-block:: bash
 
     export SQLALCHEMY_DATABASE_URI=postgresql://lemur:lemur@localhost:5432/lemur
     make test            # Run linting and tests
     make test-python     # Run Python tests only
+    pytest -v            # Run tests with verbose output
