@@ -23,8 +23,8 @@ services:
       - lemur-env
       - pgsql-env
     ports:
-      - 127.0.0.1:87:80
-      - 127.0.0.1:447:443
+      - "8087:80"
+      - "8447:443"
 
   redis:
     image: "redis:alpine3.12"

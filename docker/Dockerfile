@@ -1,4 +1,4 @@
-FROM python:3.9-alpine
+FROM ubuntu:22.04
 
 ARG VERSION
 ARG URLCONTEXT
@@ -7,34 +7,53 @@ ENV uid 1337
 ENV gid 1337
 ENV user lemur
 ENV group lemur
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN addgroup -S ${group} -g ${gid}
-RUN adduser -D -S ${user} -G ${group} -u ${uid}
-RUN apk add --no-cache --update python3 py-pip libldap postgresql-client nginx supervisor curl tzdata openssl bash build-base libstdc++ libc6-compat
-RUN apk --update add --virtual build-dependencies autoconf \
-                automake \
-                bash \
-                busybox-extras \
-                cargo \
-                curl \
-                cyrus-sasl-dev \
-                gcc \
-                git \
-                libffi-dev \
-                libpq-dev \
-                libtool \
-                libtool \
-                libxml2-dev \
-                make \
-                musl-dev \
-                nasm  \
-                npm \
-                openldap-dev \
-                postgresql-dev \
-                python3-dev \
-                python3-dev \
-                tar \
-                zlib-dev
+# Create user and group
+RUN groupadd -g ${gid} ${group} && \
+    useradd -u ${uid} -g ${gid} -m -s /bin/bash ${user}
+
+# Install Node.js 18 (matching production setup)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -sL https://deb.nodesource.com/setup_18.x | bash -
+
+# Install Python and all dependencies (matching production)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python runtime
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-venv \
+    # Runtime dependencies
+    libldap-2.5-0 \
+    libsasl2-2 \
+    postgresql-client \
+    nginx \
+    supervisor \
+    curl \
+    tzdata \
+    openssl \
+    bash \
+    cron \
+    # Build dependencies
+    build-essential \
+    autoconf \
+    automake \
+    cargo \
+    git \
+    libffi-dev \
+    libpq-dev \
+    libldap2-dev \
+    libsasl2-dev \
+    libxml2-dev \
+    libssl-dev \
+    make \
+    nasm \
+    nodejs \
+    tar && \
+    rm -rf /var/lib/apt/lists/*
+
 USER root
 RUN mkdir -p /opt/lemur /opt/lemur/lemur /home/lemur/.lemur
 COPY docker/lemur-dev.tar.gz /opt/lemur
@@ -51,7 +70,7 @@ COPY docker/nginx/nginx.conf /etc/nginx/
 COPY docker/nginx/default.conf /etc/nginx/conf.d/
 COPY docker/nginx/default-ssl.conf /etc/nginx/conf.d/
 
-RUN echo "Running with python:" && python -c 'import platform; print(platform.python_version())'
+RUN echo "Running with python:" && python3 -c 'import platform; print(platform.python_version())'
 RUN echo "Running with nodejs:" && node -v
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
@@ -61,7 +80,24 @@ RUN npm install --unsafe-perm
 RUN pip3 install --no-cache-dir -e .
 RUN node_modules/.bin/gulp build
 RUN node_modules/.bin/gulp package --urlContextPath=${URLCONTEXT}
-RUN apk del build-dependencies
+
+# Clean up build dependencies to reduce image size
+RUN apt-get purge -y --auto-remove \
+    build-essential \
+    autoconf \
+    automake \
+    cargo \
+    git \
+    libffi-dev \
+    libpq-dev \
+    libldap2-dev \
+    libsasl2-dev \
+    libxml2-dev \
+    libssl-dev \
+    make \
+    nasm && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[dev]"
 RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[tests]"
 
