@@ -18,7 +18,8 @@ endif
 	pip install -e "file://`pwd`#egg=lemur[tests]"
 	node_modules/.bin/gulp build
 	node_modules/.bin/gulp package --urlContextPath=$(urlContextPath)
-	tar --exclude='htmlcov' \
+	tar --exclude='._*' \
+		--exclude='htmlcov' \
 		--exclude='cover' \
 		--exclude='build' \
 		--exclude='dist' \
