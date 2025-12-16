@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
     software-properties-common \
     curl \
-    ca-certificates && \
+    ca-certificates \
+    git && \
     curl -sL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs libldap2-dev libsasl2-dev libssl-dev libpq-dev && \
     rm -rf /var/lib/apt/lists/*
