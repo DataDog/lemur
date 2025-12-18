@@ -23,7 +23,7 @@ dnspython == 2.6.1
 dnspython3
 dyn
 Flask-Bcrypt
-Flask-Cors >= 4.0.0 # (VULN-6645)
+Flask-Cors >= 6.0.0 # CVE-2024-6839, CVE-2024-6844, CVE-2024-6866
 Flask-Limiter
 Flask-Mail
 Flask-Migrate <= 2.7.0
@@ -37,12 +37,13 @@ google-cloud-compute
 google-cloud-private-ca
 grpcio >= 1.62.0 # (VULN-7774)
 gunicorn
+h11 >= 0.16.0 # CVE-2025-43859
 https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.26-py3-none-any.whl
 hvac # required for the vault destination plugin
 importlib-metadata==8.5.0
 inflection
 itsdangerous
-jinja2 >= 3.1.4 # (VULN-6686)
+jinja2 >= 3.1.6 # CVE-2024-56201, CVE-2024-56326, CVE-2025-27516
 lockfile
 logmatic-python
 markupsafe == 2.1.5
@@ -56,10 +57,10 @@ psycopg2
 pyjks
 pyjwt >= 2.4.0 # (CVE-2022-29217)
 pyOpenSSL
-python_ldap
+python_ldap >= 3.4.5  # CVE-2025-61911, CVE-2025-61912
 pyyaml
 redis
-requests >= 2.32.0 # (VULN-6901)
+requests >= 2.32.4 # CVE-2024-47081
 retrying
 sentry-sdk >= 2.8.0 # (VULN-7698)
 simplejson

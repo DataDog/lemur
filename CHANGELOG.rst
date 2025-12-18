@@ -1,6 +1,24 @@
 Changelog
 =========
 
+1.0.0-dd.42 - `2025-12-17`
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This release addresses security vulnerabilities tracked in https://datadoghq.atlassian.net/browse/SVBD-341
+
+Security fixes:
+- CVE-2023-30797 (GHSA-5fqv-mpj8-h7gm): Fixed insecure random generation by replacing random module with secrets module for cryptographic operations
+- Updated python-ldap to 3.4.5 (CVE-2025-61911, CVE-2025-61912)
+- Updated jinja2 to 3.1.6 (CVE-2024-56201, CVE-2024-56326, CVE-2025-27516)
+- Updated requests to 2.32.5 (CVE-2024-47081)
+- Updated h11 to 0.16.0 (CVE-2025-43859)
+- Updated Flask-Cors to 6.0.2 (CVE-2024-6839, CVE-2024-6844, CVE-2024-6866)
+
+Frontend dependency updates:
+- Updated Angular from 1.4.9 to 1.8.0
+- Updated Chart.js from 1.0.2 to 2.9.4
+- Updated angular-chart.js from 0.8.8 to 1.1.1
+
 1.2.3 - `2024-11-12`
 ~~~~~~~~~~~~~~~~~~~~
 
