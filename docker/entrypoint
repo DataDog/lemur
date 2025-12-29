@@ -50,10 +50,17 @@ cron_revoked="${CRON_CHECK_REVOKED:-"0 22 * * *"}"
 cron_reissue="${CRON_REISSUE:-"0 23 * * *"}"
 
 echo " # Populating crontab"
-echo "${cron_notify} lemur notify expirations" > /etc/crontabs/lemur
-echo "${cron_sync} lemur source sync -s all" >> /etc/crontabs/lemur
-echo "${cron_revoked} lemur certificate check_revoked" >> /etc/crontabs/lemur
-echo "${cron_reissue} lemur certificate reissue -c" >> /etc/crontabs/lemur
+# Detect cron path (Alpine uses /etc/crontabs, Debian uses /var/spool/cron/crontabs)
+if [ -d "/var/spool/cron/crontabs" ]; then
+  CRON_DIR="/var/spool/cron/crontabs"
+else
+  CRON_DIR="/etc/crontabs"
+fi
+mkdir -p "$CRON_DIR"
+echo "${cron_notify} lemur notify expirations" > "$CRON_DIR/lemur"
+echo "${cron_sync} lemur source sync -s all" >> "$CRON_DIR/lemur"
+echo "${cron_revoked} lemur certificate check_revoked" >> "$CRON_DIR/lemur"
+echo "${cron_reissue} lemur certificate reissue -c" >> "$CRON_DIR/lemur"
 echo " # Done"
 
 exec "$@"

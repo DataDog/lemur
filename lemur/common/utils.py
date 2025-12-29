@@ -9,7 +9,7 @@
 
 import base64
 import json
-import random
+import secrets
 import re
 import socket
 import ssl
@@ -63,26 +63,26 @@ def get_psuedo_random_string():
     """
     Create a random and strongish challenge.
     """
-    challenge = "".join(random.choice(string.ascii_uppercase) for x in range(6))  # noqa
-    challenge += "".join(random.choice("~!@#$%^&*()_+") for x in range(6))  # noqa
-    challenge += "".join(random.choice(string.ascii_lowercase) for x in range(6))
-    challenge += "".join(random.choice(string.digits) for x in range(6))  # noqa
+    challenge = "".join(secrets.choice(string.ascii_uppercase) for x in range(6))  # noqa
+    challenge += "".join(secrets.choice("~!@#$%^&*()_+") for x in range(6))  # noqa
+    challenge += "".join(secrets.choice(string.ascii_lowercase) for x in range(6))
+    challenge += "".join(secrets.choice(string.digits) for x in range(6))  # noqa
     return challenge
 
 
 def get_random_secret(length):
     """Similar to get_pseudo_random_string, but accepts a length parameter."""
     secret_key = "".join(
-        random.choice(string.ascii_uppercase) for x in range(round(length / 4))
+        secrets.choice(string.ascii_uppercase) for x in range(round(length / 4))
     )
     secret_key = secret_key + "".join(
-        random.choice("~!@#$%^&*()_+") for x in range(round(length / 4))
+        secrets.choice("~!@#$%^&*()_+") for x in range(round(length / 4))
     )
     secret_key = secret_key + "".join(
-        random.choice(string.ascii_lowercase) for x in range(round(length / 4))
+        secrets.choice(string.ascii_lowercase) for x in range(round(length / 4))
     )
     return secret_key + "".join(
-        random.choice(string.digits) for x in range(round(length / 4))
+        secrets.choice(string.digits) for x in range(round(length / 4))
     )
 
 
