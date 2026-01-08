@@ -548,12 +548,12 @@ def add_destination_to_sources(dst):
     if not destination_plugin.sync_as_source:
         return False
 
-    source_titles = set()
+    source_labels = set()
     sources = get_all()
     for src in sources:
-        source_titles.add(src.title)
+        source_labels.add(src.label)
 
-    if destination_plugin.title in source_titles:
+    if dst.label in source_labels:
         return False
 
     destination_plugin = plugins.get(dst.plugin_name)
