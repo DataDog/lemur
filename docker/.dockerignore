@@ -1,3 +1,7 @@
+# macOS metadata files
+._*
+.DS_Store
+
 *-env
 docker-compose.yml
 Dockerfile

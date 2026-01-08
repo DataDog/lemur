@@ -13,8 +13,12 @@ LOG_LEVEL = str(os.environ.get("LOG_LEVEL", "DEBUG"))
 LOG_FILE = str(os.environ.get("LOG_FILE", "/home/lemur/.lemur/lemur.log"))
 LOG_JSON = True
 
-CORS = os.environ.get("CORS") == "True"
-debug = os.environ.get("DEBUG") == "True"
+if os.environ.get('ENV', 'prod') == 'dev':
+    CORS = True
+    DEBUG = True
+else:
+    CORS = os.environ.get("CORS") == "True"
+    DEBUG = os.environ.get("DEBUG") == "True"
 
 
 def get_random_secret(length):
@@ -167,9 +171,13 @@ CELERYBEAT_SCHEDULE = {
 CELERY_TIMEZONE = "UTC"
 
 SQLALCHEMY_ENABLE_FLASK_REPLICATED = False
-SQLALCHEMY_DATABASE_URI = os.environ.get(
-    "SQLALCHEMY_DATABASE_URI", "postgresql://lemur:lemur@localhost:5432/lemur"
-)
+# Build PostgreSQL connection from environment variables
+POSTGRES_USER = os.environ.get("POSTGRES_USER", "lemur")
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "lemur")
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
+POSTGRES_DB = os.environ.get("POSTGRES_DB", "lemur")
+SQLALCHEMY_DATABASE_URI = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 SQLALCHEMY_ECHO = True

@@ -1,7 +1,7 @@
 'use strict';
 
 var gulp = require('gulp'),
-  minifycss = require('gulp-minify-css'),
+  cleancss = require('gulp-clean-css'),
   concat = require('gulp-concat'),
   less = require('gulp-less'),
   gulpif = require('gulp-if'),
@@ -126,7 +126,7 @@ gulp.task('dev:styles', function () {
     })))
     .pipe(plumber())
     .pipe(concat('styles.css'))
-    .pipe(minifycss())
+    .pipe(cleancss())
     .pipe(autoprefixer('last 1 version'))
     .pipe(gulp.dest('.tmp/styles'))
     .pipe(size());
