@@ -56,7 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 USER root
 RUN mkdir -p /opt/lemur /opt/lemur/lemur /home/lemur/.lemur
-COPY docker/lemur-dev.tar.gz /opt/lemur
+COPY local/lemur-dev.tar.gz /opt/lemur
 
 WORKDIR /opt/lemur
 RUN tar -xvzf lemur-dev.tar.gz && \
@@ -66,11 +66,11 @@ RUN tar -xvzf lemur-dev.tar.gz && \
 RUN mkdir -p /run/nginx/ /etc/nginx/ssl/
 RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
 
-COPY docker/entrypoint /
-COPY docker/supervisor.conf /
-COPY docker/nginx/nginx.conf /etc/nginx/
-COPY docker/nginx/default.conf /etc/nginx/conf.d/
-COPY docker/nginx/default-ssl.conf /etc/nginx/conf.d/
+COPY local/entrypoint /
+COPY local/supervisor.conf /
+COPY local/nginx/nginx.conf /etc/nginx/
+COPY local/nginx/default.conf /etc/nginx/conf.d/
+COPY local/nginx/default-ssl.conf /etc/nginx/conf.d/
 
 RUN echo "Running with python:" && python3 -c 'import platform; print(platform.python_version())'
 RUN echo "Running with nodejs:" && node -v
@@ -103,7 +103,8 @@ RUN apt-get purge -y --auto-remove \
 RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[dev]"
 RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[tests]"
 
-COPY docker/src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
+COPY local/src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
+COPY local/create_default_authority.py /home/lemur/.lemur/create_default_authority.py
 RUN echo ${PWD} && ls -lR
 
 # Set LEMUR_CONF as a persistent environment variable
@@ -117,7 +118,7 @@ CMD curl --fail http://localhost:80/api/1/healthcheck | grep -q ok || exit 1
 RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/server.key -out /etc/nginx/ssl/server.crt -subj "/C=US/ST=NY/L=New York/O=Eng/CN=www.example.com"
 
 # Use this to stop the container in case of a crash loop and use
-# "docker exec -it docker-lemur-1 bash" to troubleshoot.
+# "docker exec -it local-lemur bash" to troubleshoot.
 # CMD ["tail", "-f", "/dev/null"]
 
 ENTRYPOINT ["/entrypoint"]

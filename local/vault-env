@@ -1,0 +1,15 @@
+# Vault configuration for local development
+VAULT_ENABLED=True
+VAULT_ADDR=http://vault:8200
+VAULT_TOKEN=dev-root-token
+VAULT_MOUNT=secret
+VAULT_PATH=lemur
+
+# JWT Authentication settings
+JWT_ENABLED=True
+JWT_AUTH_ENDPOINT=/api/1/auth/jwt
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_DELTA=3600
+
+# Vault KV version (v1 or v2)
+VAULT_KV_VERSION=v2

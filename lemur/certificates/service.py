@@ -501,6 +501,19 @@ def create(**kwargs):
     """
     Creates a new certificate.
     """
+    # Validate that we have required fields for certificate naming before proceeding
+    # This prevents errors later when generating the certificate name
+    common_name = kwargs.get("common_name", "")
+    extensions = kwargs.get("extensions", {})
+    sub_alt_names = extensions.get("sub_alt_names", {}).get("names", [])
+    
+    # Ensure we have either a common_name or at least one SAN entry
+    if not common_name or not common_name.strip():
+        if not sub_alt_names:
+            raise ValueError(
+                "Certificate creation requires either a common_name or at least one Subject Alternative Name (SAN)"
+            )
+    
     # Validate destinations do not overlap accounts for the same plugin
     if "destinations" in kwargs:
         dest_plugin_accounts = {}

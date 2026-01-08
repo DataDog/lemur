@@ -1,0 +1,46 @@
+# PostgreSQL configuration
+POSTGRES_USER=lemur
+POSTGRES_PASSWORD=12345
+POSTGRES_HOST=postgres
+POSTGRES_DB=lemur
+
+# Create default user and authority for local development only
+LEMUR_CREATE_DEFAULTS=true
+
+# Fixed JWT token secret for local development (DO NOT use in production!)
+# This allows for consistent, pre-generated tokens for integration testing
+LEMUR_TOKEN_SECRET=bG9jYWwtZGV2LXNlY3JldC1mb3ItdGVzdGluZy1vbmx5LWRvLW5vdC11c2UtaW4tcHJvZA==
+
+# Fixed encryption key for local development (DO NOT use in production!)
+# This allows the container to decrypt private keys after restarts
+LEMUR_ENCRYPTION_KEYS=2ryT1gsMantc_WigzJvz0EPxZBzKn1aK8WpzWE3RfRk=
+
+# ENV=dev enables CORS and DEBUG mode
+ENV=dev
+
+# Disable destination uploads for local development (allows linking without credentials)
+LEMUR_DISABLE_DESTINATION_UPLOADS=True
+
+# Commented out optional configs - uncomment to use
+# SKIP_SSL=1
+# LEMUR_DEFAULT_COUNTRY=
+# LEMUR_DEFAULT_STATE=
+# LEMUR_DEFAULT_LOCATION=
+# LEMUR_DEFAULT_ORGANIZATION=
+# LEMUR_DEFAULT_ORGANIZATIONAL_UNIT=
+# LEMUR_DEFAULT_ISSUER_PLUGIN=cryptography-issuer
+# LEMUR_DEFAULT_AUTHORITY=cryptography
+# MAIL_SERVER=mail.example.com
+# MAIL_PORT=25
+# LEMUR_EMAIL=lemur@example.com
+# LEMUR_SECURITY_TEAM_EMAIL=['team@example.com']
+# LEMUR_ENCRYPTION_KEYS=['']
+# LDAP_DEBUG=True
+# LDAP_AUTH=True
+# LDAP_BIND_URI=ldap://example.com
+# LDAP_BASE_DN=DC=example,DC=com
+# LDAP_EMAIL_DOMAIN=example.com
+# LDAP_USE_TLS=False
+# LDAP_REQUIRED_GROUP=certificate-management-admins
+# LDAP_GROUPS_TO_ROLES={'certificate-management-admins': 'admin', 'Team': 'team@example.com'}
+# LDAP_IS_ACTIVE_DIRECTORY=False

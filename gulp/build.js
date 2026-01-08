@@ -47,8 +47,9 @@ function stringSrc(filename, string) {
 }
 
 gulp.task('clean', function (done) {
-  del(['.tmp', 'lemur/static/dist'], done);
-  done();
+  del(['.tmp', 'lemur/static/dist']).then(function() {
+    done();
+  });
 });
 
 gulp.task('default', gulp.series(['clean'], function () {
@@ -234,6 +235,8 @@ gulp.task('package:strip', function () {
 });
 
 gulp.task('addUrlContextPath:revision', function () {
+  // Process CSS and JS files for revision
+  // The cleanup task (package:clean-revised) runs first to remove corrupted files
   return gulp.src(['lemur/static/dist/**/*.css', 'lemur/static/dist/**/*.js'])
     .pipe(rev())
     .pipe(gulp.dest('lemur/static/dist'))
@@ -257,4 +260,14 @@ gulp.task('addUrlContextPath', gulp.series(['addUrlContextPath:revreplace'], fun
 }));
 
 gulp.task('build', gulp.series(['build:images', 'build:fonts', 'build:html', 'build:extras']));
-gulp.task('package', gulp.series(['addUrlContextPath', 'package:strip']));
+// Clean revised files before packaging to prevent hash accumulation
+gulp.task('package:clean-revised', function (done) {
+  // Remove files with multiple hashes (corrupted from previous builds)
+  del([
+    'lemur/static/dist/**/*-*-*.css',
+    'lemur/static/dist/**/*-*-*.js'
+  ]).then(function() {
+    done();
+  });
+});
+gulp.task('package', gulp.series(['package:clean-revised', 'addUrlContextPath', 'package:strip']));
