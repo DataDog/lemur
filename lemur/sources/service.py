@@ -69,6 +69,9 @@ def sync_update_destination(certificate, source):
                 break
         else:
             certificate.destinations.append(dest)
+            current_app.logger.info(
+                f"Added destination {source.label} for {certificate.name} during source sync"
+            )
 
 
 def sync_endpoints(source):
