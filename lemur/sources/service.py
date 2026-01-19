@@ -565,7 +565,7 @@ def add_destination_to_sources(dst):
     )
     for option in src_options:
         set_plugin_option(
-            option.name, get_plugin_option(option.name, dst.options), src_options
+            option['name'], get_plugin_option(option['name'], dst.options), src_options
         )
     create(
         label=dst.label,

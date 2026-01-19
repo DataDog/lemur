@@ -13,7 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN groupadd -g ${gid} ${group} && \
     useradd -u ${uid} -g ${gid} -m -s /bin/bash ${user}
 
-# Install Node.js 18 (matching production setup)
+# Install Node.js 18 (using gulp-clean-css instead of deprecated gulp-minify-css)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ca-certificates && \
     curl -sL https://deb.nodesource.com/setup_18.x | bash -
@@ -59,7 +59,9 @@ RUN mkdir -p /opt/lemur /opt/lemur/lemur /home/lemur/.lemur
 COPY docker/lemur-dev.tar.gz /opt/lemur
 
 WORKDIR /opt/lemur
-RUN tar -xvzf lemur-dev.tar.gz
+RUN tar -xvzf lemur-dev.tar.gz && \
+    find . -name '._*' -type f -delete && \
+    find . -name '.DS_Store' -type f -delete
 
 RUN mkdir -p /run/nginx/ /etc/nginx/ssl/
 RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
@@ -103,6 +105,9 @@ RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[tests]"
 
 COPY docker/src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
 RUN echo ${PWD} && ls -lR
+
+# Set LEMUR_CONF as a persistent environment variable
+ENV LEMUR_CONF=/home/lemur/.lemur/lemur.conf.py
 
 RUN chmod +x /entrypoint
 WORKDIR /

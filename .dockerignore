@@ -1,0 +1,40 @@
+# macOS metadata files
+._*
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info
+dist
+build
+*.so
+.cache
+
+# Node
+node_modules
+npm-debug.log*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Testing
+.coverage
+.pytest_cache
+htmlcov
+
+# Documentation
+docs/_build
+
+

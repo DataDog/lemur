@@ -46,6 +46,8 @@ endif
 		--exclude='docker/lemur-dev.tar.gz' \
 		--exclude='docs/_build' \
 		--exclude='lemur/tests/tmp' \
+		--exclude='._*' \
+		--exclude='.DS_Store' \
 		-cvzf ./.tmp/lemur-dev.tar.gz . 1>/dev/null 1>/dev/null
 	mv ./.tmp/lemur-dev.tar.gz ./docker/
 	rm -rf build/

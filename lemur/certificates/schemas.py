@@ -48,6 +48,26 @@ from lemur.schemas import (
 from lemur.users.schemas import UserNestedOutputSchema
 
 
+def remove_body_for_non_admins(data):
+    """
+    Remove certificate body from response data for non-admin users.
+    This is a shared utility function used by multiple schema classes.
+
+    :param data: The serialized certificate data dictionary
+    :return: The modified data dictionary with body removed if user is not admin
+    """
+    from flask import g
+
+    if hasattr(g, 'current_user') and g.current_user:
+        user_roles = [role.name for role in g.current_user.roles]
+        if 'admin' not in user_roles:
+            data.pop('body', None)
+    else:
+        data.pop('body', None)
+
+    return data
+
+
 class CertificateSchema(LemurInputSchema):
     owner = fields.Email(required=True)
     description = fields.String(missing="", allow_none=True)
@@ -278,7 +298,7 @@ class CertificateNestedOutputSchema(LemurOutputSchema):
     status = fields.String()
 
     bits = fields.Integer()
-    body = fields.String()
+    body = fields.String()  # Only shown to admin users (removed in post_dump)
     chain = fields.String()
     csr = fields.String()
     active = fields.Boolean()
@@ -299,6 +319,11 @@ class CertificateNestedOutputSchema(LemurOutputSchema):
 
     issuer = fields.Nested(AuthorityNestedOutputSchema)
 
+    @post_dump
+    def filter_body(self, data):
+        """Remove certificate body for non-admin users"""
+        return remove_body_for_non_admins(data)
+
 
 class CertificateCloneSchema(LemurOutputSchema):
     __envelope__ = False
@@ -310,7 +335,7 @@ class CertificateOutputSchema(LemurOutputSchema):
     id = fields.Integer()
     external_id = fields.String()
     bits = fields.Integer()
-    body = fields.String()
+    body = fields.String()  # Only shown to admin users (removed in post_dump)
     chain = fields.String()
     csr = fields.String()
     deleted = fields.Boolean(default=False)
@@ -395,6 +420,9 @@ class CertificateOutputSchema(LemurOutputSchema):
         for field in subject_details:
             if field in data and data[field] is None:
                 data.pop(field)
+
+        # Remove certificate body for non-admin users
+        return remove_body_for_non_admins(data)
 
 
 class CertificateShortOutputSchema(LemurOutputSchema):
