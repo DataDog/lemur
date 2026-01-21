@@ -42,7 +42,7 @@ SECRET_KEY = repr(os.environ.get("SECRET_KEY", get_random_secret(32).encode("utf
 # You should consider storing these separately from your config
 # If LEMUR_TOKEN_SECRET is provided via environment, use it directly
 # Otherwise generate a random one and wrap with repr()
-if os.environ.get("LEMUR_TOKEN_SECRET"):
+if os.environ.get('ENV', 'prod') == 'dev':
     LEMUR_TOKEN_SECRET = os.environ.get("LEMUR_TOKEN_SECRET")
 else:
     LEMUR_TOKEN_SECRET = repr(base64.b64encode(get_random_secret(32).encode("utf8")))

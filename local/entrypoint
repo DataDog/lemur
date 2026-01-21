@@ -32,8 +32,9 @@ echo " # Running init"
 su lemur -s /bin/bash -c "cd /opt/lemur/lemur; lemur init -p ${LEMUR_ADMIN_PASSWORD}"
 echo " # Done"
 
-# Only create default user in local development (set CREATE_DEFAULT_USER=true)
-if [ "${LEMUR_CREATE_DEFAULT_USER}" = "true" ]; then
+# Only create default user and authority in local development (set LEMUR_CREATE_DEFAULTS=true)
+if [ "${LEMUR_CREATE_DEFAULTS}" = "true" ]; then
+  echo " # Creating default user if not exists"
   # Check if user exists, if not create it
   if ! su lemur -s /bin/bash -c "PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -tAc \"SELECT 1 FROM users WHERE username='user'\"" | grep -q 1; then
     su lemur -s /bin/bash -c "cd /opt/lemur/lemur; lemur create_user -u user -e user@email.com -p pass -r admin"
@@ -41,6 +42,11 @@ if [ "${LEMUR_CREATE_DEFAULT_USER}" = "true" ]; then
   else
     echo " # Default user 'user' already exists"
   fi
+  
+  echo " # Creating default authority if not exists"
+  # Create TestCA authority using Python script
+  su lemur -s /bin/bash -c "cd /opt/lemur; python3 /home/lemur/.lemur/create_default_authority.py"
+  echo " # Done"
 fi
 
 

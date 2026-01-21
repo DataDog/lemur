@@ -15,11 +15,6 @@ def text_to_slug(value, joiner="-"):
     Normalize a string to a "slug" value, stripping character accents and removing non-alphanum characters.
     A series of non-alphanumeric characters is replaced with the joiner character.
     """
-    # Ensure value is a string
-    if value is None:
-        value = "UNKNOWN"
-    if not isinstance(value, str):
-        value = str(value)
 
     # Strip all character accents: decompose Unicode characters and then drop combining chars.
     value = "".join(
@@ -57,35 +52,15 @@ def certificate_name(common_name, issuer, not_before, not_after, san, domains=[]
 
     if common_name and common_name.strip():
         subject = common_name
-    elif len(domains) and domains[0].name:
+    elif len(domains):
         subject = domains[0].name
-    else:
-        # Fallback if no common_name or domains
-        subject = "UNKNOWN"
 
-    # Ensure all values are strings to avoid None concatenation errors
-    issuer_str = issuer.replace(" ", "") if issuer else "UNKNOWN"
-    not_before_str = not_before.strftime("%Y%m%d") if not_before else "00000000"
-    not_after_str = not_after.strftime("%Y%m%d") if not_after else "00000000"
-    
-    # Ensure subject is a string (should already be set above, but double-check)
-    if not subject or not isinstance(subject, str):
-        subject = "UNKNOWN"
-    
-    try:
-        temp = t.format(
-            subject=subject,
-            issuer=issuer_str,
-            not_before=not_before_str,
-            not_after=not_after_str,
-        )
-    except (KeyError, AttributeError, TypeError) as e:
-        # Fallback if template formatting fails
-        current_app.logger.warning(f"Certificate name template formatting failed: {e}")
-        temp = f"{subject}-{issuer_str}-{not_before_str}-{not_after_str}"
-
-    if not temp:
-        temp = f"{subject}-{issuer_str}-{not_before_str}-{not_after_str}"
+    temp = t.format(
+        subject=subject,
+        issuer=issuer.replace(" ", ""),
+        not_before=not_before.strftime("%Y%m%d"),
+        not_after=not_after.strftime("%Y%m%d"),
+    )
 
     temp = temp.replace("*", "WILDCARD")
     return text_to_slug(temp)

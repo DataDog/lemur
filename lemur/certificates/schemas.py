@@ -165,12 +165,6 @@ class CertificateInputSchema(CertificateCreationSchema):
 
     @post_load
     def validate_common_name(self, data):
-        # Validate that we have either a common_name or SAN entries
-        # This validation happens early to prevent errors during certificate creation
-        common_name = data.get("common_name", "")
-        extensions = data.get("extensions", {})
-        sub_alt_names = extensions.get("sub_alt_names", {}).get("names", [])
-        
         if (
             data["authority"]
             and (not data["authority"].is_cn_optional)
@@ -179,16 +173,12 @@ class CertificateInputSchema(CertificateCreationSchema):
             raise ValidationError("Missing common_name")
 
         if (
-            len(sub_alt_names) == 0
-            and (not common_name or common_name.strip() == "")
+            len(data["extensions"]["sub_alt_names"]["names"]) == 0
+            and data["common_name"] == ""
         ):
             raise ValidationError(
                 "Missing common_name, either CN or SAN must be present"
             )
-        
-        # Ensure common_name is not None - convert empty string to empty string explicitly
-        if data.get("common_name") is None:
-            data["common_name"] = ""
 
     @pre_load
     def load_data(self, data):

@@ -19,7 +19,6 @@ endif
 	node_modules/.bin/gulp build
 	node_modules/.bin/gulp package --urlContextPath=$(urlContextPath)
 	tar --exclude='._*' \
-		--exclude='._*' \
 		--exclude='.DS_Store' \
 		--exclude='.git' \
 		--exclude='.tmp/lemur-dev.tar.gz' \
@@ -46,8 +45,6 @@ endif
 		--exclude='node_modules' \
 		--exclude='venv' \
 		--exclude='wheelhouse' \
-		--exclude='._*' \
-		--exclude='.DS_Store' \
 		-cvzf ./.tmp/lemur-dev.tar.gz . 1>/dev/null 1>/dev/null
 	mv ./.tmp/lemur-dev.tar.gz ./local/
 	rm -rf build/
