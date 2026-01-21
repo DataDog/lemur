@@ -1,6 +1,5 @@
 volumes:
   pg_data: { }
-  vault_data: { }
 
 services:
   postgres:
@@ -12,28 +11,6 @@ services:
     env_file:
       - pgsql-env
 
-  vault:
-    container_name: local-vault
-    image: "hashicorp/vault:latest"
-    restart: on-failure
-    ports:
-      - "8200:8200"
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: "dev-root-token"
-      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-      VAULT_ADDR: "http://0.0.0.0:8200"
-    cap_add:
-      - IPC_LOCK
-    volumes:
-      - vault_data:/vault/data
-      - ./vault-init.sh:/vault/init.sh:ro
-    command: server -dev
-    healthcheck:
-      test: ["CMD", "vault", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   lemur:
     container_name: local-lemur
     image: "lemur:local-dev"
@@ -42,8 +19,6 @@ services:
       context: ../
       dockerfile: ./local/Dockerfile
     depends_on:
-      vault:
-        condition: service_healthy
       postgres:
         condition: service_started
       redis:
@@ -51,7 +26,6 @@ services:
     env_file:
       - lemur-env
       - pgsql-env
-      - vault-env
     ports:
       - "8087:80"
       - "8447:443"

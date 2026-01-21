@@ -40,7 +40,7 @@ def get_random_secret(length):
 SECRET_KEY = repr(os.environ.get("SECRET_KEY", get_random_secret(32).encode("utf8")))
 
 # You should consider storing these separately from your config
-# If LEMUR_TOKEN_SECRET is used as raw text when running locally to ensure api keys are constant
+# LEMUR_TOKEN_SECRET is used as raw text when running locally to ensure api keys are constant
 if os.environ.get('ENV', 'prod') == 'dev':
     LEMUR_TOKEN_SECRET = os.environ.get("LEMUR_TOKEN_SECRET")
 else:
@@ -272,53 +272,7 @@ SUPPORTED_REVOCATION_AUTHORITY_PLUGINS = ["acme-issuer"]
 
 # Disable destination uploads for local development
 # This allows linking destinations without triggering deployment
-LEMUR_DISABLE_DESTINATION_UPLOADS = os.environ.get("LEMUR_DISABLE_DESTINATION_UPLOADS", "False") == "True"
-
-# =============================================================================
-# Vault Integration Configuration
-# =============================================================================
-VAULT_ENABLED = os.environ.get("VAULT_ENABLED", "False") == "True"
-
-if VAULT_ENABLED:
-    VAULT_ADDR = os.environ.get("VAULT_ADDR", "http://vault:8200")
-    VAULT_TOKEN = os.environ.get("VAULT_TOKEN", "")
-    VAULT_MOUNT = os.environ.get("VAULT_MOUNT", "secret")
-    VAULT_PATH = os.environ.get("VAULT_PATH", "lemur")
-    VAULT_KV_VERSION = os.environ.get("VAULT_KV_VERSION", "v2")
-    
-    # Optional: Use Vault for encryption keys
-    # LEMUR_ENCRYPTION_KEYS can be retrieved from Vault dynamically
-    try:
-        import hvac
-        vault_client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
-        if vault_client.is_authenticated():
-            # Read encryption keys from Vault
-            secret = vault_client.secrets.kv.v2.read_secret_version(
-                path=f'{VAULT_PATH}/encryption',
-                mount_point=VAULT_MOUNT
-            )
-            if secret and 'data' in secret and 'data' in secret['data']:
-                vault_keys = secret['data']['data'].get('keys')
-                if vault_keys:
-                    LEMUR_ENCRYPTION_KEYS = vault_keys
-                    print(f"✅ Loaded encryption keys from Vault")
-    except Exception as e:
-        print(f"⚠️  Could not load secrets from Vault: {e}")
-
-# =============================================================================
-# Enhanced JWT Authentication Configuration  
-# =============================================================================
-JWT_ENABLED = os.environ.get("JWT_ENABLED", "True") == "True"
-JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
-JWT_EXPIRATION_DELTA = int(os.environ.get("JWT_EXPIRATION_DELTA", "3600"))
-
-# JWT authentication endpoint
-JWT_AUTH_ENDPOINT = os.environ.get("JWT_AUTH_ENDPOINT", "/api/1/auth/jwt")
-
-# Optional: JWT audience and issuer for validation
-JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "lemur-local-dev")
-JWT_ISSUER = os.environ.get("JWT_ISSUER", "lemur")
-
-# Optional: JWT public key for RS256 algorithm (if using asymmetric keys)
-JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY", None)
-JWT_PRIVATE_KEY = os.environ.get("JWT_PRIVATE_KEY", None)
+if os.environ.get('ENV', 'prod') == 'dev':
+    LEMUR_DISABLE_DESTINATION_UPLOADS = True
+else:
+    LEMUR_DISABLE_DESTINATION_UPLOADS = os.environ.get("LEMUR_DISABLE_DESTINATION_UPLOADS", "False") == "True"
