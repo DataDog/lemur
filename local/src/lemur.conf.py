@@ -40,12 +40,12 @@ def get_random_secret(length):
 SECRET_KEY = repr(os.environ.get("SECRET_KEY", get_random_secret(32).encode("utf8")))
 
 # You should consider storing these separately from your config
-# If LEMUR_TOKEN_SECRET is provided via environment, use it directly
-# Otherwise generate a random one and wrap with repr()
+# If LEMUR_TOKEN_SECRET is used as raw text when running locally to ensure api keys are constant
 if os.environ.get('ENV', 'prod') == 'dev':
     LEMUR_TOKEN_SECRET = os.environ.get("LEMUR_TOKEN_SECRET")
 else:
     LEMUR_TOKEN_SECRET = repr(base64.b64encode(get_random_secret(32).encode("utf8")))
+# TODO Do I need to also stop encoding this when running locally
 # This must match the key for whichever DB the container is using - this could be a dump of dev or test, or a unique key
 LEMUR_ENCRYPTION_KEYS = repr(
     os.environ.get(

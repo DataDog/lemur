@@ -22,7 +22,6 @@ See [VAULT_JWT_INTEGRATION.md](../VAULT_JWT_INTEGRATION.md) for complete Vault s
 
 ### Certificate Management Scripts
 - **`create_cert_with_destinations.py`** - Main script to create certificates with destinations (bypasses plugin upload)
-- **`create_authority.sh`** - Create test certificate authorities via API
 - **`create_default_authority.py`** - Auto-create default authority on container startup
 
 ### Authentication Scripts

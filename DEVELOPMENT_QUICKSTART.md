@@ -57,13 +57,6 @@ TOKEN=$(python3 local/generate_test_token_constant.py)
 curl -k -H "Authorization: Bearer $TOKEN" https://localhost:8447/api/1/certificates
 ```
 
-### `create_authority.sh` - Create Authority
-Create a test certificate authority via API.
-
-```bash
-./local/create_authority.sh
-```
-
 ## Integration Test Connection Info
 
 **Quick Reference for CI/CD:**
@@ -109,7 +102,6 @@ See [INTEGRATION_TEST_CONNECTION.md](INTEGRATION_TEST_CONNECTION.md) for complet
 local/                          # All local dev files
 ├── create_cert_with_destinations.py
 ├── generate_test_token_constant.py  
-├── create_authority.sh
 ├── create_default_authority.py
 ├── docker-compose.yml
 ├── Dockerfile

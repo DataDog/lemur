@@ -121,13 +121,6 @@ Creates certificates with destinations for local testing.
 docker exec -i local-lemur python3 /opt/lemur/local/create_cert_with_destinations.py --help
 ```
 
-### `create_authority.sh`
-Creates a test certificate authority via API.
-
-```bash
-./local/create_authority.sh
-```
-
 ## Troubleshooting
 
 ### "Permission denied" errors
