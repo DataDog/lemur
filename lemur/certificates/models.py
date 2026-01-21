@@ -491,6 +491,14 @@ def update_destinations(target, value, initiator):
     :param initiator:
     :return:
     """
+    # Check if destination uploads are disabled (for local development)
+    if current_app.config.get("LEMUR_DISABLE_DESTINATION_UPLOADS", False):
+        current_app.logger.info(
+            f"Destination upload disabled for local development. "
+            f"Skipping upload for certificate {target.name} to destination {value.label}"
+        )
+        return
+
     destination_plugin = plugins.get(value.plugin_name)
     status = FAILURE_METRIC_STATUS
 
