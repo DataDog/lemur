@@ -44,7 +44,7 @@ lemur/tests/tmp
 /lemur/plugins/lemur_email/tests/rotation-rendered.html
 .celerybeat-schedule
 
-/docker/lemur.dev.tar.gz
+/local/lemur-dev.tar.gz
 
 # Python Virtual Environments
 .env

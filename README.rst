@@ -44,12 +44,12 @@ This repository contains multiple Dockerfiles for different purposes:
 
     Usage: ``docker compose up test``
 
-``docker/Dockerfile``
+``local/Dockerfile``
     **Local development environment** - Full-featured development setup based on ``ubuntu:22.04``
     with Python 3.10 and Node.js 18, including nginx, supervisor, and celery workers.
-    Provides a complete Lemur stack for local development. Used by ``docker/docker-compose.yml``.
+    Provides a complete Lemur stack for local development. Used by ``local/docker-compose.yml``.
 
-    Usage: ``cd docker && docker compose up``
+    Usage: ``cd local && docker compose up -d``
 
     Access at ``http://localhost:8087`` (HTTP) and ``https://localhost:8447`` (HTTPS)
 
@@ -74,11 +74,11 @@ The fastest way to get started. Uses containerized environments matching product
 
     docker compose up test
 
-**Start local dev environment:**
+**Build and start local dev environment:**
 
 .. code-block:: bash
-
-    cd docker && docker compose up
+    source .venv/bin/activate && make develop
+    cd local && docker compose up -d
 
 Access at http://localhost:8087 (HTTP) or https://localhost:8447 (HTTPS)
 

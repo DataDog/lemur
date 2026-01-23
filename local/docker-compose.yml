@@ -3,6 +3,7 @@ volumes:
 
 services:
   postgres:
+    container_name: local-postgres
     image: "postgres:13.1-alpine"
     restart: on-failure
     volumes:
@@ -11,14 +12,17 @@ services:
       - pgsql-env
 
   lemur:
+    container_name: local-lemur
     image: "lemur:local-dev"
     restart: on-failure
     build:
       context: ../
-      dockerfile: ./docker/Dockerfile
+      dockerfile: ./local/Dockerfile
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
     env_file:
       - lemur-env
       - pgsql-env
@@ -27,5 +31,6 @@ services:
       - "8447:443"
 
   redis:
+    container_name: local-redis
     image: "redis:alpine3.12"
     restart: on-failure

@@ -13,13 +13,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN groupadd -g ${gid} ${group} && \
     useradd -u ${uid} -g ${gid} -m -s /bin/bash ${user}
 
-# Install Node.js 18 (using gulp-clean-css instead of deprecated gulp-minify-css)
+# Install Node.js 18 and all dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ca-certificates && \
-    curl -sL https://deb.nodesource.com/setup_18.x | bash -
-
-# Install Python and all dependencies (matching production)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl -sL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y --no-install-recommends \
     # Python runtime
     python3 \
     python3-pip \
@@ -31,7 +29,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     nginx \
     supervisor \
-    curl \
     tzdata \
     openssl \
     bash \
@@ -54,30 +51,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tar && \
     rm -rf /var/lib/apt/lists/*
 
-USER root
-RUN mkdir -p /opt/lemur /opt/lemur/lemur /home/lemur/.lemur
-COPY docker/lemur-dev.tar.gz /opt/lemur
+# Create necessary directories
+RUN mkdir -p /opt/lemur /opt/lemur/lemur /home/lemur/.lemur /run/nginx/ /etc/nginx/ssl/
+COPY local/lemur-dev.tar.gz /opt/lemur
 
 WORKDIR /opt/lemur
 RUN tar -xvzf lemur-dev.tar.gz && \
     find . -name '._*' -type f -delete && \
-    find . -name '.DS_Store' -type f -delete
+    find . -name '.DS_Store' -type f -delete && \
+    chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
 
-RUN mkdir -p /run/nginx/ /etc/nginx/ssl/
-RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
+COPY local/entrypoint /
+COPY local/supervisor.conf /
+COPY local/nginx/nginx.conf /etc/nginx/
+COPY local/nginx/default.conf /etc/nginx/conf.d/
+COPY local/nginx/default-ssl.conf /etc/nginx/conf.d/
 
-COPY docker/entrypoint /
-COPY docker/supervisor.conf /
-COPY docker/nginx/nginx.conf /etc/nginx/
-COPY docker/nginx/default.conf /etc/nginx/conf.d/
-COPY docker/nginx/default-ssl.conf /etc/nginx/conf.d/
-
-RUN echo "Running with python:" && python3 -c 'import platform; print(platform.python_version())'
-RUN echo "Running with nodejs:" && node -v
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
-RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/
-
-WORKDIR /opt/lemur
+# Upgrade pip and display versions
+RUN echo "Running with python:" && python3 -c 'import platform; print(platform.python_version())' && \
+    echo "Running with nodejs:" && node -v && \
+    pip3 install --no-cache-dir --upgrade pip setuptools wheel
 RUN npm install --unsafe-perm
 RUN pip3 install --no-cache-dir -e .
 RUN node_modules/.bin/gulp build
@@ -100,16 +93,19 @@ RUN apt-get purge -y --auto-remove \
     nasm && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[dev]"
-RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[tests]"
+# Install development and test dependencies
+RUN pip install --no-cache-dir "file://`pwd`#egg=lemur[dev]" "file://`pwd`#egg=lemur[tests]"
 
-COPY docker/src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
-RUN echo ${PWD} && ls -lR
+COPY local/src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
+COPY local/create_defaults.py /home/lemur/.lemur/create_defaults.py
+COPY local/testing/ /opt/lemur/local/testing/
+
+# Fix ownership and permissions
+RUN chown -R $user:$group /opt/lemur/ /home/lemur/.lemur/ && \
+    chmod +x /entrypoint
 
 # Set LEMUR_CONF as a persistent environment variable
 ENV LEMUR_CONF=/home/lemur/.lemur/lemur.conf.py
-
-RUN chmod +x /entrypoint
 WORKDIR /
 
 HEALTHCHECK --interval=12s --timeout=12s --start-period=30s \
@@ -117,7 +113,7 @@ CMD curl --fail http://localhost:80/api/1/healthcheck | grep -q ok || exit 1
 RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/server.key -out /etc/nginx/ssl/server.crt -subj "/C=US/ST=NY/L=New York/O=Eng/CN=www.example.com"
 
 # Use this to stop the container in case of a crash loop and use
-# "docker exec -it docker-lemur-1 bash" to troubleshoot.
+# "docker exec -it local-lemur bash" to troubleshoot.
 # CMD ["tail", "-f", "/dev/null"]
 
 ENTRYPOINT ["/entrypoint"]
