@@ -16,6 +16,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 
 from lemur.auth.vault_jwt_auth import JWTAuthenticator
+from lemur.auth.isa_vault_service import ISAVaultValidator
 
 from flask import Blueprint, current_app
 
@@ -685,6 +686,285 @@ class Vault(Resource):
         return dict(token=create_token(user))
 
 
+class ISAToken(Resource):
+    """
+    Authenticates using ISA tokens validated against HashiCorp Vault.
+    
+    This endpoint accepts an ISA token, validates it against the approved token list
+    stored in Vault, and returns a JWT token for API access if valid.
+    
+    The ISA tokens and their associated user information must be pre-configured in Vault
+    at the path specified by ISA_VAULT_TOKEN_PATH configuration.
+    """
+
+    def __init__(self):
+        self.reqparse = reqparse.RequestParser()
+        super(ISAToken, self).__init__()
+
+    def post(self):
+        """
+        .. http:post:: /auth/isa
+
+           Authenticate with ISA token
+
+           **Example request**:
+
+           .. sourcecode:: http
+
+              POST /auth/isa HTTP/1.1
+              Host: example.com
+              Accept: application/json, text/javascript
+              Content-Type: application/json;charset=UTF-8
+
+              {
+                "isa_token": "your-isa-token-here"
+              }
+
+           **Example response**:
+
+           .. sourcecode:: http
+
+              HTTP/1.1 200 OK
+              Vary: Accept
+              Content-Type: text/javascript
+
+              {
+                "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              }
+
+           :arg isa_token: ISA authentication token
+           :statuscode 401: invalid or expired token
+           :statuscode 403: token not authorized or user inactive
+           :statuscode 500: Vault communication error
+           :statuscode 200: authentication successful
+        """
+        self.reqparse.add_argument(
+            "isa_token", type=str, required=True, location="json"
+        )
+
+        args = self.reqparse.parse_args()
+        isa_token = args["isa_token"]
+
+        try:
+            # Initialize Vault validator
+            validator = ISAVaultValidator()
+            
+            # Validate token against Vault
+            token_data = validator.validate_token(isa_token)
+            
+            if not token_data:
+                metrics.send(
+                    "isa_login", "counter", 1, 
+                    metric_tags={"status": FAILURE_METRIC_STATUS}
+                )
+                return dict(message="Invalid or unauthorized ISA token"), 401
+            
+            # Get user by email or ID
+            user = None
+            if token_data.get("user_email"):
+                user = user_service.get_by_email(token_data["user_email"])
+            elif token_data.get("user_id"):
+                user = user_service.get_by_id(token_data["user_id"])
+            
+            if not user:
+                current_app.logger.error(
+                    f"ISA token valid but user not found: {token_data.get('user_email')}"
+                )
+                metrics.send(
+                    "isa_login", "counter", 1,
+                    metric_tags={"status": FAILURE_METRIC_STATUS}
+                )
+                return dict(message="User not found"), 403
+            
+            if not user.active:
+                current_app.logger.warning(
+                    f"ISA token valid but user inactive: {user.email}"
+                )
+                metrics.send(
+                    "isa_login", "counter", 1,
+                    metric_tags={"status": FAILURE_METRIC_STATUS}
+                )
+                return dict(message="User account is inactive"), 403
+            
+            # Log successful authentication
+            log_service.audit_log(
+                "isa_token_login", 
+                user.username, 
+                f"Successful ISA token authentication"
+            )
+            
+            # Tell Flask-Principal the identity changed
+            identity_changed.send(
+                current_app._get_current_object(), identity=Identity(user.id)
+            )
+            
+            metrics.send(
+                "isa_login", "counter", 1,
+                metric_tags={"status": SUCCESS_METRIC_STATUS}
+            )
+            
+            return dict(token=create_token(user))
+            
+        except ValueError as e:
+            current_app.logger.error(f"ISA token validation configuration error: {e}")
+            metrics.send(
+                "isa_login", "counter", 1,
+                metric_tags={"status": FAILURE_METRIC_STATUS}
+            )
+            return dict(message="Authentication service misconfigured"), 500
+            
+        except Exception as e:
+            current_app.logger.error(f"ISA token validation error: {e}")
+            metrics.send(
+                "isa_login", "counter", 1,
+                metric_tags={"status": FAILURE_METRIC_STATUS}
+            )
+            return dict(message="Authentication service error"), 500
+
+
+class ProxyAuth(Resource):
+    """
+    Proxy authorization endpoint for service-to-service operations acting on behalf of users.
+    
+    This endpoint validates an API token and checks if the specified user exists and is active
+    in the Lemur database. It's designed for services that need to perform operations on
+    behalf of users.
+    """
+
+    def __init__(self):
+        self.reqparse = reqparse.RequestParser()
+        super(ProxyAuth, self).__init__()
+
+    def post(self):
+        """
+        .. http:post:: /auth/proxy-auth
+
+           Authorize a service token to act on behalf of a user
+
+           **Example request**:
+
+           .. sourcecode:: http
+
+              POST /auth/proxy-auth HTTP/1.1
+              Host: example.com
+              Accept: application/json, text/javascript
+              Content-Type: application/json;charset=UTF-8
+
+              {
+                "api_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "behalf_of": "user@example.com"
+              }
+
+           **Example response (success)**:
+
+           .. sourcecode:: http
+
+              HTTP/1.1 200 OK
+              Vary: Accept
+              Content-Type: text/javascript
+
+              {
+                "authorized": true,
+                "user": {
+                  "id": 1,
+                  "email": "user@example.com",
+                  "username": "user",
+                  "active": true
+                }
+              }
+
+           **Example response (failure)**:
+
+           .. sourcecode:: http
+
+              HTTP/1.1 403 Forbidden
+              Vary: Accept
+              Content-Type: text/javascript
+
+              {
+                "authorized": false,
+                "message": "User not found or inactive"
+              }
+
+           :arg api_token: JWT token for the service
+           :arg behalf_of: User email or username to act on behalf of
+           :statuscode 200: authorization check completed
+           :statuscode 400: missing required fields
+           :statuscode 401: invalid or expired token
+           :statuscode 403: user not found or inactive
+        """
+        self.reqparse.add_argument("api_token", type=str, required=True, location="json")
+        self.reqparse.add_argument("behalf_of", type=str, required=True, location="json")
+
+        args = self.reqparse.parse_args()
+        api_token = args["api_token"]
+        behalf_of = args["behalf_of"]
+
+        # Validate the API token
+        try:
+            payload = jwt.decode(
+                api_token,
+                current_app.config["LEMUR_TOKEN_SECRET"],
+                algorithms=["HS256"]
+            )
+        except jwt.ExpiredSignatureError:
+            current_app.logger.warning(f"Authorization attempt with expired token for user: {behalf_of}")
+            metrics.send(
+                "authorize", "counter", 1,
+                metric_tags={"status": FAILURE_METRIC_STATUS, "reason": "expired_token"}
+            )
+            return dict(authorized=False, message="Token has expired"), 401
+        except jwt.InvalidTokenError as e:
+            current_app.logger.warning(f"Authorization attempt with invalid token for user: {behalf_of}")
+            metrics.send(
+                "authorize", "counter", 1,
+                metric_tags={"status": FAILURE_METRIC_STATUS, "reason": "invalid_token"}
+            )
+            return dict(authorized=False, message="Token is invalid"), 401
+
+        # Look up the user specified in behalf_of
+        user = None
+        if "@" in behalf_of:
+            # Treat as email
+            user = user_service.get_by_email(behalf_of)
+        else:
+            # Treat as username
+            user = user_service.get_by_username(behalf_of)
+
+        if not user:
+            current_app.logger.warning(f"Authorization failed: user not found: {behalf_of}")
+            metrics.send(
+                "authorize", "counter", 1,
+                metric_tags={"status": FAILURE_METRIC_STATUS, "reason": "user_not_found"}
+            )
+            return dict(authorized=False, message="User not found"), 403
+
+        if not user.active:
+            current_app.logger.warning(f"Authorization failed: user inactive: {behalf_of}")
+            metrics.send(
+                "authorize", "counter", 1,
+                metric_tags={"status": FAILURE_METRIC_STATUS, "reason": "user_inactive"}
+            )
+            return dict(authorized=False, message="User is inactive"), 403
+
+        # Authorization successful
+        current_app.logger.info(f"Authorization successful for token acting on behalf of: {behalf_of}")
+        metrics.send(
+            "authorize", "counter", 1,
+            metric_tags={"status": SUCCESS_METRIC_STATUS}
+        )
+        
+        return dict(
+            authorized=True,
+            user={
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "active": user.active
+            }
+        ), 200
+
+
 class Providers(Resource):
     def get(self):
         active_providers = []
@@ -776,4 +1056,6 @@ api.add_resource(Ping, "/auth/ping", endpoint="ping")
 api.add_resource(Google, "/auth/google", endpoint="google")
 api.add_resource(OAuth2, "/auth/oauth2", endpoint="oauth2")
 api.add_resource(Vault, "/auth/vault", endpoint="vault")
+api.add_resource(ISAToken, "/auth/isa", endpoint="isa")
+api.add_resource(ProxyAuth, "/auth/proxy-auth", endpoint="proxyauth")
 api.add_resource(Providers, "/auth/providers", endpoint="providers")
