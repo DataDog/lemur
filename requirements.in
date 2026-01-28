@@ -69,7 +69,7 @@ sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://git
 SQLAlchemy-Utils
 tabulate
 types-protobuf
-urllib3 >= 1.26.19 # (VULN-7275)
+urllib3 >= 2.5.0  # (VULN-7275, CVE-2025-50181, CVE-2025-50182)
 validators
 werkzeug >= 3.0.3 # (VULN-6679)
 xmltodict

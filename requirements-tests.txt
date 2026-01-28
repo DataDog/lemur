@@ -871,7 +871,7 @@ tzdata==2024.2
     #   -r requirements.txt
     #   celery
     #   kombu
-urllib3==1.26.20
+urllib3==2.6.3
     # via
     #   -r requirements.txt
     #   botocore
