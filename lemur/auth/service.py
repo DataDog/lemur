@@ -101,6 +101,14 @@ def login_required(f):
         except Exception as e:
             return dict(message="Token is invalid"), 403
 
+        # Log request tokens when running locally (DEBUG or explicit config)
+        if current_app.debug:
+            current_app.logger.info(
+                "[AUTH] Request token: %s (path=%s)",
+                token,
+                request.path,
+            )
+
         try:
             header_data = fetch_token_header(token)
             payload = jwt.decode(

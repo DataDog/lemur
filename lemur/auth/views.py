@@ -905,6 +905,13 @@ class ProxyAuth(Resource):
         api_token = args["api_token"]
         behalf_of = args["behalf_of"]
 
+        if current_app.debug or current_app.config.get("LEMUR_LOG_REQUEST_TOKENS"):
+            current_app.logger.info(
+                "[AUTH] proxy-auth request token: %s (behalf_of=%s)",
+                api_token,
+                behalf_of,
+            )
+
         # Step 1: Validate the API token
         try:
             payload = jwt.decode(
