@@ -1,8 +1,12 @@
 # Run `make up-reqs` to update pinned dependencies in requirement text files
 
 flake8
-invoke
-nodeenv
+Flake8-pyproject
 pre-commit
-cryptography==43.0.1 # Must keep `cryptography` pinned to the same version as `requirements-overrides.txt` for FIPS support.
+invoke
+twine
+nodeenv
 -r requirements-tests.txt
+
+# === Datadog-specific additions ===
+cryptography==43.0.1  # Must keep pinned for FIPS support (do not sync from upstream)

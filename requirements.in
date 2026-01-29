@@ -1,76 +1,8 @@
-# Run `make up-reqs` to update pinned dependencies in requirement text files
-
-acme
-alembic-autogenerate-enums
-anyio==4.5.0
-arrow
-asyncpool
-azure-identity >= 1.16.1 # (VUNL-7150)
-azure-keyvault
-azure-mgmt-cdn
-azure-mgmt-network
-azure-mgmt-subscription
-boto3
-botocore
-celery[redis]
-cert_manager
-certbot
-certifi
-certsrv[ntlm]
-CloudFlare
-cryptography==43.0.1 # Must keep `cryptography` pinned to the same version as `requirements-overrides.txt` for FIPS support.
-dnspython == 2.6.1
-dnspython3
-dyn
-Flask-Bcrypt
-Flask-Cors >= 6.0.0 # CVE-2024-6839, CVE-2024-6844, CVE-2024-6866
-Flask-Limiter
-Flask-Mail
-Flask-Migrate <= 2.7.0
-Flask-Principal
-Flask-RESTful
-flask-Script==2.0.5
-Flask-SQLAlchemy
-Flask<3  # until https://github.com/pytest-dev/pytest-flask/pull/168 is released
-flask_replicated
-google-cloud-compute
-google-cloud-private-ca
-grpcio >= 1.62.0 # (VULN-7774)
-gunicorn
-h11 >= 0.16.0 # CVE-2025-43859
-https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.26-py3-none-any.whl
-hvac # required for the vault destination plugin
-importlib-metadata==8.5.0
-inflection
-itsdangerous
-jinja2 >= 3.1.6 # CVE-2024-56201, CVE-2024-56326, CVE-2025-27516
-lockfile
-logmatic-python
-markupsafe == 2.1.5
-marshmallow-sqlalchemy == 0.23.1 #related to the marshmallow issue (to avoid conflicts)
-marshmallow<2.21.1 #schema duplicate issues https://github.com/marshmallow-code/marshmallow-sqlalchemy/issues/121
-ndg-httpsclient
-paramiko  # required for the SFTP destination plugin
-pem
-protobuf
-psycopg2
-pyjks
-pyjwt >= 2.4.0 # (CVE-2022-29217)
-pyOpenSSL
-python_ldap >= 3.4.5  # CVE-2025-61911, CVE-2025-61912
-pyyaml
-redis
-requests >= 2.32.4 # CVE-2024-47081
-retrying
-sentry-sdk >= 2.8.0 # (VULN-7698)
-simplejson
-six
-sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226tabulate
-SQLAlchemy-Utils
-tabulate
-types-protobuf
-urllib3 >= 1.26.19 # (VULN-7275)
-validators
-werkzeug >= 3.0.3 # (VULN-6679)
-xmltodict
-zipp >= 3.19.1 # (VULN-7514)
+# Lemur requirements - combines upstream base with Datadog-specific overlay
+#
+# To sync from upstream Netflix/lemur:
+#   curl https://raw.githubusercontent.com/Netflix/lemur/main/requirements.in > requirements-base.in
+#   make up-reqs
+#
+-r requirements-base.in
+-r requirements-datadog.in
