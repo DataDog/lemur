@@ -11,28 +11,27 @@ celery[redis]
 certbot
 certsrv
 CloudFlare
-cryptography==43.0.1 # Must keep `cryptography` pinned to the same version as `requirements-overrides.txt` for FIPS support.
-dnspython >= 2.6.0
+cryptography
 dnspython3
 dyn
+Flask<3  # until https://github.com/pytest-dev/pytest-flask/pull/168 is released
 Flask-Bcrypt
-Flask-Cors >= 4.0.0 # (VULN-6645)
+Flask-Cors
 Flask-Limiter
 Flask-Mail
 Flask-Migrate
 Flask-Principal
 Flask-RESTful
 Flask-SQLAlchemy
-Flask<3  # until https://github.com/pytest-dev/pytest-flask/pull/168 is released
 flask_replicated
 gunicorn
 hvac # required for the vault destination plugin
 inflection
 itsdangerous
 josepy
-logmatic-python
 marshmallow-sqlalchemy == 0.23.1 #related to the marshmallow issue (to avoid conflicts)
 marshmallow<2.21.1 #schema duplicate issues https://github.com/marshmallow-code/marshmallow-sqlalchemy/issues/121
+sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226
 paramiko  # required for the SFTP destination plugin
 pem
 pyjks
@@ -40,18 +39,25 @@ pyjwt
 pyOpenSSL
 redis
 retrying
-sentry-sdk >= 2.8.0 # (VULN-7698)
-sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226
+sentry-sdk
 SQLAlchemy-Utils
 tabulate
 vine
-werkzeug >= 3.0.3 # (VULN-6679)
+werkzeug
 xmltodict
 # Test requirements are needed to allow test docs to build
 -r requirements-tests.txt
 
 # docs specific
-docutils
 sphinx
-sphinx-rtd-theme
 sphinxcontrib-httpdomain
+sphinx-rtd-theme
+docutils
+
+# === Datadog-specific additions ===
+cryptography==43.0.1  # Must keep pinned for FIPS support (do not sync from upstream)
+dnspython >= 2.6.0
+logmatic-python
+sentry-sdk >= 2.8.0  # (VULN-7698)
+werkzeug >= 3.0.3  # (VULN-6679)
+Flask-Cors >= 4.0.0  # (VULN-6645)

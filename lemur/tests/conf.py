@@ -94,6 +94,17 @@ SQLALCHEMY_DATABASE_URI = os.getenv(
 )
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+# Add connection pool and timeout settings for tests
+SQLALCHEMY_ENGINE_OPTIONS = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "pool_timeout": 10,
+    "connect_args": {
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=30000"  # 30 second statement timeout
+    }
+}
+
 # AWS
 LEMUR_INSTANCE_PROFILE = "Lemur"
 

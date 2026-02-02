@@ -65,9 +65,9 @@ def create_token(user, aid=None, ttl=None):
 
     # Handle Just a User ID & User Object.
     if isinstance(user, int):
-        payload["sub"] = user
+        payload["sub"] = str(user)
     else:
-        payload["sub"] = user.id
+        payload["sub"] = str(user.id)
     if aid is not None:
         payload["aid"] = aid
     # Custom TTLs are only supported on Access Keys.
@@ -107,6 +107,9 @@ def login_required(f):
                 token,
                 current_app.config["LEMUR_TOKEN_SECRET"],
                 algorithms=[header_data["alg"]],
+                # Disable strict 'sub' validation to support both old tokens (int sub)
+                # and new tokens (string sub) during migration to PyJWT 2.10+
+                options={"verify_sub": False},
             )
         except jwt.DecodeError:
             return dict(message="Token is invalid"), 403
@@ -130,7 +133,10 @@ def login_required(f):
             if access_key.application_name:
                 g.caller_application = access_key.application_name
 
-        user = user_service.get(payload["sub"])
+        user_id = payload["sub"]
+        if isinstance(user_id, str):
+            user_id = int(user_id)
+        user = user_service.get(user_id)
 
         if not user.active:
             return dict(message="User is not currently active"), 403

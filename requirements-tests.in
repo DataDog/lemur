@@ -4,7 +4,6 @@ bandit
 black
 celery[redis]>=5.3.5
 coverage
-cryptography==43.0.1 # Must keep `cryptography` pinned to the same version as `requirements-overrides.txt` for FIPS support.
 factory-boy
 Faker
 fakeredis
@@ -18,7 +17,6 @@ pytest
 pytest-flask
 pytest-mock
 requests-mock
-simplejson
 types-Deprecated
 types-paramiko
 types-pyOpenSSL
@@ -30,3 +28,7 @@ types-requests
 types-setuptools
 types-six
 types-tabulate
+
+# === Datadog-specific additions ===
+cryptography==43.0.1  # Must keep pinned for FIPS support (do not sync from upstream)
+simplejson
