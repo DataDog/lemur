@@ -17,6 +17,13 @@ class DestinationInputSchema(LemurInputSchema):
     description = fields.String(required=True)
     active = fields.Boolean()
     plugin = fields.Nested(PluginInputSchema, required=True)
+    behalf_of = fields.String(
+        missing=None,
+        allow_none=True,
+        metadata={
+            "description": "Username or email of user to act on behalf of (for proxy authentication)"
+        },
+    )
 
 
 class DestinationOutputSchema(LemurOutputSchema):

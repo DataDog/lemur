@@ -276,3 +276,10 @@ if os.environ.get('ENV', 'prod') == 'dev':
     LEMUR_DISABLE_DESTINATION_UPLOADS = True
 else:
     LEMUR_DISABLE_DESTINATION_UPLOADS = os.environ.get("LEMUR_DISABLE_DESTINATION_UPLOADS", "False") == "True"
+
+# ISA Token Authentication with Vault
+# Configuration for ISA token validation against HashiCorp Vault
+ISA_VAULT_ADDR = os.environ.get("ISA_VAULT_ADDR", "http://vault:8200")
+ISA_VAULT_TOKEN = os.environ.get("ISA_VAULT_TOKEN", "dev-root-token")
+ISA_VAULT_MOUNT_POINT = os.environ.get("ISA_VAULT_MOUNT_POINT", "lemur")
+ISA_VAULT_TOKEN_PATH = os.environ.get("ISA_VAULT_TOKEN_PATH", "isa-tokens/approved")

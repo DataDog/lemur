@@ -58,12 +58,12 @@ def remove_body_for_non_admins(data):
     """
     from flask import g
 
-    if hasattr(g, 'current_user') and g.current_user:
+    if hasattr(g, "current_user") and g.current_user:
         user_roles = [role.name for role in g.current_user.roles]
-        if 'admin' not in user_roles:
-            data.pop('body', None)
+        if "admin" not in user_roles:
+            data.pop("body", None)
     else:
-        data.pop('body', None)
+        data.pop("body", None)
 
     return data
 
@@ -148,6 +148,14 @@ class CertificateInputSchema(CertificateCreationSchema):
 
     extensions = fields.Nested(ExtensionSchema, missing={})
 
+    behalf_of = fields.String(
+        missing=None,
+        allow_none=True,
+        metadata={
+            "description": "Username or email of user to act on behalf of (for proxy authentication)"
+        },
+    )
+
     @validates_schema
     def validate_authority(self, data):
         if "authority" not in data:
@@ -227,6 +235,14 @@ class CertificateEditInputSchema(CertificateSchema):
         AssociatedCertificateSchema, missing=[], many=True
     )  # deprecated
     roles = fields.Nested(AssociatedRoleSchema, missing=[], many=True)
+
+    behalf_of = fields.String(
+        missing=None,
+        allow_none=True,
+        metadata={
+            "description": "Username or email of user to act on behalf of (for proxy authentication)"
+        },
+    )
 
     @pre_load
     def load_data(self, data):

@@ -20,7 +20,11 @@ from lemur.common.schema import validate_schema
 from lemur.common.utils import paginated_parser
 
 from lemur.auth.service import AuthenticatedResource
-from lemur.auth.permissions import AuthorityPermission, CertificatePermission
+from lemur.auth.permissions import (
+    AuthorityPermission,
+    CertificatePermission,
+    allow_proxy_authentication,
+)
 
 from lemur.certificates import service
 from lemur.certificates.models import Certificate
@@ -387,6 +391,7 @@ class CertificatesList(AuthenticatedResource):
         args["user"] = g.user
         return service.render(args)
 
+    @allow_proxy_authentication
     @validate_schema(certificate_input_schema, certificate_output_schema)
     def post(self, data=None):
         """
@@ -829,6 +834,7 @@ class Certificates(AuthenticatedResource):
         """
         return service.get(certificate_id)
 
+    @allow_proxy_authentication
     @validate_schema(certificate_edit_input_schema, certificate_output_schema)
     def put(self, certificate_id, data=None):
         """
@@ -1089,6 +1095,7 @@ class Certificates(AuthenticatedResource):
         log_service.create(g.current_user, "update_cert", certificate=cert)
         return cert
 
+    @allow_proxy_authentication
     def delete(self, certificate_id, data=None):
         """
         .. http:delete:: /certificates/1
