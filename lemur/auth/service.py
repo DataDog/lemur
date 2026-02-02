@@ -107,6 +107,9 @@ def login_required(f):
                 token,
                 current_app.config["LEMUR_TOKEN_SECRET"],
                 algorithms=[header_data["alg"]],
+                # Disable strict 'sub' validation to support both old tokens (int sub)
+                # and new tokens (string sub) during migration to PyJWT 2.10+
+                options={"verify_sub": False},
             )
         except jwt.DecodeError:
             return dict(message="Token is invalid"), 403
