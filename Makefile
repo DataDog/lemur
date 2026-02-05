@@ -16,6 +16,8 @@ endif
 	pip install -e .
 	pip install -e "file://`pwd`#egg=lemur[dev]"
 	pip install -e "file://`pwd`#egg=lemur[tests]"
+	# Install Datadog-specific dependencies (URL-based packages not resolvable by pip-compile)
+	pip install "dd-internal-authentication @ https://binaries.ddbuild.io/dd-source/python/dd_internal_authentication-1.7.1-py2.py3-none-any.whl"
 	node_modules/.bin/gulp build
 	node_modules/.bin/gulp package --urlContextPath=$(urlContextPath)
 	tar --exclude='._*' \
