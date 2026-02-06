@@ -32,6 +32,8 @@ RUN npm config set registry http://registry.npmjs.org/ && \
     /opt/venv/bin/python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
     # ddtrace is required to automatically instrument lemur to emit traces
     /opt/venv/bin/python3 -m pip install --no-cache-dir ddtrace && \
+    # dd_internal_authentication is required for the COA plugin
+    /opt/venv/bin/python3 -m pip install --no-cache-dir "dd-internal-authentication @ https://binaries.ddbuild.io/dd-source/python/dd_internal_authentication-1.7.1-py2.py3-none-any.whl" && \
     /opt/venv/bin/python3 -m pip install --no-cache-dir -e . && \
     # install the statsd plugin required to emit metrics to datadog
     /opt/venv/bin/python3 -m pip install --no-cache-dir -e /opt/lemur/lemur/plugins/lemur_statsd && \
