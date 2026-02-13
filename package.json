@@ -46,7 +46,7 @@
     "require-dir": "~0.3.0",
     "streamqueue": "^1.1.1",
     "uglify-save-license": "^0.4.1",
-    "yargs": "^16.0.0"
+    "yargs": "^16.0.3"
   },
   "scripts": {
     "postinstall": "node_modules/.bin/bower install --allow-root --config.interactive=false",
@@ -59,7 +59,7 @@
   "devDependencies": {
     "gulp": "^4.0.2",
     "gulp-util": "^3.0.8",
-    "jshint": "^2.11.0",
+    "jshint": "^2.11.2",
     "karma-chrome-launcher": "^3.1.0"
   }
 }
