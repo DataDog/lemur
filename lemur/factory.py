@@ -267,7 +267,7 @@ def install_plugins(app):
             plugins.get(slug)
         except KeyError:
             raise Exception(
-                "Unable to location notification plugin: {slug}. Ensure that "
+                "Unable to locate notification plugin: {slug}. Ensure that "
                 "LEMUR_DEFAULT_NOTIFICATION_PLUGIN is set to a valid and installed notification plugin.".format(
                     slug=slug
                 )
