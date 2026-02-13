@@ -56,8 +56,8 @@ docutils
 
 # === Datadog-specific additions ===
 cryptography==43.0.1  # Must keep pinned for FIPS support (do not sync from upstream)
-dnspython >= 2.6.0
+dnspython>=2.8.0
 logmatic-python
-sentry-sdk >= 2.8.0  # (VULN-7698)
+sentry-sdk>=2.52.0  # (VULN-7698)
 werkzeug >= 3.0.3  # (VULN-6679)
 Flask-Cors >= 4.0.0  # (VULN-6645)
