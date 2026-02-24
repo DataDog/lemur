@@ -141,7 +141,7 @@ celery[redis]==5.6.2
     # via -r requirements-tests.txt
 cert-manager==2.4.0
     # via -r requirements-tests.txt
-cert-orchestration-adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.26-py3-none-any.whl
+cert-orchestration-adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.27-py3-none-any.whl
     # via -r requirements-tests.txt
 certbot==5.2.2
     # via -r requirements-tests.txt
@@ -209,8 +209,8 @@ coverage==7.13.2
     # via -r requirements-tests.txt
 cryptography==43.0.1
     # via
-    #   -r requirements-dev.in
     #   -r requirements-tests.txt
+    #   -r requirements-dev.in
     #   acme
     #   azure-identity
     #   azure-keyvault-keys
@@ -230,6 +230,10 @@ cryptography==43.0.1
     #   types-paramiko
     #   types-pyopenssl
     #   types-redis
+datadog==0.52.1
+    # via
+    #   -r requirements-tests.txt
+    #   cert-orchestration-adapter
 ddtrace==4.3.1
     # via
     #   -r requirements-tests.txt
@@ -237,7 +241,6 @@ ddtrace==4.3.1
 deprecated==1.3.1
     # via
     #   -r requirements-tests.txt
-    #   cert-orchestration-adapter
     #   limits
 distlib==0.4.0
     # via virtualenv
@@ -415,8 +418,8 @@ iniconfig==2.3.0
     #   pytest
 invoke==2.2.1
     # via
-    #   -r requirements-dev.in
     #   -r requirements-tests.txt
+    #   -r requirements-dev.in
     #   paramiko
 isodate==0.7.2
     # via
@@ -650,7 +653,7 @@ proto-plus==1.27.0
     #   google-api-core
     #   google-cloud-compute
     #   google-cloud-private-ca
-protobuf==3.20.3
+protobuf==6.33.5
     # via
     #   -r requirements-tests.txt
     #   cert-orchestration-adapter
@@ -811,6 +814,7 @@ requests==2.32.5
     #   cert-manager
     #   cert-orchestration-adapter
     #   certsrv
+    #   datadog
     #   docker
     #   google-api-core
     #   hvac
@@ -1047,7 +1051,6 @@ wrapt==2.0.1
 xmltodict==1.0.2
     # via
     #   -r requirements-tests.txt
-    #   cert-orchestration-adapter
     #   moto
 zipp==3.23.0
     # via

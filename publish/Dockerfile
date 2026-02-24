@@ -29,10 +29,16 @@ RUN npm config set registry http://registry.npmjs.org/ && \
     echo "Running with nodejs:" && node -v && \
     python3 -m venv /opt/venv && \
     echo "Running with python:" && /opt/venv/bin/python3 -c 'import sys, platform; print("sys.platform == {}, platform.machine == {}, platform.python_version == {}".format(sys.platform, platform.machine(), platform.python_version()))' && \
-    /opt/venv/bin/python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    /opt/venv/bin/python3 -m pip install --no-cache-dir --upgrade pip "setuptools<81" wheel && \
     # ddtrace is required to automatically instrument lemur to emit traces
     /opt/venv/bin/python3 -m pip install --no-cache-dir ddtrace && \
     /opt/venv/bin/python3 -m pip install --no-cache-dir -e . && \
+    # COA plugin for cert orchestration, built and published from dd-source.
+    # Source: https://github.com/DataDog/dd-source/tree/main/domains/cert_orchestration/libs/lemur_plugins/cert_orchestration_adapter
+    # Changes to the wheel require a version bump in dd-source and updating this URL.
+    /opt/venv/bin/python3 -m pip install --no-cache-dir "cert-orchestration-adapter @ https://binaries.ddbuild.io/dd-source/python/cert_orchestration_adapter-0.1.27-py3-none-any.whl" && \
+    # dd_internal_authentication is required by the COA plugin for JWT-based service auth
+    /opt/venv/bin/python3 -m pip install --no-cache-dir "dd-internal-authentication @ https://binaries.ddbuild.io/dd-source/python/dd_internal_authentication-1.7.1-py2.py3-none-any.whl" && \
     # install the statsd plugin required to emit metrics to datadog
     /opt/venv/bin/python3 -m pip install --no-cache-dir -e /opt/lemur/lemur/plugins/lemur_statsd && \
     npm install --unsafe-perm && \
