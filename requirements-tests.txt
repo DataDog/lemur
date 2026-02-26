@@ -109,12 +109,12 @@ blinker==1.9.0
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.42.56
+boto3==1.42.58
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   aws-sam-translator
     #   moto
-botocore==1.42.56
+botocore==1.42.58
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   aws-xray-sdk
@@ -343,7 +343,7 @@ grpc-google-iam-v1==0.14.3
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   google-cloud-private-ca
-grpcio==1.78.1
+grpcio==1.78.0
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   cert-orchestration-adapter
@@ -354,7 +354,7 @@ grpcio==1.78.1
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.78.1
+grpcio-status==1.78.0
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   google-api-core
@@ -518,7 +518,7 @@ oauthlib==3.3.1
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   requests-oauthlib
-openapi-schema-validator==0.7.2
+openapi-schema-validator==0.7.3
     # via openapi-spec-validator
 openapi-spec-validator==0.8.1
     # via
@@ -625,7 +625,7 @@ pygments==2.19.2
     #   rich
 pyjks==20.0.0
     # via -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
-pyjwt[crypto]==2.11.0
+pyjwt[crypto]==2.10.1
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   cert-orchestration-adapter
