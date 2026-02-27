@@ -50,20 +50,21 @@ from lemur.users.schemas import UserNestedOutputSchema
 
 def remove_body_for_non_admins(data):
     """
-    Remove certificate body from response data for non-admin users.
-    This is a shared utility function used by multiple schema classes.
+    Remove certificate body from response data for non-break-glass users.
+    Break-glass users (permanent role or temporary grant) can see the body.
 
     :param data: The serialized certificate data dictionary
-    :return: The modified data dictionary with body removed if user is not admin
+    :return: The modified data dictionary with body removed if user is not break-glass
     """
     from flask import g
+    from lemur.users import service as user_service
 
-    if hasattr(g, 'current_user') and g.current_user:
-        user_roles = [role.name for role in g.current_user.roles]
-        if 'admin' not in user_roles:
-            data.pop('body', None)
+    if hasattr(g, "current_user") and g.current_user:
+        effective_roles = user_service.get_effective_role_names(g.current_user)
+        if "break-glass" not in effective_roles:
+            data.pop("body", None)
     else:
-        data.pop('body', None)
+        data.pop("body", None)
 
     return data
 
@@ -321,7 +322,7 @@ class CertificateNestedOutputSchema(LemurOutputSchema):
 
     @post_dump
     def filter_body(self, data):
-        """Remove certificate body for non-admin users"""
+        """Remove certificate body for non-break-glass users"""
         return remove_body_for_non_admins(data)
 
 
