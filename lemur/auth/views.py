@@ -796,7 +796,7 @@ class ISAToken(Resource):
 
             # Log successful authentication
             log_service.audit_log(
-                "isa_token_login", user.username, f"Successful ISA token authentication"
+                "isa_token_login", user.username, "Successful ISA token authentication"
             )
 
             # Tell Flask-Principal the identity changed
@@ -953,7 +953,7 @@ class ProxyAuth(Resource):
         # Step 2: Get the service account/user who owns this API token
         service_account_id = payload.get("sub")
         if not service_account_id:
-            current_app.logger.warning(f"Proxy-auth attempt with token missing user ID")
+            current_app.logger.warning("Proxy-auth attempt with token missing user ID")
             metrics.send(
                 "proxy_auth",
                 "counter",
