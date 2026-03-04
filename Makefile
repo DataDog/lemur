@@ -123,7 +123,7 @@ lint: lint-python lint-js
 
 lint-python:
 	@echo "--> Linting Python files"
-	PYFLAKES_NODOCTEST=1 flake8 lemur
+	PYFLAKES_NODOCTEST=1 flake8 lemur --exclude=lemur/lib,lemur/lib64,lemur/migrations/versions
 	@echo ""
 
 lint-js:
