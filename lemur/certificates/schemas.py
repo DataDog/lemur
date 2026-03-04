@@ -151,6 +151,14 @@ class CertificateInputSchema(CertificateCreationSchema):
 
     extensions = fields.Nested(ExtensionSchema, missing={})
 
+    behalf_of = fields.String(
+        missing=None,
+        allow_none=True,
+        metadata={
+            "description": "Username or email of user to act on behalf of (for proxy authentication)"
+        },
+    )
+
     @validates_schema
     def validate_authority(self, data):
         if "authority" not in data:
@@ -230,6 +238,14 @@ class CertificateEditInputSchema(CertificateSchema):
         AssociatedCertificateSchema, missing=[], many=True
     )  # deprecated
     roles = fields.Nested(AssociatedRoleSchema, missing=[], many=True)
+
+    behalf_of = fields.String(
+        missing=None,
+        allow_none=True,
+        metadata={
+            "description": "Username or email of user to act on behalf of (for proxy authentication)"
+        },
+    )
 
     @pre_load
     def load_data(self, data):

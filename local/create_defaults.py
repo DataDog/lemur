@@ -47,10 +47,32 @@ def create_user(username, password, email, role_names):
     return user
 
 
+def create_proxy_role():
+    """Create the proxy role for service-to-service authentication."""
+    from lemur.roles import service as role_service
+
+    role_name = "proxy"
+    role = role_service.get_by_name(role_name)
+
+    if role:
+        print(f" # Role '{role_name}' already exists (ID: {role.id})")
+        return role
+
+    role = role_service.create(
+        name=role_name,
+        description="Service accounts that can authenticate on behalf of users via proxy-auth endpoint",
+        third_party=False,
+    )
+    print(f" # Proxy role '{role_name}' created successfully (ID: {role.id})")
+    return role
+
+
 def create_default_users():
     """Create the default users if they don't exist."""
     create_user("user", "pass", "user@email.com", ["admin"])
     create_user("operator", "pass", "operator@email.com", ["operator"])
+    create_user("nom", "pass", "nom@email.com", ["proxy"])
+
 
 
 def create_default_authority():
@@ -148,6 +170,8 @@ def main():
     print(" # Creating default resources for local development")
 
     with app.app_context():
+        # Create proxy role first (needed before users)
+        create_proxy_role()
         # Create default users
         create_default_users()
         create_default_authority()

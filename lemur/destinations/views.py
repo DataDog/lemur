@@ -12,7 +12,10 @@ from flask_restful import Api, reqparse
 from lemur.destinations import service
 
 from lemur.auth.service import AuthenticatedResource
-from lemur.auth.permissions import admin_permission
+from lemur.auth.permissions import (
+    admin_permission,
+    allow_proxy_authentication,
+)
 from lemur.common.utils import paginated_parser
 
 from lemur.common.schema import validate_schema
@@ -99,8 +102,9 @@ class DestinationsList(AuthenticatedResource):
         args = parser.parse_args()
         return service.render(args)
 
-    @admin_permission.require(http_exception=403)
+    @allow_proxy_authentication
     @validate_schema(destination_input_schema, destination_output_schema)
+    @admin_permission.require(http_exception=403)
     def post(self, data=None):
         """
         .. http:post:: /destinations
@@ -251,8 +255,9 @@ class Destinations(AuthenticatedResource):
         """
         return service.get(destination_id)
 
-    @admin_permission.require(http_exception=403)
+    @allow_proxy_authentication
     @validate_schema(destination_input_schema, destination_output_schema)
+    @admin_permission.require(http_exception=403)
     def put(self, destination_id, data=None):
         """
         .. http:put:: /destinations/1
@@ -346,6 +351,7 @@ class Destinations(AuthenticatedResource):
             data["description"],
         )
 
+    @allow_proxy_authentication
     @admin_permission.require(http_exception=403)
     def delete(self, destination_id):
         service.delete(destination_id)
