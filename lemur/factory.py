@@ -17,10 +17,7 @@ import errno
 import socket
 import stat
 
-try:
-    from importlib.metadata import entry_points
-except ImportError:
-    from importlib_metadata import entry_points
+from importlib.metadata import entry_points
 
 from logging import Formatter, StreamHandler
 from logging.handlers import RotatingFileHandler
