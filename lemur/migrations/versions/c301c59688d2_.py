@@ -32,6 +32,8 @@ down_revision = "434c29e40511"
 
 from alembic import op
 from sqlalchemy.sql import text
+import os
+import tempfile
 import time
 import datetime
 from flask import current_app
@@ -41,7 +43,13 @@ from logging import Formatter, FileHandler, getLogger
 from lemur.common import utils
 
 log = getLogger(__name__)
-handler = FileHandler(current_app.config.get("LOG_UPGRADE_FILE", "db_upgrade.log"))
+# Use temp dir if default path would be unwritable (e.g. CWD is /)
+_upgrade_log = current_app.config.get("LOG_UPGRADE_FILE", "db_upgrade.log")
+if not os.path.isabs(_upgrade_log):
+    _cwd_log = os.path.join(os.getcwd(), _upgrade_log)
+    _fallback_log = os.path.join(tempfile.gettempdir(), _upgrade_log)
+    _upgrade_log = _fallback_log if not os.access(os.path.dirname(_cwd_log) or ".", os.W_OK) else _cwd_log
+handler = FileHandler(_upgrade_log)
 handler.setFormatter(
     Formatter("%(asctime)s %(levelname)s: %(message)s " "[in %(pathname)s:%(lineno)d]")
 )
