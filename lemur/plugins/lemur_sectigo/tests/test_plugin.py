@@ -94,7 +94,7 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
+                assert INTERMEDIATE_CERT_STR == ca_bundle
                 assert 3000 == cert_id
 
             with self.subTest(case="create certificates with unsupported terms"):
@@ -106,7 +106,7 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
+                assert INTERMEDIATE_CERT_STR == ca_bundle
                 assert 3000 == cert_id
 
                 cert_pem, ca_bundle, cert_id = plugin.create_certificate(
@@ -117,7 +117,7 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
+                assert INTERMEDIATE_CERT_STR == ca_bundle
                 assert 3000 == cert_id
 
                 cert_pem, ca_bundle, cert_id = plugin.create_certificate(
@@ -128,7 +128,7 @@ class TestSectigoIssuerPlugin(TestCase):
                     },
                 )
                 assert WILDCARD_CERT_STR == cert_pem
-                assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
+                assert INTERMEDIATE_CERT_STR == ca_bundle
                 assert 3000 == cert_id
 
     def test_determine_certificate_term(self):
