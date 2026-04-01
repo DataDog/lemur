@@ -505,6 +505,11 @@ def clean_source(source):
 
 
 @celery_app.task()
+def clear_sync_chain_flag():
+    red.delete("sync_chain_active")
+
+
+@celery_app.task()
 def sync_all_sources():
     """
     This function will sync certificates from all sources. This function triggers one celery task per source.
@@ -525,17 +530,30 @@ def sync_all_sources():
         current_app.logger.debug(log_data)
         return
 
+    # Skip if a previous sync chain is still running
+    if red.get("sync_chain_active"):
+        log_data["message"] = "Skipping: previous sync chain is still running"
+        current_app.logger.warning(log_data)
+        return log_data
+
     sources = validate_sources("all")
+    # Source syncs are heavy, chain them sequentially so they don't flood the queue
+    from celery import chain
+    red.set("sync_chain_active", "1", ex=7200)  # cleared by clear_sync_chain_flag at end of chain, 2h expiry is a safety net
+    tasks = []
     for source in sources:
         log_data["source"] = source.label
         current_app.logger.debug(log_data)
-        sync_source.delay(source.label)
+        tasks.append(sync_source.si(source.label))
+    tasks.append(clear_sync_chain_flag.si())
+    if tasks:
+        chain(*tasks).delay()
 
     metrics.send(f"{function}.success", "counter", 1)
     return log_data
 
 
-@celery_app.task(soft_time_limit=7200)
+@celery_app.task(soft_time_limit=600)  # 10 minutes, fail fast if a source is stuck
 def sync_source(source):
     """
     This celery task will sync the specified source.
@@ -577,6 +595,11 @@ def sync_source(source):
             "sync_source_timeout", "counter", 1, metric_tags={"source": source}
         )
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
+        return
+    except Exception as e:
+        log_data["message"] = f"Error syncing source: {e}"
+        current_app.logger.error(log_data)
+        capture_exception()
         return
 
     log_data["message"] = "Done syncing source"
