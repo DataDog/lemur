@@ -553,7 +553,7 @@ def sync_all_sources():
     return log_data
 
 
-@celery_app.task(soft_time_limit=600)  # 10 minutes, fail fast if a source is stuck
+@celery_app.task(soft_time_limit=900)  # fail if a source task gets stuck
 def sync_source(source):
     """
     This celery task will sync the specified source.
@@ -584,9 +584,6 @@ def sync_source(source):
         sync(
             [source], current_app.config.get("CELERY_ENDPOINTS_EXPIRE_TIME_IN_HOURS", 2)
         )
-        metrics.send(
-            f"{function}.success", "counter", 1, metric_tags={"source": source}
-        )
     except SoftTimeLimitExceeded:
         log_data["message"] = "Error syncing source: Time limit exceeded."
         current_app.logger.error(log_data)
@@ -600,6 +597,7 @@ def sync_source(source):
         log_data["message"] = f"Error syncing source: {e}"
         current_app.logger.error(log_data)
         capture_exception()
+        metrics.send(f"{function}.failure", "counter", 1, metric_tags={"source": source})
         return
 
     log_data["message"] = "Done syncing source"
