@@ -505,7 +505,7 @@ def clean_source(source):
 
 
 @celery_app.task()
-def clear_sync_chain_flag():
+def complete_sync_chain():
     red.delete("sync_chain_active")
     # Mark sync_all_sources as successful now that all sources have synced
     function = f"{__name__}.sync_all_sources"
@@ -543,13 +543,13 @@ def sync_all_sources():
     sources = validate_sources("all")
     # Source syncs are heavy, chain them sequentially so they don't flood the queue
     from celery import chain
-    red.set("sync_chain_active", "1", ex=7200)  # cleared by clear_sync_chain_flag at end of chain, 2h expiry is a safety net
+    red.set("sync_chain_active", "1", ex=7200)  # cleared by complete_sync_chain at end of chain, 2h expiry is a safety net
     tasks = []
     for source in sources:
         log_data["source"] = source.label
         current_app.logger.debug(log_data)
         tasks.append(sync_source.si(source.label))
-    tasks.append(clear_sync_chain_flag.si())
+    tasks.append(complete_sync_chain.si())
     if tasks:
         chain(*tasks).delay()
 
