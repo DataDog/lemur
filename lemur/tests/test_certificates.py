@@ -900,6 +900,73 @@ def test_verify_cert_chain_custom_error_class(app):
         verify_cert_chain([SAN_CERT, ROOTCA_CERT], error_class=AssertionError)
 
 
+# =============================================================================
+# Non-linear chain tests (Step 3, RDNA-926)
+# These exercise dual-chain / cross-signed bundles.
+# =============================================================================
+
+@pytest.mark.xfail(reason="Requires DAG validator (Step 4)", strict=True)
+def test_verify_cert_chain_dual_chain(app):
+    """Dual-chain bundle [leaf, int_by_a, root_a, int_by_b] should pass.
+
+    This is the core non-linear case: the leaf's intermediate has two versions,
+    each signed by a different root. Both should be accepted in the bundle.
+    """
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([
+        CROSS_SIGNED_LEAF_CERT,
+        CROSS_SIGNED_INT_BY_A_CERT,
+        CROSS_SIGNED_ROOT_A_CERT,
+        CROSS_SIGNED_INT_BY_B_CERT,
+    ])
+
+
+@pytest.mark.xfail(reason="Requires DAG validator (Step 4)", strict=True)
+def test_verify_cert_chain_dual_chain_reversed_order(app):
+    """Reversed alternate order [leaf, int_by_b, root_b, int_by_a] should pass."""
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([
+        CROSS_SIGNED_LEAF_CERT,
+        CROSS_SIGNED_INT_BY_B_CERT,
+        CROSS_SIGNED_ROOT_B_CERT,
+        CROSS_SIGNED_INT_BY_A_CERT,
+    ])
+
+
+def test_verify_cert_chain_dual_chain_with_orphan(app):
+    """Dual-chain with orphaned unrelated cert appended should be rejected."""
+    from lemur.common.validators import verify_cert_chain
+
+    with pytest.raises(ValidationError, match="not signed by"):
+        verify_cert_chain([
+            CROSS_SIGNED_LEAF_CERT,
+            CROSS_SIGNED_INT_BY_A_CERT,
+            CROSS_SIGNED_ROOT_A_CERT,
+            ORPHAN_CERT,
+        ])
+
+
+def test_verify_cert_chain_cross_signed_root(app):
+    """Cross-signed root case (DigiCert pattern):
+    [leaf, int_by_a, root_a_self_signed, root_a_cross_signed_by_b] should pass.
+
+    Root A exists in two forms: self-signed and cross-signed by Root B.
+    Both have the same public key. The intermediate is signed by Root A's key.
+    The linear validator happens to accept this because both Root A certs share
+    the same key, so the signature check passes linearly too.
+    """
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([
+        CROSS_SIGNED_LEAF_CERT,
+        CROSS_SIGNED_INT_BY_A_CERT,
+        CROSS_SIGNED_ROOT_A_CERT,
+        ROOT_A_CROSS_SIGNED_BY_B_CERT,
+    ])
+
+
 def test_certificate_revoke_schema():
     from lemur.certificates.schemas import CertificateRevokeSchema
 
