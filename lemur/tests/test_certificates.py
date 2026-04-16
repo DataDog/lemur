@@ -38,6 +38,22 @@ from lemur.tests.vectors import (
     SAN_CERT_KEY,
     ROOTCA_KEY,
     ROOTCA_CERT_STR,
+    CROSS_SIGNED_ROOT_A_CERT,
+    CROSS_SIGNED_ROOT_B_CERT,
+    CROSS_SIGNED_INT_BY_A_CERT,
+    CROSS_SIGNED_INT_BY_B_CERT,
+    CROSS_SIGNED_LEAF_CERT,
+    CROSS_SIGNED_LEAF_KEY,
+    CROSS_SIGNED_LEAF_CERT_STR,
+    CROSS_SIGNED_INT_BY_A_CERT_STR,
+    CROSS_SIGNED_INT_BY_B_CERT_STR,
+    CROSS_SIGNED_ROOT_A_CERT_STR,
+    CROSS_SIGNED_ROOT_B_CERT_STR,
+    CROSS_SIGNED_INT_KEY,
+    ORPHAN_CERT,
+    ORPHAN_CERT_STR,
+    ROOT_A_CROSS_SIGNED_BY_B_CERT,
+    ROOT_A_CROSS_SIGNED_BY_B_CERT_STR,
 )
 
 
@@ -828,6 +844,60 @@ def test_certificate_upload_schema_wrong_chain_2nd(client):
             "not signed by 'san.example.org'"
         ]
     }
+
+
+# =============================================================================
+# Regression tests for verify_cert_chain() — linear chains (Step 2, RDNA-926)
+# =============================================================================
+
+def test_verify_cert_chain_linear_full(app):
+    """Linear chain [leaf, intermediate, root] should pass."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT, ROOTCA_CERT
+
+    verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT, ROOTCA_CERT])
+
+
+def test_verify_cert_chain_linear_two_deep(app):
+    """Two-cert chain [leaf, intermediate] (root omitted) should pass."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT
+
+    verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT])
+
+
+def test_verify_cert_chain_cross_signed_linear(app):
+    """Linear chain using cross-signed fixtures: [leaf, int_by_a, root_a] should pass."""
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([CROSS_SIGNED_LEAF_CERT, CROSS_SIGNED_INT_BY_A_CERT, CROSS_SIGNED_ROOT_A_CERT])
+
+
+def test_verify_cert_chain_wrong_chain(app):
+    """Leaf not signed by next cert should be rejected."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
+
+    with pytest.raises(ValidationError, match="not signed by"):
+        verify_cert_chain([SAN_CERT, ROOTCA_CERT])
+
+
+def test_verify_cert_chain_wrong_second_cert(app):
+    """Wrong cert at position 2 should be rejected."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT
+
+    with pytest.raises(ValidationError, match="not signed by"):
+        verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT, CROSS_SIGNED_ROOT_A_CERT])
+
+
+def test_verify_cert_chain_custom_error_class(app):
+    """verify_cert_chain respects custom error_class parameter."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
+
+    with pytest.raises(AssertionError, match="not signed by"):
+        verify_cert_chain([SAN_CERT, ROOTCA_CERT], error_class=AssertionError)
 
 
 def test_certificate_revoke_schema():
