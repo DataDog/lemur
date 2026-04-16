@@ -965,6 +965,79 @@ def test_verify_cert_chain_cross_signed_root(app):
     ])
 
 
+# =============================================================================
+# check_integrity() tests with non-linear chains (Step 5, RDNA-926)
+# These exercise the model-layer validation path used by source sync.
+# =============================================================================
+
+def test_check_integrity_nonlinear_chain(session):
+    """Certificate with a non-linear (dual-chain) bundle should pass check_integrity().
+
+    This is the path that matters for source sync round-trips: when a cert is
+    synced back from Vault, Certificate.__init__() calls check_integrity(),
+    which calls verify_cert_chain() on [parsed_cert] + parse_cert_chain(chain).
+    """
+    from lemur.certificates.models import Certificate
+
+    # Build a non-linear chain string: int_by_a + root_a + int_by_b
+    chain_str = (
+        CROSS_SIGNED_INT_BY_A_CERT_STR.strip()
+        + "\n"
+        + CROSS_SIGNED_ROOT_A_CERT_STR.strip()
+        + "\n"
+        + CROSS_SIGNED_INT_BY_B_CERT_STR.strip()
+    )
+
+    # Should not raise — check_integrity() is called in __init__
+    cert = Certificate(
+        body=CROSS_SIGNED_LEAF_CERT_STR,
+        chain=chain_str,
+        private_key=CROSS_SIGNED_LEAF_KEY,
+        owner="test@example.com",
+    )
+    assert cert.cn == "test.example.com"
+
+
+def test_check_integrity_nonlinear_chain_no_private_key(session):
+    """Certificate with a non-linear chain but no private key should also pass.
+
+    This is the common source sync case: the source doesn't have access to
+    the private key, only the cert + chain.
+    """
+    from lemur.certificates.models import Certificate
+
+    chain_str = (
+        CROSS_SIGNED_INT_BY_A_CERT_STR.strip()
+        + "\n"
+        + CROSS_SIGNED_INT_BY_B_CERT_STR.strip()
+    )
+
+    cert = Certificate(
+        body=CROSS_SIGNED_LEAF_CERT_STR,
+        chain=chain_str,
+        owner="test@example.com",
+    )
+    assert cert.cn == "test.example.com"
+
+
+def test_check_integrity_nonlinear_chain_with_orphan_rejected(session):
+    """Certificate with a non-linear chain containing an orphan should fail check_integrity()."""
+    from lemur.certificates.models import Certificate
+
+    chain_str = (
+        CROSS_SIGNED_INT_BY_A_CERT_STR.strip()
+        + "\n"
+        + ORPHAN_CERT_STR.strip()
+    )
+
+    with pytest.raises(AssertionError, match="not signed by any certificate in the chain"):
+        Certificate(
+            body=CROSS_SIGNED_LEAF_CERT_STR,
+            chain=chain_str,
+            owner="test@example.com",
+        )
+
+
 def test_certificate_revoke_schema():
     from lemur.certificates.schemas import CertificateRevokeSchema
 
