@@ -217,9 +217,11 @@ def verify_cert_chain(certs, error_class=ValidationError):
             except InvalidSignature:
                 continue
             except UnsupportedAlgorithm as err:
-                # Can't verify this pair; treat as potentially valid to avoid
-                # false rejections (matches previous behavior).
+                # Can't verify this pair — do NOT treat as a valid edge.
+                # Falling through would let an unverifiable cert appear connected
+                # and pull orphaned subgraphs into the accepted set.
                 current_app.logger.warning("Skipping chain validation for pair: %s", err)
+                continue
 
             # candidate's public key verified current_cert's signature,
             # so candidate is a valid issuer of current_cert.
@@ -235,6 +237,30 @@ def verify_cert_chain(certs, error_class=ValidationError):
             "Incorrect chain certificate(s) provided: '%s' is not signed by any certificate in the chain"
             % (defaults.common_name(certs[orphan_idx]) or "Unknown")
         )
+
+    # Enforce leaf-to-root ordering: each cert after the leaf (position i > 0)
+    # must be an issuer of at least one cert that appears before it (position
+    # j < i). This ensures the chain is presented in the order TLS clients
+    # expect, while still allowing non-linear bundles where multiple issuers
+    # can appear at different positions.
+    for i in range(1, len(certs)):
+        candidate = certs[i]
+        signs_something_before = False
+        for j in range(i):
+            try:
+                check_cert_signature(certs[j], candidate.public_key())
+                signs_something_before = True
+                break
+            except (InvalidSignature, UnsupportedAlgorithm):
+                continue
+
+        if not signs_something_before:
+            raise error_class(
+                "Incorrect chain certificate(s) provided: "
+                "chain is not in leaf-to-root order — '%s' (position %d) "
+                "does not sign any preceding certificate"
+                % (defaults.common_name(candidate) or "Unknown", i)
+            )
 
 
 def is_valid_owner(email):

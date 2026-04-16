@@ -946,6 +946,22 @@ def test_verify_cert_chain_dual_chain_with_orphan(app):
         ])
 
 
+def test_verify_cert_chain_misordered_linear(app):
+    """Misordered linear chain [leaf, root, intermediate] should be rejected.
+
+    Even though all certs are reachable in the DAG, the chain must be in
+    leaf-to-root order for TLS compatibility.
+    """
+    from lemur.common.validators import verify_cert_chain
+
+    with pytest.raises(ValidationError, match="not in leaf-to-root order"):
+        verify_cert_chain([
+            CROSS_SIGNED_LEAF_CERT,
+            CROSS_SIGNED_ROOT_A_CERT,  # root before intermediate — wrong order
+            CROSS_SIGNED_INT_BY_A_CERT,
+        ])
+
+
 def test_verify_cert_chain_cross_signed_root(app):
     """Cross-signed root case (DigiCert pattern):
     [leaf, int_by_a, root_a_self_signed, root_a_cross_signed_by_b] should pass.
