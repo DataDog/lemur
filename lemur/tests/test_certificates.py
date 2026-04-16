@@ -823,8 +823,8 @@ def test_certificate_upload_schema_wrong_chain(client):
     data, errors = CertificateUploadInputSchema().load(data)
     assert errors == {
         "_schema": [
-            "Incorrect chain certificate(s) provided: 'san.example.org' is not signed by "
-            "'LemurTrust Unittests Root CA 2018'"
+            "Incorrect chain certificate(s) provided: 'LemurTrust Unittests Root CA 2018' "
+            "is not signed by any certificate in the chain"
         ]
     }
 
@@ -840,8 +840,8 @@ def test_certificate_upload_schema_wrong_chain_2nd(client):
     data, errors = CertificateUploadInputSchema().load(data)
     assert errors == {
         "_schema": [
-            "Incorrect chain certificate(s) provided: 'LemurTrust Unittests Class 1 CA 2018' is "
-            "not signed by 'san.example.org'"
+            "Incorrect chain certificate(s) provided: 'san.example.org' "
+            "is not signed by any certificate in the chain"
         ]
     }
 
@@ -878,7 +878,7 @@ def test_verify_cert_chain_wrong_chain(app):
     from lemur.common.validators import verify_cert_chain
     from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
 
-    with pytest.raises(ValidationError, match="not signed by"):
+    with pytest.raises(ValidationError, match="not signed by any certificate in the chain"):
         verify_cert_chain([SAN_CERT, ROOTCA_CERT])
 
 
@@ -887,7 +887,7 @@ def test_verify_cert_chain_wrong_second_cert(app):
     from lemur.common.validators import verify_cert_chain
     from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT
 
-    with pytest.raises(ValidationError, match="not signed by"):
+    with pytest.raises(ValidationError, match="not signed by any certificate in the chain"):
         verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT, CROSS_SIGNED_ROOT_A_CERT])
 
 
@@ -896,7 +896,7 @@ def test_verify_cert_chain_custom_error_class(app):
     from lemur.common.validators import verify_cert_chain
     from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
 
-    with pytest.raises(AssertionError, match="not signed by"):
+    with pytest.raises(AssertionError, match="not signed by any certificate in the chain"):
         verify_cert_chain([SAN_CERT, ROOTCA_CERT], error_class=AssertionError)
 
 
@@ -905,7 +905,6 @@ def test_verify_cert_chain_custom_error_class(app):
 # These exercise dual-chain / cross-signed bundles.
 # =============================================================================
 
-@pytest.mark.xfail(reason="Requires DAG validator (Step 4)", strict=True)
 def test_verify_cert_chain_dual_chain(app):
     """Dual-chain bundle [leaf, int_by_a, root_a, int_by_b] should pass.
 
@@ -922,7 +921,6 @@ def test_verify_cert_chain_dual_chain(app):
     ])
 
 
-@pytest.mark.xfail(reason="Requires DAG validator (Step 4)", strict=True)
 def test_verify_cert_chain_dual_chain_reversed_order(app):
     """Reversed alternate order [leaf, int_by_b, root_b, int_by_a] should pass."""
     from lemur.common.validators import verify_cert_chain
@@ -939,7 +937,7 @@ def test_verify_cert_chain_dual_chain_with_orphan(app):
     """Dual-chain with orphaned unrelated cert appended should be rejected."""
     from lemur.common.validators import verify_cert_chain
 
-    with pytest.raises(ValidationError, match="not signed by"):
+    with pytest.raises(ValidationError, match="Unrelated CA"):
         verify_cert_chain([
             CROSS_SIGNED_LEAF_CERT,
             CROSS_SIGNED_INT_BY_A_CERT,
