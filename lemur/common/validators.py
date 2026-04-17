@@ -217,14 +217,22 @@ def verify_cert_chain(certs, error_class=ValidationError):
             except InvalidSignature:
                 continue
             except UnsupportedAlgorithm as err:
-                # Can't verify this pair — do NOT treat as a valid edge.
-                # Falling through would let an unverifiable cert appear connected
-                # and pull orphaned subgraphs into the accepted set.
-                current_app.logger.warning("Skipping chain validation for pair: %s", err)
-                continue
+                # Can't verify this pair due to an unsupported algorithm
+                # (e.g. RSASSA-PSS). To preserve master behavior for existing
+                # linear chains and source sync imports, allow the edge only if
+                # the candidate is the immediately-next cert in the presented
+                # order (adjacency-only fallback). This avoids the broad
+                # false-edge problem for non-adjacent certs while keeping
+                # compatibility with the old linear validator's skip behavior.
+                if candidate_idx == current_idx + 1:
+                    current_app.logger.warning(
+                        "Skipping chain validation for adjacent pair (unsupported algorithm): %s", err
+                    )
+                else:
+                    continue
 
-            # candidate's public key verified current_cert's signature,
-            # so candidate is a valid issuer of current_cert.
+            # candidate's public key verified current_cert's signature (or is
+            # an adjacent unsupported-algorithm fallback).
             reached.add(candidate_idx)
             frontier.append(candidate_idx)
 
@@ -251,7 +259,14 @@ def verify_cert_chain(certs, error_class=ValidationError):
                 check_cert_signature(certs[j], candidate.public_key())
                 signs_something_before = True
                 break
-            except (InvalidSignature, UnsupportedAlgorithm):
+            except InvalidSignature:
+                continue
+            except UnsupportedAlgorithm:
+                # Adjacency-only fallback: treat as valid if this is the
+                # immediately-preceding cert (preserves master linear behavior).
+                if j == i - 1:
+                    signs_something_before = True
+                    break
                 continue
 
         if not signs_something_before:

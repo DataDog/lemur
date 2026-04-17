@@ -35,6 +35,6 @@ All 5 steps from the plan were implemented and committed:
 
 2. **Performance**: The DAG algorithm is O(n²) in the number of certs (for each visited cert, it checks all candidates). For typical chains (2-5 certs), this is negligible. For pathological inputs with many certs, it could be slower than the linear O(n) walk. This is acceptable given the use case.
 
-3. **UnsupportedAlgorithm handling**: When a cert pair can't be verified due to an unsupported algorithm (e.g. RSASSA-PSS), the DAG validator marks the candidate as reached (same as the old validator skipping the check). This is the conservative choice to avoid false rejections, but means an unsupported-algorithm cert could mask an orphan. The old validator had the same limitation.
+3. **UnsupportedAlgorithm handling (adjacency-only fallback)**: Unsupported signature algorithms (e.g. RSASSA-PSS) use a compatibility fallback: the unverifiable hop is accepted only if the candidate is the immediately-next cert in the presented order. This preserves master behavior for existing linear chains and source sync imports, avoids the false-edge problem for non-adjacent certs, and keeps the DAG validation strict for the supported cases. Non-adjacent unsupported hops are rejected (the cert will appear orphaned). Full algorithm support is out of scope for this PR.
 
 4. **Preexisting test failure**: `test_certificate_upload_schema_ok` fails on this branch and on master. Consider fixing separately (the `g.identity` / `SensitiveDomainPermission` issue in the CSR validation path).
