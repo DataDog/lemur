@@ -217,13 +217,9 @@ def verify_cert_chain(certs, error_class=ValidationError):
             except InvalidSignature:
                 continue
             except UnsupportedAlgorithm as err:
-                # Can't verify this pair due to an unsupported algorithm
-                # (e.g. RSASSA-PSS). To preserve master behavior for existing
-                # linear chains and source sync imports, allow the edge only if
-                # the candidate is the immediately-next cert in the presented
-                # order (adjacency-only fallback). This avoids the broad
-                # false-edge problem for non-adjacent certs while keeping
-                # compatibility with the old linear validator's skip behavior.
+                # COMPAT: Adjacency-only fallback for unsupported algorithms.
+                # Remove when RSASSA-PSS / other algorithms are natively supported.
+                # See: https://github.com/DataDog/lemur/pull/254#issuecomment-4265512236
                 if candidate_idx == current_idx + 1:
                     current_app.logger.warning(
                         "Skipping chain validation for adjacent pair (unsupported algorithm): %s", err
@@ -262,8 +258,9 @@ def verify_cert_chain(certs, error_class=ValidationError):
             except InvalidSignature:
                 continue
             except UnsupportedAlgorithm:
-                # Adjacency-only fallback: treat as valid if this is the
-                # immediately-preceding cert (preserves master linear behavior).
+                # COMPAT: Adjacency-only fallback for unsupported algorithms.
+                # Remove when RSASSA-PSS / other algorithms are natively supported.
+                # See: https://github.com/DataDog/lemur/pull/254#issuecomment-4265512236
                 if j == i - 1:
                     signs_something_before = True
                     break
