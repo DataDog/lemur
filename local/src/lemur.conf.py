@@ -216,6 +216,10 @@ LEMUR_DEFAULT_AUTHORITY = str(os.environ.get("LEMUR_DEFAULT_AUTHORITY", "Example
 
 LEMUR_DEFAULT_ROLE = "operator"
 
+# Restrict authority creation and sensitive operations to admin/operator roles
+ADMIN_ONLY_AUTHORITY_CREATION = True
+LEMUR_STRICT_ROLE_ENFORCEMENT = True
+
 ACTIVE_PROVIDERS = []
 METRIC_PROVIDERS = []
 
