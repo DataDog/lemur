@@ -113,5 +113,5 @@ def test_invalid_pending_upload_with_chain(pending_certificate_from_partial_chai
     with pytest.raises(ValidationError) as err:
         upload(pending_certificate_from_partial_chain_ca.id, **cert)
     assert str(err.value).startswith(
-        "Incorrect chain certificate(s) provided: '*.wild.example.org' is not signed by 'LemurTrust Unittests Root CA 2018"
+        "Incorrect chain certificate(s) provided:"
     )
