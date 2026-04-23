@@ -121,7 +121,7 @@ configargparse==1.7.5
     # via certbot
 configobj==5.0.9
     # via certbot
-cryptography==43.0.1
+cryptography==46.0.7
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements-base.in
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements-datadog.in
@@ -364,7 +364,7 @@ pyjwt[crypto]==2.12.1
     #   msal
 pynacl==1.6.2
     # via paramiko
-pyopenssl==25.1.0
+pyopenssl==26.0.0
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements-base.in
     #   acme
