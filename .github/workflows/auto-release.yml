@@ -14,8 +14,6 @@ jobs:
     if: "!startsWith(github.event.head_commit.message, 'Merge tag')"
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
     - name: Get latest release and increment
       id: version
