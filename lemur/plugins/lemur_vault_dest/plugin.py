@@ -141,13 +141,14 @@ def _upload_with_retry(stub, request, auth_token, retry_timeout_seconds, initial
                 except Exception:
                     pass
             return
-        except grpc.RpcError as exc:
+        except Exception as exc:
             if not _is_retriable_grpc_error(exc):
                 raise
 
             attempt += 1
-            elapsed = time.monotonic() - start
-            if deadline is not None and time.monotonic() >= deadline:
+            now = time.monotonic()
+            elapsed = now - start
+            if deadline is not None and now >= deadline:
                 current_app.logger.error(
                     "COA upload retry deadline exceeded after %d attempt(s): %s",
                     attempt,
@@ -631,7 +632,7 @@ class COADestinationPlugin(DestinationPlugin):
         },
         {
             "name": "retry_timeout_seconds",
-            "type": "str",
+            "type": "int",
             "required": False,
             "validation": check_validation(r"^\d+$"),
             "helpMessage": (
@@ -639,11 +640,11 @@ class COADestinationPlugin(DestinationPlugin):
                 "Set to 0 to retry forever.  Only used when retry_until_healthy "
                 "is true.  Default: 600 (10 minutes)."
             ),
-            "default": "600",
+            "default": 600,
         },
         {
             "name": "retry_initial_wait_seconds",
-            "type": "str",
+            "type": "int",
             "required": False,
             "validation": check_validation(r"^\d+(\.\d+)?$"),
             "helpMessage": (
@@ -651,7 +652,7 @@ class COADestinationPlugin(DestinationPlugin):
                 "Doubles on each attempt, capped at 60 s.  "
                 "Only used when retry_until_healthy is true.  Default: 5."
             ),
-            "default": "5",
+            "default": 5,
         },
     ]
 

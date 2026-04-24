@@ -281,8 +281,7 @@ class TestUploadWithRetry:
         """stub.Upload called 3 times when first two raise retriable UNAVAILABLE.
 
         monotonic() call pattern (deadline=9999):
-          [0] start; [1] elapsed1; [2] deadline1 check; [3] elapsed2; [4] deadline2 check;
-          [5] success log (attempt>0).
+          [0] start; [1] now (failure 1); [2] now (failure 2); [3] success log.
         """
         unavailable_err = make_rpc_error(grpc.StatusCode.UNAVAILABLE, "no healthy upstream")
         stub = MagicMock()
@@ -323,26 +322,15 @@ class TestUploadWithRetry:
 
         monotonic() call pattern (deadline = start + 5 = 5):
           [0] start → deadline=5;
-          [1] elapsed (= 1.0, elapsed=1.0);
-          [2] deadline check → 2.0 < 5 → NOT past deadline yet.
-
-        We need the SECOND failure's deadline check to be >= 5. So we return
-        a sequence where after the second failure the deadline check value >= 5.
-        Concretely: [0, 1, 1, 6, 10] gives:
-          monotonic[0]=0 → deadline=5
-          monotonic[1]=1 → elapsed1=1
-          monotonic[2]=1 → 1 < 5, not expired → sleep → retry
-          monotonic[3]=6 → elapsed2=6
-          monotonic[4]=10 → 10 >= 5 → EXPIRED → raise
+          [1] now (failure 1): elapsed=1.0, 1.0 < 5 → not expired → sleep → retry
+          [2] now (failure 2): elapsed=6.0, 6.0 >= 5 → EXPIRED → raise
         """
         unavailable_err = make_rpc_error(grpc.StatusCode.UNAVAILABLE, "no healthy upstream")
         stub = MagicMock()
-        # Keep raising on every call so we can control exactly when timeout hits
         stub.Upload.side_effect = unavailable_err
         request = MagicMock()
 
-        # Let the first failure pass (not timed out) and the second fail with timeout.
-        monotonic_values = [0.0, 1.0, 1.0, 6.0, 10.0] + [10.0] * 5
+        monotonic_values = [0.0, 1.0, 6.0] + [10.0] * 5
 
         with patch.object(_plugin_mod, "current_app"):
             with patch.object(_plugin_time, "sleep"):
