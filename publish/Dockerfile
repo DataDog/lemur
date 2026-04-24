@@ -53,10 +53,15 @@ FROM $BASE_IMAGE
 ARG FIPS_ENABLED=false
 ARG CI_COMMIT_SHA
 ARG GBILITE_ENV=prod
+ARG IMAGE_TAG
 LABEL IS_FIPS=$FIPS_ENABLED
 LABEL git.repository="lemur"
 LABEL git.branch=$GBILITE_ENV
 LABEL git.commit=$CI_COMMIT_SHA
+LABEL org.opencontainers.image.source="https://github.com/DataDog/lemur"
+LABEL org.opencontainers.image.revision=$CI_COMMIT_SHA
+LABEL org.opencontainers.image.version=$IMAGE_TAG
+LABEL org.opencontainers.image.vendor="datadog"
 
 USER root
 
