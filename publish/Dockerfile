@@ -50,9 +50,13 @@ RUN /opt/venv/bin/python3 -m pip install --no-cache-dir --no-deps --force-reinst
 # Lemur Application
 FROM $BASE_IMAGE
 
-# FIPS mode
 ARG FIPS_ENABLED=false
+ARG CI_COMMIT_SHA
+ARG GBILITE_ENV=prod
 LABEL IS_FIPS=$FIPS_ENABLED
+LABEL git.repository="lemur"
+LABEL git.branch=$GBILITE_ENV
+LABEL git.commit=$CI_COMMIT_SHA
 
 USER root
 

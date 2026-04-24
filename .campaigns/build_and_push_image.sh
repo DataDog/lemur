@@ -33,6 +33,7 @@ docker buildx build \
   --build-arg CI_COMMIT_SHA=$CHECKOUT_REF \
   --build-arg BASE_IMAGE=$BASE_IMAGE \
   --build-arg FIPS_ENABLED=$FIPS_ENABLED \
+  --build-arg GBILITE_ENV=$GBILITE_ENV \
   --tag registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD \
   --metadata-file ${METADATA_FILE} \
   --push \
