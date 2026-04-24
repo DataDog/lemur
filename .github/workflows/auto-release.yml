@@ -19,8 +19,8 @@ jobs:
       id: octo-sts
       uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
       with:
-        scope: DataDog/lemur
-        policy: self.auto-release
+        scope: DataDog
+        policy: lemur.github.auto-release.push
 
     - name: Get latest release and compute next version
       id: version
