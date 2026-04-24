@@ -1,0 +1,43 @@
+name: Auto-release on master merge
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Skip if the commit was a tag push (avoid double-triggering with manual releases)
+    if: "!startsWith(github.event.head_commit.message, 'Merge tag')"
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Get latest release and compute next version
+      id: version
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
+        TODAY=$(date -u +%Y.%m.%d)
+        if [[ "$LATEST_TAG" == "$TODAY."* ]]; then
+          N="${LATEST_TAG##*.}"
+          NEW_TAG="${TODAY}.$((N + 1))"
+        else
+          NEW_TAG="${TODAY}.1"
+        fi
+        echo "latest=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+        echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+    - name: Create tag and release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        git tag ${{ steps.version.outputs.new_tag }}
+        git push origin ${{ steps.version.outputs.new_tag }}
+        gh release create ${{ steps.version.outputs.new_tag }} \
+          --title "${{ steps.version.outputs.new_tag }}" \
+          --generate-notes \
+          --notes-start-tag "${{ steps.version.outputs.latest }}"
