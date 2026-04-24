@@ -5,20 +5,27 @@ on:
     branches: [master]
 
 permissions:
-  contents: write
+  id-token: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Skip if the commit was a tag push (avoid double-triggering with manual releases)
     if: "!startsWith(github.event.head_commit.message, 'Merge tag')"
     steps:
     - uses: actions/checkout@v4
 
+    - name: Get dd-octo-sts token
+      id: octo-sts
+      uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+      with:
+        scope: DataDog
+        policy: lemur.github.auto-release.push
+
     - name: Get latest release and compute next version
       id: version
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       run: |
         LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
         TODAY=$(date -u +%Y.%m.%d)
@@ -31,13 +38,12 @@ jobs:
         echo "latest=$LATEST_TAG" >> "$GITHUB_OUTPUT"
         echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
 
-    - name: Create tag and release
+    - name: Create release
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       run: |
-        git tag ${{ steps.version.outputs.new_tag }}
-        git push origin ${{ steps.version.outputs.new_tag }}
         gh release create ${{ steps.version.outputs.new_tag }} \
+          --target ${{ github.sha }} \
           --title "${{ steps.version.outputs.new_tag }}" \
           --generate-notes \
           --notes-start-tag "${{ steps.version.outputs.latest }}"
