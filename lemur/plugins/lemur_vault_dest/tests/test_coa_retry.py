@@ -237,9 +237,6 @@ class TestIsRetriableGrpcError:
 # under every pytest import mode.  patch.object is always safe regardless of
 # sys.modules state.
 
-import time as _time_module  # noqa: E402
-
-
 class TestUploadWithRetry:
 
     AUTH_TOKEN = ("authorization", "Bearer tok")
