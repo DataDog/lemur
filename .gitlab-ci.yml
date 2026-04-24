@@ -72,8 +72,6 @@ build-stage-image-fips:
   script:
     - CHECKOUT_REF=$CI_COMMIT_SHA GBILITE_ENV=staging GBILITE_IMAGE_TO_BUILD="lemur:v${CI_PIPELINE_ID}-${CI_COMMIT_SHORT_SHA}-fips" /bin/bash .campaigns/build_and_push_image.sh
 
-# Prod images are only built from tags (auto-release creates a CalVer tag
-# on every master merge, so master-commit builds are no longer needed).
 build-prod-image:
   image: $CURRENT_CI_IMAGE
   stage: build-prod-image
