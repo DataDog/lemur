@@ -101,14 +101,12 @@ cd lemur && lemur db migrate -m "description"
 
 ## Release Process
 
-Releases are automated. Merging to master triggers a GitHub Action that auto-increments the `1.0.0-dd.N` tag, creates a GitHub Release, and kicks off the GitLab CI image build. Conductor in k8s-resources picks up the new image automatically (staging every 30 min, prod/gov on weekday schedule).
+Releases are automated. Merging to master triggers a GitHub Action that creates a CalVer tag (`YYYY.MM.DD.N`), creates a GitHub Release with auto-generated notes, and kicks off the GitLab CI image build. Conductor in k8s-resources picks up the new image automatically (staging every 30 min, prod/gov on weekday schedule).
 
-Tag format: `1.0.0-dd.N`. Increment the trailing number only.
-
-For manual releases (e.g., changelog-only or upstream sync), you can still tag manually:
+For manual releases, you can still tag manually:
 ```bash
-git tag 1.0.0-dd.N && git push origin 1.0.0-dd.N
-gh release create 1.0.0-dd.N --title "1.0.0-dd.N" --generate-notes
+git tag 2026.04.24.1 && git push origin 2026.04.24.1
+gh release create 2026.04.24.1 --title "2026.04.24.1" --generate-notes
 ```
 
 ## Runbooks & References

@@ -15,17 +15,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Get latest release and increment
+    - name: Get latest release and compute next version
       id: version
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
-        if [ -z "$LATEST_TAG" ]; then
-          NEW_TAG="1.0.0-dd.1"
+        TODAY=$(date -u +%Y.%m.%d)
+        if [[ "$LATEST_TAG" == "$TODAY."* ]]; then
+          N="${LATEST_TAG##*.}"
+          NEW_TAG="${TODAY}.$((N + 1))"
         else
-          N="${LATEST_TAG##*dd.}"
-          NEW_TAG="1.0.0-dd.$((N + 1))"
+          NEW_TAG="${TODAY}.1"
         fi
         echo "latest=$LATEST_TAG" >> "$GITHUB_OUTPUT"
         echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
