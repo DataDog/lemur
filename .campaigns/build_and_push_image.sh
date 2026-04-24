@@ -39,8 +39,7 @@ docker buildx build \
   .
 ddsign sign registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD --docker-metadata-file ${METADATA_FILE}
 
-# Tag as mutable-latest for Conductor's artifact_reference_latest to resolve.
-# Only for prod non-FIPS builds, matching the convention used by Bazel-built services.
+# Tag as mutable-latest for Conductor image resolution.
 if [[ $GBILITE_ENV == "prod" && $FIPS_ENABLED == "false" ]]; then
   crane tag registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD mutable-latest-prod
 elif [[ $GBILITE_ENV == "prod" && $FIPS_ENABLED == "true" ]]; then
