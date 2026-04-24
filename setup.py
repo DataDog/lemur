@@ -148,6 +148,7 @@ setup(
             "aws_s3 = lemur.plugins.lemur_aws.plugin:S3DestinationPlugin",
             "aws_sns = lemur.plugins.lemur_aws.plugin:SNSNotificationPlugin",
             "coa_destination = cert_orchestration_adapter.plugin:AdapterDestinationPlugin",
+            "coa_destination_retrying = lemur.plugins.lemur_vault_dest.plugin:COADestinationPlugin",
             "coa_source = cert_orchestration_adapter.plugin:AdapterSourcePlugin",
             "email_notification = lemur.plugins.lemur_email.plugin:EmailNotificationPlugin",
             "slack_notification = lemur.plugins.lemur_slack.plugin:SlackNotificationPlugin",

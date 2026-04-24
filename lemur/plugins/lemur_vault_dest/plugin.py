@@ -12,7 +12,9 @@
 
 import os
 import re
+import time
 import hvac
+import grpc
 from flask import current_app
 
 from lemur.common.defaults import (
@@ -31,6 +33,110 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
 from validators.url import url
+
+try:
+    from cert_orchestration_adapter.plugin import create_coa_connection, parse_ca_vendor
+    from cert_orchestration_adapter.plugin import (
+        parse_certificate as coa_parse_certificate,
+        common_name as coa_common_name,
+        get_key_type_from_certificate,
+    )
+    from domains.cert_orchestration.libs.pb.cert_orchestration_adapter import (
+        service_pb2 as _coa_adapter_pb2,
+    )
+    _COA_AVAILABLE = True
+except ImportError:
+    _COA_AVAILABLE = False
+    _coa_adapter_pb2 = None
+
+# ---------------------------------------------------------------------------
+# Retry helpers for gRPC UNAVAILABLE errors
+# ---------------------------------------------------------------------------
+
+# gRPC status codes that indicate the upstream is not yet reachable and the
+# call is safe to retry without risk of duplicate side-effects.
+_RETRIABLE_STATUS_CODES = {grpc.StatusCode.UNAVAILABLE}
+
+# Substrings in the gRPC error detail that confirm a "no healthy upstream"
+# condition.  If any of these appear we know COA simply isn't deployed yet
+# and retrying is the right behaviour.
+_RETRIABLE_DETAIL_SUBSTRINGS = (
+    "no healthy upstream",
+    "upstream connect error",
+    "connection refused",
+    "failed to connect",
+)
+
+
+def _is_retriable_grpc_error(exc):
+    """Return True if *exc* is a gRPC error that should be retried.
+
+    Only retries on UNAVAILABLE status where the detail string indicates that
+    the upstream is unreachable (e.g. COA not yet deployed).  All other gRPC
+    errors – including UNAUTHENTICATED, PERMISSION_DENIED, INVALID_ARGUMENT,
+    and INTERNAL – propagate immediately so mis-configuration is surfaced fast.
+    """
+    if not isinstance(exc, grpc.RpcError):
+        return False
+    try:
+        code = exc.code()
+    except Exception:
+        return False
+    if code not in _RETRIABLE_STATUS_CODES:
+        return False
+    try:
+        detail = exc.details() or ""
+    except Exception:
+        detail = ""
+    detail_lower = detail.lower()
+    return any(sub in detail_lower for sub in _RETRIABLE_DETAIL_SUBSTRINGS)
+
+
+def _upload_with_retry(stub, request, auth_token, retry_timeout_seconds, initial_wait_seconds):
+    """Call stub.Upload(request) with exponential back-off on retriable errors.
+
+    Args:
+        stub: gRPC stub with an Upload method.
+        request: The CertificateUploadRequest protobuf message.
+        auth_token: (key, value) tuple for the gRPC call metadata.
+        retry_timeout_seconds (float): Wall-clock deadline for the entire retry
+            loop.  Zero or negative means retry forever.
+        initial_wait_seconds (float): Wait time before the first retry.
+            Each subsequent wait is doubled, capped at 60 s.
+
+    Raises:
+        grpc.RpcError: Re-raises the last gRPC error when the deadline is
+            exceeded or when the error is not retriable.
+    """
+    deadline = time.monotonic() + retry_timeout_seconds if retry_timeout_seconds > 0 else None
+    wait = max(initial_wait_seconds, 1.0)
+    attempt = 0
+
+    while True:
+        try:
+            stub.Upload(request=request, metadata=[auth_token])
+            return
+        except grpc.RpcError as exc:
+            if not _is_retriable_grpc_error(exc):
+                raise
+
+            attempt += 1
+            if deadline is not None and time.monotonic() >= deadline:
+                current_app.logger.error(
+                    "COA upload retry deadline exceeded after %d attempt(s): %s",
+                    attempt,
+                    exc.details(),
+                )
+                raise
+
+            current_app.logger.warning(
+                "COA gRPC UNAVAILABLE (attempt %d), retrying in %.1f s: %s",
+                attempt,
+                wait,
+                exc.details(),
+            )
+            time.sleep(wait)
+            wait = min(wait * 2, 60.0)
 
 
 class VaultSourcePlugin(SourcePlugin):
@@ -385,3 +491,212 @@ def get_secret(client, mount, path):
         pass
     finally:
         return result
+
+
+# ---------------------------------------------------------------------------
+# COA (Cert Orchestration Adapter) destination plugin
+# ---------------------------------------------------------------------------
+
+class COADestinationPlugin(DestinationPlugin):
+    """Destination plugin that delivers certificates to the Cert Orchestration
+    Adapter (COA) service over gRPC.
+
+    Extends the base COA destination with a ``retry_until_healthy`` option: when
+    enabled, a gRPC UNAVAILABLE / "no healthy upstream" error causes the plugin
+    to retry with exponential back-off instead of failing immediately.  This is
+    useful during initial cluster bootstrapping when COA may not yet be deployed.
+
+    The plugin delegates connection setup to
+    ``cert_orchestration_adapter.plugin.create_coa_connection`` so that auth
+    (JWT / Ticino), channel setup, and path parsing stay in one place.
+
+    Configuration example (per-destination options)::
+
+        hostname: cert-orchestration-adapter.cert-orchestration.<env>.fabric.dog
+        port: 3000
+        audience: cert-orchestration-adapter
+        paths: /secret/certs/my-app
+        use_xdcgw: false
+        use_ticino: false
+        retry_until_healthy: true   # <-- new flag
+        retry_timeout_seconds: 600  # give up after 10 min (0 = retry forever)
+        retry_initial_wait_seconds: 5
+    """
+
+    title = "Cert Orchestration Adapter (with retry)"
+    slug = "coa-destination-retrying"
+    description = (
+        "Uploads certificates to the Cert Orchestration Adapter over gRPC.  "
+        "When retry_until_healthy is enabled the plugin retries on "
+        "UNAVAILABLE / 'no healthy upstream' errors with exponential back-off."
+    )
+
+    author = "Datadog Runtime DNA"
+    author_url = "https://github.com/DataDog/lemur"
+
+    options = [
+        {
+            "name": "audience",
+            "type": "str",
+            "required": True,
+            "helpMessage": "JWT audience claim for authenticating with the COA service.",
+        },
+        {
+            "name": "hostname",
+            "type": "str",
+            "required": True,
+            "validation": check_validation("^.*.fabric.dog|localhost$"),
+            "helpMessage": (
+                "COA service hostname.  Must be a Fabric DNS name or localhost."
+            ),
+        },
+        {
+            "name": "port",
+            "type": "str",
+            "required": True,
+            "validation": check_validation(r"^\d+$"),
+            "helpMessage": "COA service gRPC port.",
+        },
+        {
+            "name": "paths",
+            "type": "str",
+            "required": True,
+            "validation": check_validation(r"^(/[\w-]+)+(,[/\w-]+)*$"),
+            "helpMessage": "Comma-delimited list of Vault paths to write each certificate to.",
+        },
+        {
+            "name": "use_xdcgw",
+            "type": "bool",
+            "required": False,
+            "helpMessage": "Route the request through the Cross-DC Gateway.",
+            "default": False,
+        },
+        {
+            "name": "use_ticino",
+            "type": "bool",
+            "required": False,
+            "helpMessage": "Use Ticino tokens for cross-DC internal service auth.",
+            "default": False,
+        },
+        {
+            "name": "retry_until_healthy",
+            "type": "bool",
+            "required": False,
+            "helpMessage": (
+                "When true, retry the gRPC call with exponential back-off on "
+                "UNAVAILABLE / 'no healthy upstream' errors.  All other errors "
+                "are raised immediately.  Useful when COA may not be deployed "
+                "yet on the target cluster."
+            ),
+            "default": False,
+        },
+        {
+            "name": "retry_timeout_seconds",
+            "type": "str",
+            "required": False,
+            "validation": check_validation(r"^\d+$"),
+            "helpMessage": (
+                "How long (in seconds) to keep retrying before giving up.  "
+                "Set to 0 to retry forever.  Only used when retry_until_healthy "
+                "is true.  Default: 600 (10 minutes)."
+            ),
+            "default": "600",
+        },
+        {
+            "name": "retry_initial_wait_seconds",
+            "type": "str",
+            "required": False,
+            "validation": check_validation(r"^\d+(\.\d+)?$"),
+            "helpMessage": (
+                "Initial back-off delay in seconds before the first retry.  "
+                "Doubles on each attempt, capped at 60 s.  "
+                "Only used when retry_until_healthy is true.  Default: 5."
+            ),
+            "default": "5",
+        },
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super(COADestinationPlugin, self).__init__(*args, **kwargs)
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        """Upload a certificate to COA.
+
+        When *retry_until_healthy* is set the call is retried with exponential
+        back-off whenever gRPC returns UNAVAILABLE with a detail string that
+        looks like "no healthy upstream" (or similar).  All other gRPC errors
+        propagate immediately.
+        """
+        if not _COA_AVAILABLE:
+            raise RuntimeError(
+                "cert_orchestration_adapter wheel is not installed; "
+                "cannot use COADestinationPlugin."
+            )
+
+        retry_until_healthy = self.get_option("retry_until_healthy", options)
+        retry_timeout = float(self.get_option("retry_timeout_seconds", options) or 600)
+        initial_wait = float(self.get_option("retry_initial_wait_seconds", options) or 5)
+
+        try:
+            stub, channel, paths_list, host, auth_token = create_coa_connection(self, options)
+        except Exception as exc:
+            current_app.logger.error(
+                "Failed to create COA gRPC connection: %s", exc, exc_info=True
+            )
+            raise
+
+        if not paths_list:
+            current_app.logger.error(
+                "COADestinationPlugin: no paths configured for certificate upload"
+            )
+            return
+
+        parsed_crt = coa_parse_certificate(body)
+        parsed_chain = coa_parse_certificate(cert_chain)
+        ca_vendor = parse_ca_vendor(parsed_chain)
+        key_type = get_key_type_from_certificate(body)
+        crt_name = "{cn}_{vendor}_{ktype}".format(
+            cn=coa_common_name(parsed_crt),
+            vendor=ca_vendor,
+            ktype=key_type,
+        )
+
+        with channel:
+            for path in paths_list:
+                vault_path = os.path.join(path, crt_name)
+                current_app.logger.info(
+                    {
+                        "message": "Uploading certificate via COADestinationPlugin",
+                        "name": name,
+                        "endpoint": host,
+                        "path": vault_path,
+                        "retry_until_healthy": retry_until_healthy,
+                    }
+                )
+
+                request = _coa_adapter_pb2.CertificateUploadRequest(
+                    certificate=body,
+                    intermediate=cert_chain,
+                    private_key=private_key,
+                    vault_path=vault_path,
+                )
+
+                if retry_until_healthy:
+                    _upload_with_retry(
+                        stub=stub,
+                        request=request,
+                        auth_token=auth_token,
+                        retry_timeout_seconds=retry_timeout,
+                        initial_wait_seconds=initial_wait,
+                    )
+                else:
+                    try:
+                        stub.Upload(request=request, metadata=[auth_token])
+                    except Exception as exc:
+                        current_app.logger.error(
+                            "COA gRPC upload failed for path %s: %s",
+                            vault_path,
+                            exc,
+                            exc_info=True,
+                        )
+                        raise
