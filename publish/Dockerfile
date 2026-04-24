@@ -52,11 +52,15 @@ FROM $BASE_IMAGE
 
 ARG FIPS_ENABLED=false
 ARG CI_COMMIT_SHA
+ARG CI_PIPELINE_ID
 ARG GBILITE_ENV=prod
+ARG IMAGE_TAG
 LABEL IS_FIPS=$FIPS_ENABLED
 LABEL git.repository="lemur"
 LABEL git.branch=$GBILITE_ENV
 LABEL git.commit=$CI_COMMIT_SHA
+LABEL ci.pipeline_id=$CI_PIPELINE_ID
+LABEL org.opencontainers.image.version=$IMAGE_TAG
 
 USER root
 
