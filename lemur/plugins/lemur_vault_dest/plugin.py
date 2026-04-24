@@ -14,7 +14,6 @@ import os
 import re
 import time
 import hvac
-import grpc
 from flask import current_app
 
 from lemur.common.defaults import (
@@ -26,6 +25,7 @@ from lemur.common.defaults import (
     organization,
 )
 from lemur.common.utils import parse_certificate, check_validation
+from lemur.extensions import metrics
 from lemur.plugins.bases import DestinationPlugin
 from lemur.plugins.bases import SourcePlugin
 
@@ -35,6 +35,7 @@ from cryptography.hazmat.backends import default_backend
 from validators.url import url
 
 try:
+    import grpc
     from cert_orchestration_adapter.plugin import create_coa_connection, parse_ca_vendor
     from cert_orchestration_adapter.plugin import (
         parse_certificate as coa_parse_certificate,
@@ -47,6 +48,7 @@ try:
     _COA_AVAILABLE = True
 except ImportError:
     _COA_AVAILABLE = False
+    grpc = None
     _coa_adapter_pb2 = None
 
 # ---------------------------------------------------------------------------
@@ -55,7 +57,7 @@ except ImportError:
 
 # gRPC status codes that indicate the upstream is not yet reachable and the
 # call is safe to retry without risk of duplicate side-effects.
-_RETRIABLE_STATUS_CODES = {grpc.StatusCode.UNAVAILABLE}
+_RETRIABLE_STATUS_CODES = {grpc.StatusCode.UNAVAILABLE} if grpc is not None else set()
 
 # Substrings in the gRPC error detail that confirm a "no healthy upstream"
 # condition.  If any of these appear we know COA simply isn't deployed yet
@@ -76,6 +78,8 @@ def _is_retriable_grpc_error(exc):
     errors – including UNAUTHENTICATED, PERMISSION_DENIED, INVALID_ARGUMENT,
     and INTERNAL – propagate immediately so mis-configuration is surfaced fast.
     """
+    if grpc is None:
+        return False
     if not isinstance(exc, grpc.RpcError):
         return False
     try:
@@ -92,7 +96,7 @@ def _is_retriable_grpc_error(exc):
     return any(sub in detail_lower for sub in _RETRIABLE_DETAIL_SUBSTRINGS)
 
 
-def _upload_with_retry(stub, request, auth_token, retry_timeout_seconds, initial_wait_seconds):
+def _upload_with_retry(stub, request, auth_token, retry_timeout_seconds, initial_wait_seconds, endpoint="unknown"):
     """Call stub.Upload(request) with exponential back-off on retriable errors.
 
     Args:
@@ -103,24 +107,46 @@ def _upload_with_retry(stub, request, auth_token, retry_timeout_seconds, initial
             loop.  Zero or negative means retry forever.
         initial_wait_seconds (float): Wait time before the first retry.
             Each subsequent wait is doubled, capped at 60 s.
+        endpoint (str): Human-readable endpoint label for logs and metrics.
+            Defaults to "unknown".
 
     Raises:
         grpc.RpcError: Re-raises the last gRPC error when the deadline is
             exceeded or when the error is not retriable.
     """
-    deadline = time.monotonic() + retry_timeout_seconds if retry_timeout_seconds > 0 else None
+    start = time.monotonic()
+    deadline = start + retry_timeout_seconds if retry_timeout_seconds > 0 else None
     wait = max(initial_wait_seconds, 1.0)
     attempt = 0
 
     while True:
         try:
             stub.Upload(request=request, metadata=[auth_token])
+            if attempt > 0:
+                current_app.logger.info(
+                    {
+                        "message": "COA upload succeeded after retries",
+                        "attempt_count": attempt,
+                        "endpoint": endpoint,
+                        "total_elapsed_seconds": round(time.monotonic() - start, 2),
+                    }
+                )
+                try:
+                    metrics.send(
+                        "lemur.plugins.coa.retry_success",
+                        "counter",
+                        1,
+                        metric_tags={"host": endpoint},
+                    )
+                except Exception:
+                    pass
             return
         except grpc.RpcError as exc:
             if not _is_retriable_grpc_error(exc):
                 raise
 
             attempt += 1
+            elapsed = time.monotonic() - start
             if deadline is not None and time.monotonic() >= deadline:
                 current_app.logger.error(
                     "COA upload retry deadline exceeded after %d attempt(s): %s",
@@ -130,11 +156,24 @@ def _upload_with_retry(stub, request, auth_token, retry_timeout_seconds, initial
                 raise
 
             current_app.logger.warning(
-                "COA gRPC UNAVAILABLE (attempt %d), retrying in %.1f s: %s",
-                attempt,
-                wait,
-                exc.details(),
+                {
+                    "message": "COA gRPC UNAVAILABLE — will retry",
+                    "attempt": attempt,
+                    "wait_seconds": round(wait, 1),
+                    "total_elapsed_seconds": round(elapsed, 2),
+                    "endpoint": endpoint,
+                    "grpc_detail": exc.details(),
+                }
             )
+            try:
+                metrics.send(
+                    "lemur.plugins.coa.retry_attempt",
+                    "counter",
+                    1,
+                    metric_tags={"host": endpoint},
+                )
+            except Exception:
+                pass
             time.sleep(wait)
             wait = min(wait * 2, 60.0)
 
@@ -524,7 +563,7 @@ class COADestinationPlugin(DestinationPlugin):
     """
 
     title = "Cert Orchestration Adapter (with retry)"
-    slug = "coa-destination-retrying"
+    slug = "coa-destination-retry"
     description = (
         "Uploads certificates to the Cert Orchestration Adapter over gRPC.  "
         "When retry_until_healthy is enabled the plugin retries on "
@@ -552,7 +591,7 @@ class COADestinationPlugin(DestinationPlugin):
         },
         {
             "name": "port",
-            "type": "str",
+            "type": "int",
             "required": True,
             "validation": check_validation(r"^\d+$"),
             "helpMessage": "COA service gRPC port.",
@@ -645,12 +684,6 @@ class COADestinationPlugin(DestinationPlugin):
             )
             raise
 
-        if not paths_list:
-            current_app.logger.error(
-                "COADestinationPlugin: no paths configured for certificate upload"
-            )
-            return
-
         parsed_crt = coa_parse_certificate(body)
         parsed_chain = coa_parse_certificate(cert_chain)
         ca_vendor = parse_ca_vendor(parsed_chain)
@@ -662,6 +695,12 @@ class COADestinationPlugin(DestinationPlugin):
         )
 
         with channel:
+            if not paths_list:
+                current_app.logger.error(
+                    "COADestinationPlugin: no paths configured for certificate upload"
+                )
+                return
+
             for path in paths_list:
                 vault_path = os.path.join(path, crt_name)
                 current_app.logger.info(
@@ -688,6 +727,7 @@ class COADestinationPlugin(DestinationPlugin):
                         auth_token=auth_token,
                         retry_timeout_seconds=retry_timeout,
                         initial_wait_seconds=initial_wait,
+                        endpoint=host,
                     )
                 else:
                     try:
