@@ -17,19 +17,17 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Get latest release tag and increment
+    - name: Get latest release and increment
       id: version
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        # Find the latest 1.0.0-dd.N tag
-        LATEST_TAG=$(git tag --list '1.0.0-dd.*' --sort=-version:refname | head -1)
+        LATEST_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
         if [ -z "$LATEST_TAG" ]; then
-          echo "No existing tags found, starting at 1.0.0-dd.1"
           NEW_TAG="1.0.0-dd.1"
         else
-          # Extract the N from 1.0.0-dd.N and increment
-          N=$(echo "$LATEST_TAG" | sed 's/1.0.0-dd.//')
-          NEXT=$((N + 1))
-          NEW_TAG="1.0.0-dd.${NEXT}"
+          N="${LATEST_TAG##*dd.}"
+          NEW_TAG="1.0.0-dd.$((N + 1))"
         fi
         echo "latest=$LATEST_TAG" >> "$GITHUB_OUTPUT"
         echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
