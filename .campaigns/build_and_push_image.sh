@@ -47,7 +47,16 @@ elif [[ $GBILITE_ENV == "prod" && $FIPS_ENABLED == "true" ]]; then
   crane tag registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD mutable-latest-prod-fips
 fi
 
-# Output image metadata (required by campaigner)
 cd ../
+IMAGE_DIGEST=$(crane digest registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD)
+
+# Output image metadata (required by campaigner)
 echo $IMAGE_TAG > .campaigns/image_info.txt
-echo $(crane digest registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD) >> .campaigns/image_info.txt
+echo $IMAGE_DIGEST >> .campaigns/image_info.txt
+
+echo ""
+echo "================================================================"
+echo "Pushed image:  registry.ddbuild.io/lemur:$IMAGE_TAG"
+echo "Image tag:     $IMAGE_TAG"
+echo "Image digest:  $IMAGE_DIGEST"
+echo "================================================================"
