@@ -212,7 +212,7 @@ class VaultDestinationPlugin(DestinationPlugin):
             "type": "str",
             "required": True,
             "validation": check_validation(
-                "^([a-zA-Z0-9._-]+|{CN}|{OU}|{O}|{L}|{S}|{C})(/?([a-zA-Z0-9._-]+|{CN}|{OU}|{O}|{L}|{S}|{C}))*$"
+                r"^([a-zA-Z0-9._-]|\{(?:CN|OU|O|L|S|C)\})+(/([a-zA-Z0-9._-]|\{(?:CN|OU|O|L|S|C)\})+)*$"
             ),
             "helpMessage": "Must be a valid Vault secrets path. Support vars: {CN}|{OU}|{O}|{L}|{S}|{C}",
         },
@@ -221,7 +221,7 @@ class VaultDestinationPlugin(DestinationPlugin):
             "type": "str",
             "required": False,
             "validation": check_validation(
-                "^([a-zA-Z0-9:._-]+|{CN}|{OU}|{O}|{L}|{S}|{C})(/?([a-zA-Z0-9._-]+|{CN}|{OU}|{O}|{L}|{S}|{C}))*$"),
+                r"^([a-zA-Z0-9:._-]|\{(?:CN|OU|O|L|S|C)\})+(/([a-zA-Z0-9._-]|\{(?:CN|OU|O|L|S|C)\})+)*$"),
             "helpMessage": "Name to bundle certs under, if blank use {CN}. Support vars: {CN}|{OU}|{O}|{L}|{S}|{C}",
         },
         {
