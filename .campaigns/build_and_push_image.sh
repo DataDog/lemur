@@ -51,3 +51,9 @@ fi
 cd ../
 echo $IMAGE_TAG > .campaigns/image_info.txt
 echo $(crane digest registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD) >> .campaigns/image_info.txt
+
+echo ""
+echo "================================================================"
+echo "Pushed image: registry.ddbuild.io/lemur:$IMAGE_TAG"
+echo "Image tag:    $IMAGE_TAG"
+echo "================================================================"
