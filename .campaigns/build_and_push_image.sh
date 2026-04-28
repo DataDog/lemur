@@ -17,7 +17,7 @@ elif [[ $GBILITE_IMAGE_TO_BUILD == *"-fips" ]]; then
 fi
 
 if [[ -z "$CHECKOUT_REF" ]]; then
-  CHECKOUT_REF=$IMAGE_TAG
+  CHECKOUT_REF=$(git rev-parse HEAD)
 fi
 
 if [[ $FIPS_ENABLED == "true" ]]; then
