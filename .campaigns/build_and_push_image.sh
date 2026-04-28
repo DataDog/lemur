@@ -17,7 +17,7 @@ elif [[ $GBILITE_IMAGE_TO_BUILD == *"-fips" ]]; then
 fi
 
 if [[ -z "$CHECKOUT_REF" ]]; then
-  CHECKOUT_REF=$IMAGE_TAG
+  CHECKOUT_REF=$(git rev-parse HEAD)
 fi
 
 if [[ $FIPS_ENABLED == "true" ]]; then
@@ -34,6 +34,8 @@ docker buildx build \
   --build-arg BASE_IMAGE=$BASE_IMAGE \
   --build-arg FIPS_ENABLED=$FIPS_ENABLED \
   --build-arg GBILITE_ENV=$GBILITE_ENV \
+  --build-arg CI_PIPELINE_ID=$CI_PIPELINE_ID \
+  --build-arg IMAGE_TAG=$IMAGE_TAG \
   --tag registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD \
   --metadata-file ${METADATA_FILE} \
   --push \

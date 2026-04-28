@@ -556,7 +556,7 @@ def sync_all_sources():
     return log_data
 
 
-@celery_app.task(soft_time_limit=900)  # fail if a source task gets stuck
+@celery_app.task(soft_time_limit=7200)
 def sync_source(source):
     """
     This celery task will sync the specified source.
