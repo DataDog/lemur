@@ -101,13 +101,7 @@ cd lemur && lemur db migrate -m "description"
 
 ## Release Process
 
-Releases are automated. Merging to master triggers a GitHub Action that creates a CalVer tag (`YYYY.MM.DD.N`), creates a GitHub Release with auto-generated notes, and kicks off the GitLab CI image build. Conductor in k8s-resources picks up the new image automatically (staging every 30 min, prod/gov on weekday schedule).
-
-For manual releases, you can still tag manually:
-```bash
-git tag 2026.04.24.1 && git push origin 2026.04.24.1
-gh release create 2026.04.24.1 --title "2026.04.24.1" --generate-notes
-```
+Master commits build a prod-signed image via GitLab CI, tagged `v<pipeline_id>-<short_sha>` and re-tagged `mutable-latest-prod`.
 
 ## Runbooks & References
 - Wiki: https://datadoghq.atlassian.net/wiki/spaces/NE/pages/2130608302/Lemur+Certificate+Orchestration
