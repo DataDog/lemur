@@ -182,7 +182,7 @@ configobj==5.0.9
     #   certbot
 coverage==7.13.5
     # via -r requirements-tests.in
-cryptography==43.0.1
+cryptography==46.0.7
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   -r requirements-tests.in
