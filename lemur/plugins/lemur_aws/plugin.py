@@ -327,6 +327,8 @@ class AWSSourcePlugin(SourcePlugin):
             regions = "".join(regions.split()).split(",")
 
         for region in regions:
+            if region == "me-south-1":
+                continue  # AWS Bahrain offline since Apr 2026 missile strike on Batelco
             elbs = elb.get_all_elbs(account_number=account_number, region=region)
             current_app.logger.info(
                 {
