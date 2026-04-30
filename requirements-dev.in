@@ -9,4 +9,4 @@ nodeenv
 -r requirements-tests.txt
 
 # === Datadog-specific additions ===
-cryptography==43.0.1  # Must keep pinned for FIPS support (do not sync from upstream)
+cryptography==46.0.7  # Must keep pinned for FIPS support (do not sync from upstream)
