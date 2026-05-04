@@ -42,10 +42,10 @@ docker buildx build \
   .
 ddsign sign registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD --docker-metadata-file ${METADATA_FILE}
 
-# Tag as mutable-latest for Conductor image resolution.
-if [[ $GBILITE_ENV == "prod" && $FIPS_ENABLED == "false" ]]; then
+# Tag as mutable-latest only from master-commit builds.
+if [[ "$CI_COMMIT_BRANCH" == "master" && $GBILITE_ENV == "prod" && $FIPS_ENABLED == "false" ]]; then
   crane tag registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD mutable-latest-prod
-elif [[ $GBILITE_ENV == "prod" && $FIPS_ENABLED == "true" ]]; then
+elif [[ "$CI_COMMIT_BRANCH" == "master" && $GBILITE_ENV == "prod" && $FIPS_ENABLED == "true" ]]; then
   crane tag registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD mutable-latest-prod-fips
 fi
 
