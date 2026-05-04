@@ -42,10 +42,7 @@ docker buildx build \
   .
 ddsign sign registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD --docker-metadata-file ${METADATA_FILE}
 
-# Tag as mutable-latest only from master-commit builds. Tag builds may rebuild
-# an older release (e.g. when a pipeline re-runs an existing tag for a base
-# image refresh) and must not regress the mutable-latest pointer to that older
-# code.
+# Tag as mutable-latest only from master-commit builds.
 if [[ "$CI_COMMIT_BRANCH" == "master" && $GBILITE_ENV == "prod" && $FIPS_ENABLED == "false" ]]; then
   crane tag registry.ddbuild.io/$GBILITE_IMAGE_TO_BUILD mutable-latest-prod
 elif [[ "$CI_COMMIT_BRANCH" == "master" && $GBILITE_ENV == "prod" && $FIPS_ENABLED == "true" ]]; then
