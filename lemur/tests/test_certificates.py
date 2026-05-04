@@ -38,6 +38,19 @@ from lemur.tests.vectors import (
     SAN_CERT_KEY,
     ROOTCA_KEY,
     ROOTCA_CERT_STR,
+    CROSS_SIGNED_ROOT_A_CERT,
+    CROSS_SIGNED_ROOT_B_CERT,
+    CROSS_SIGNED_INT_BY_A_CERT,
+    CROSS_SIGNED_INT_BY_B_CERT,
+    CROSS_SIGNED_LEAF_CERT,
+    CROSS_SIGNED_LEAF_KEY,
+    CROSS_SIGNED_LEAF_CERT_STR,
+    CROSS_SIGNED_INT_BY_A_CERT_STR,
+    CROSS_SIGNED_INT_BY_B_CERT_STR,
+    CROSS_SIGNED_ROOT_A_CERT_STR,
+    ORPHAN_CERT,
+    ORPHAN_CERT_STR,
+    ROOT_A_CROSS_SIGNED_BY_B_CERT,
 )
 
 
@@ -807,8 +820,8 @@ def test_certificate_upload_schema_wrong_chain(client):
     data, errors = CertificateUploadInputSchema().load(data)
     assert errors == {
         "_schema": [
-            "Incorrect chain certificate(s) provided: 'san.example.org' is not signed by "
-            "'LemurTrust Unittests Root CA 2018'"
+            "Incorrect chain certificate(s) provided: 'LemurTrust Unittests Root CA 2018' "
+            "is not signed by any certificate in the chain"
         ]
     }
 
@@ -824,10 +837,218 @@ def test_certificate_upload_schema_wrong_chain_2nd(client):
     data, errors = CertificateUploadInputSchema().load(data)
     assert errors == {
         "_schema": [
-            "Incorrect chain certificate(s) provided: 'LemurTrust Unittests Class 1 CA 2018' is "
-            "not signed by 'san.example.org'"
+            "Incorrect chain certificate(s) provided: 'san.example.org' "
+            "is not signed by any certificate in the chain"
         ]
     }
+
+
+# =============================================================================
+# Regression tests for verify_cert_chain() — linear chains (Step 2, RDNA-926)
+# =============================================================================
+
+def test_verify_cert_chain_linear_full(app):
+    """Linear chain [leaf, intermediate, root] should pass."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT, ROOTCA_CERT
+
+    verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT, ROOTCA_CERT])
+
+
+def test_verify_cert_chain_linear_two_deep(app):
+    """Two-cert chain [leaf, intermediate] (root omitted) should pass."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT
+
+    verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT])
+
+
+def test_verify_cert_chain_cross_signed_linear(app):
+    """Linear chain using cross-signed fixtures: [leaf, int_by_a, root_a] should pass."""
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([CROSS_SIGNED_LEAF_CERT, CROSS_SIGNED_INT_BY_A_CERT, CROSS_SIGNED_ROOT_A_CERT])
+
+
+def test_verify_cert_chain_wrong_chain(app):
+    """Leaf not signed by next cert should be rejected."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
+
+    with pytest.raises(ValidationError, match="not signed by any certificate in the chain"):
+        verify_cert_chain([SAN_CERT, ROOTCA_CERT])
+
+
+def test_verify_cert_chain_wrong_second_cert(app):
+    """Wrong cert at position 2 should be rejected."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT
+
+    with pytest.raises(ValidationError, match="not signed by any certificate in the chain"):
+        verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT, CROSS_SIGNED_ROOT_A_CERT])
+
+
+def test_verify_cert_chain_custom_error_class(app):
+    """verify_cert_chain respects custom error_class parameter."""
+    from lemur.common.validators import verify_cert_chain
+    from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
+
+    with pytest.raises(AssertionError, match="not signed by any certificate in the chain"):
+        verify_cert_chain([SAN_CERT, ROOTCA_CERT], error_class=AssertionError)
+
+
+# =============================================================================
+# Non-linear chain tests (Step 3, RDNA-926)
+# These exercise dual-chain / cross-signed bundles.
+# =============================================================================
+
+def test_verify_cert_chain_dual_chain(app):
+    """Dual-chain bundle [leaf, int_by_a, root_a, int_by_b] should pass.
+
+    This is the core non-linear case: the leaf's intermediate has two versions,
+    each signed by a different root. Both should be accepted in the bundle.
+    """
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([
+        CROSS_SIGNED_LEAF_CERT,
+        CROSS_SIGNED_INT_BY_A_CERT,
+        CROSS_SIGNED_ROOT_A_CERT,
+        CROSS_SIGNED_INT_BY_B_CERT,
+    ])
+
+
+def test_verify_cert_chain_dual_chain_reversed_order(app):
+    """Reversed alternate order [leaf, int_by_b, root_b, int_by_a] should pass."""
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([
+        CROSS_SIGNED_LEAF_CERT,
+        CROSS_SIGNED_INT_BY_B_CERT,
+        CROSS_SIGNED_ROOT_B_CERT,
+        CROSS_SIGNED_INT_BY_A_CERT,
+    ])
+
+
+def test_verify_cert_chain_dual_chain_with_orphan(app):
+    """Dual-chain with orphaned unrelated cert appended should be rejected."""
+    from lemur.common.validators import verify_cert_chain
+
+    with pytest.raises(ValidationError, match="Unrelated CA"):
+        verify_cert_chain([
+            CROSS_SIGNED_LEAF_CERT,
+            CROSS_SIGNED_INT_BY_A_CERT,
+            CROSS_SIGNED_ROOT_A_CERT,
+            ORPHAN_CERT,
+        ])
+
+
+def test_verify_cert_chain_misordered_linear(app):
+    """Misordered linear chain [leaf, root, intermediate] should be rejected.
+
+    Even though all certs are reachable in the DAG, the chain must be in
+    leaf-to-root order for TLS compatibility.
+    """
+    from lemur.common.validators import verify_cert_chain
+
+    with pytest.raises(ValidationError, match="not in leaf-to-root order"):
+        verify_cert_chain([
+            CROSS_SIGNED_LEAF_CERT,
+            CROSS_SIGNED_ROOT_A_CERT,  # root before intermediate — wrong order
+            CROSS_SIGNED_INT_BY_A_CERT,
+        ])
+
+
+def test_verify_cert_chain_cross_signed_root(app):
+    """Cross-signed root case (DigiCert pattern):
+    [leaf, int_by_a, root_a_self_signed, root_a_cross_signed_by_b] should pass.
+
+    Root A exists in two forms: self-signed and cross-signed by Root B.
+    Both have the same public key. The intermediate is signed by Root A's key.
+    The linear validator happens to accept this because both Root A certs share
+    the same key, so the signature check passes linearly too.
+    """
+    from lemur.common.validators import verify_cert_chain
+
+    verify_cert_chain([
+        CROSS_SIGNED_LEAF_CERT,
+        CROSS_SIGNED_INT_BY_A_CERT,
+        CROSS_SIGNED_ROOT_A_CERT,
+        ROOT_A_CROSS_SIGNED_BY_B_CERT,
+    ])
+
+
+# =============================================================================
+# check_integrity() tests with non-linear chains (Step 5, RDNA-926)
+# These exercise the model-layer validation path used by source sync.
+# =============================================================================
+
+def test_check_integrity_nonlinear_chain(session):
+    """Certificate with a non-linear (dual-chain) bundle should pass check_integrity().
+
+    This is the path that matters for source sync round-trips: when a cert is
+    synced back from Vault, Certificate.__init__() calls check_integrity(),
+    which calls verify_cert_chain() on [parsed_cert] + parse_cert_chain(chain).
+    """
+    from lemur.certificates.models import Certificate
+
+    # Build a non-linear chain string: int_by_a + root_a + int_by_b
+    chain_str = (
+        CROSS_SIGNED_INT_BY_A_CERT_STR.strip()
+        + "\n"
+        + CROSS_SIGNED_ROOT_A_CERT_STR.strip()
+        + "\n"
+        + CROSS_SIGNED_INT_BY_B_CERT_STR.strip()
+    )
+
+    # Should not raise — check_integrity() is called in __init__
+    cert = Certificate(
+        body=CROSS_SIGNED_LEAF_CERT_STR,
+        chain=chain_str,
+        private_key=CROSS_SIGNED_LEAF_KEY,
+        owner="test@example.com",
+    )
+    assert cert.cn == "test.example.com"
+
+
+def test_check_integrity_nonlinear_chain_no_private_key(session):
+    """Certificate with a non-linear chain but no private key should also pass.
+
+    This is the common source sync case: the source doesn't have access to
+    the private key, only the cert + chain.
+    """
+    from lemur.certificates.models import Certificate
+
+    chain_str = (
+        CROSS_SIGNED_INT_BY_A_CERT_STR.strip()
+        + "\n"
+        + CROSS_SIGNED_INT_BY_B_CERT_STR.strip()
+    )
+
+    cert = Certificate(
+        body=CROSS_SIGNED_LEAF_CERT_STR,
+        chain=chain_str,
+        owner="test@example.com",
+    )
+    assert cert.cn == "test.example.com"
+
+
+def test_check_integrity_nonlinear_chain_with_orphan_rejected(session):
+    """Certificate with a non-linear chain containing an orphan should fail check_integrity()."""
+    from lemur.certificates.models import Certificate
+
+    chain_str = (
+        CROSS_SIGNED_INT_BY_A_CERT_STR.strip()
+        + "\n"
+        + ORPHAN_CERT_STR.strip()
+    )
+
+    with pytest.raises(AssertionError, match="not signed by any certificate in the chain"):
+        Certificate(
+            body=CROSS_SIGNED_LEAF_CERT_STR,
+            chain=chain_str,
+            owner="test@example.com",
+        )
 
 
 def test_certificate_revoke_schema():
