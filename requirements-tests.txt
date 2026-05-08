@@ -182,7 +182,7 @@ configobj==5.0.9
     #   certbot
 coverage==7.13.5
     # via -r requirements-tests.in
-cryptography==43.0.1
+cryptography==48.0.0
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   -r requirements-tests.in
@@ -586,7 +586,7 @@ pynacl==1.6.2
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   paramiko
-pyopenssl==25.1.0
+pyopenssl==26.2.0
     # via
     #   -r /Users/maxime.perusse/go/src/github.com/DataDog/lemur/requirements.txt
     #   acme
