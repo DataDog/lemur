@@ -5,6 +5,6 @@ set -euo pipefail
 git config --global --add safe.directory /go/src/github.com/DataDog/lemur
 
 # Campaigner refreshes mutable-latest-prod (rebuilds master HEAD against the
-# latest base image). Required for Build Horizon (28-day rebuild policy).
+# latest base image). Required for the once a month rebuild policy.
 echo "lemur:mutable-latest-prod"
 echo "lemur:mutable-latest-prod-fips"
