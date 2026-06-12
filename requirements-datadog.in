@@ -19,7 +19,7 @@ simplejson
 
 # === Version Pins for Compatibility ===
 anyio==4.5.0
-cryptography==43.0.1  # Must keep pinned for FIPS support (do not sync from upstream)
+cryptography==48.0.0  # Must keep pinned for FIPS support (do not sync from upstream)
 dnspython==2.6.1
 flask-Script==2.0.5
 Flask-Migrate<=2.7.0
