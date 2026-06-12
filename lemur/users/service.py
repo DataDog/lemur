@@ -34,8 +34,8 @@ def create(username, password, email, active, profile_picture, roles):
     """
     strict_role_enforcement = current_app.config.get("LEMUR_STRICT_ROLE_ENFORCEMENT", False)
     if strict_role_enforcement and not any(role.name in STRICT_ENFORCEMENT_DEFAULT_ROLES for role in roles):
-        return dict(message="Default role required, user needs least one of the following roles assigned: admin, "
-                            "operator, read-only"), 400
+        return dict(message="Default role required. Assign the user at least one of: admin, operator, read-only. "
+                            "To disable this requirement, set LEMUR_STRICT_ROLE_ENFORCEMENT = False in your config."), 400
 
     user = User(
         password=password,
@@ -64,8 +64,8 @@ def update(user_id, username, email, active, profile_picture, roles, password=No
     """
     strict_role_enforcement = current_app.config.get("LEMUR_STRICT_ROLE_ENFORCEMENT", False)
     if strict_role_enforcement and not any(role.name in STRICT_ENFORCEMENT_DEFAULT_ROLES for role in roles):
-        return dict(message="Default role required, user needs least one of the following roles assigned: admin, "
-                            "operator, read-only"), 400
+        return dict(message="Default role required. Assign the user at least one of: admin, operator, read-only. "
+                            "To disable this requirement, set LEMUR_STRICT_ROLE_ENFORCEMENT = False in your config."), 400
 
     user = get(user_id)
     user.username = username

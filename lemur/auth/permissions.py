@@ -62,7 +62,7 @@ class RoleMemberPermission(Permission):
 
 class AuthorityCreatorPermission(Permission):
     def __init__(self):
-        requires_admin = current_app.config.get("ADMIN_ONLY_AUTHORITY_CREATION", False)
+        requires_admin = current_app.config.get("ADMIN_ONLY_AUTHORITY_CREATION", True)
         if requires_admin:
             super().__init__(RoleNeed("admin"))
         else:
@@ -87,9 +87,16 @@ class AuthorityPermission(Permission):
 
 class StrictRolePermission(Permission):
     def __init__(self):
-        strict_role_enforcement = current_app.config.get("LEMUR_STRICT_ROLE_ENFORCEMENT", False)
-        if strict_role_enforcement:
-            needs = [RoleNeed("admin"), RoleNeed("operator")]
-            super().__init__(*needs)
+        self._strict = current_app.config.get("LEMUR_STRICT_ROLE_ENFORCEMENT", False)
+        if self._strict:
+            super().__init__(RoleNeed("admin"), RoleNeed("operator"))
         else:
             super().__init__()
+
+    def allows(self, identity):
+        if self._strict:
+            return super().allows(identity)
+        # When not in strict mode, block only read-only users.
+        # Empty needs (super().__init__()) would pass everyone including read-only,
+        # which was the GHSA-qcqw-jwxc-2hqg vulnerability.
+        return RoleNeed("read-only") not in identity.provides

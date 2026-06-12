@@ -5,6 +5,7 @@
 #   curl https://raw.githubusercontent.com/Netflix/lemur/main/requirements.in > requirements-base.in
 #   make up-reqs
 
+
 acme
 alembic-autogenerate-enums
 arrow
@@ -15,7 +16,7 @@ celery[redis]
 certbot
 certifi
 certsrv[ntlm]
-CloudFlare
+CloudFlare<3  # v4 renamed the module and overhauled the API; plugin needs migration
 cryptography
 dnspython3
 dyn
@@ -31,6 +32,7 @@ Flask-Cors
 flask_replicated
 future
 google-cloud-private-ca
+google-cloud-storage
 protobuf
 types-protobuf
 gunicorn
@@ -57,7 +59,7 @@ retrying
 sentry-sdk
 six
 SQLAlchemy-Utils
-sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226
+sqlalchemy < 1.4.0 # ImportError: cannot import name '_ColumnEntity' https://github.com/sqlalchemy/sqlalchemy/issues/6226tabulate
 tabulate
 validators
 werkzeug
