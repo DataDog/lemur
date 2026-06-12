@@ -384,7 +384,7 @@ python-json-logger==4.0.0
     # via
     #   -r requirements-base.in
     #   logmatic-python
-python-ldap==3.4.5
+python-ldap==3.4.7
     # via
     #   -r requirements-base.in
     #   -r requirements-datadog.in
