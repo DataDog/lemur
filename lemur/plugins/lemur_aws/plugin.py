@@ -340,6 +340,8 @@ class AWSSourcePlugin(SourcePlugin):
 
         policy_cache = {}
         for region in regions:
+            if region == "me-south-1":
+                continue  # AWS Bahrain offline since Apr 2026 missile strike on Batelco
             try:
                 elbs = elb.get_all_elbs(account_number=account_number, region=region)
             except Exception:  # noqa

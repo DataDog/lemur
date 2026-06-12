@@ -101,42 +101,7 @@ cd lemur && lemur db migrate -m "description"
 
 ## Release Process
 
-Tag format: `1.0.0-dd.N`. Pushing a tag triggers GitLab CI to build and push prod images (regular + FIPS).
-
-1. **Update `CHANGELOG.rst`** — add entry at the top (after the `Changelog` heading):
-   ```rst
-   1.0.0-dd.N - `YYYY-MM-DD`
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-   Features:
-   - Description (#PR)
-
-   Bug fixes:
-   - Description (#PR)
-
-   Security fixes:
-   - CVE description (#PR or Jira link)
-   ```
-   Omit empty sections. Commit to `master`.
-
-2. **Push the tag**:
-   ```bash
-   git tag 1.0.0-dd.N && git push origin 1.0.0-dd.N
-   ```
-
-3. **Create the GitHub Release**:
-   ```bash
-   gh release create 1.0.0-dd.N --title "1.0.0-dd.N" --notes "$(cat <<'EOF'
-   - Description (#PR)
-
-   **Full Changelog**: https://github.com/DataDog/lemur/compare/1.0.0-dd.PREV...1.0.0-dd.N
-   EOF
-   )"
-   ```
-
-4. **Deploy**: bump image tag in `chart/values.yaml` in k8s-resources and open a PR.
-
-Versioning: increment the trailing number only (`1.0.0-dd.(N+1)`).
+Master commits build a prod-signed image via GitLab CI, tagged `v<pipeline_id>-<short_sha>` and re-tagged `mutable-latest-prod`.
 
 ## Runbooks & References
 - Wiki: https://datadoghq.atlassian.net/wiki/spaces/NE/pages/2130608302/Lemur+Certificate+Orchestration

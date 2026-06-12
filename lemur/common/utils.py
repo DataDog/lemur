@@ -266,6 +266,12 @@ def key_to_alg(key):
     return algorithm
 
 
+def csr_to_string(csr):
+    if isinstance(csr, str):
+        return csr.encode("ascii")
+    return csr
+
+
 def check_cert_signature(cert, issuer_public_key):
     """
     Check a certificate's signature against an issuer public key.
