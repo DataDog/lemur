@@ -48,9 +48,9 @@
                 <script>
                   (function () {
                     var h = location.hostname, l = '';
-                    if (h.indexOf('us1.staging.dog') >= 0) l = ' - development';
-                    else if (h.indexOf('us1.ddbuild.io') >= 0) l = ' - commercial';
-                    else if (h.indexOf('us1-build.fed') >= 0) l = ' - government';
+                    if (h.endsWith('.us1.staging.dog')) l = ' - development';
+                    else if (h.endsWith('.us1.ddbuild.io')) l = ' - commercial';
+                    else if (h.endsWith('.us1-build.fed.dog')) l = ' - government';
                     if (l) { document.getElementById('lemur-brand').textContent = 'Lemur' + l; document.title = 'Lemur' + l; }
                   })();
                 </script>
