@@ -3,7 +3,7 @@ Lemur monitoring tasks.
 
 Tasks here are pure observability: they read DB state and emit metrics. They
 must not mutate state. Business-logic Celery tasks (cert rotation, source
-sync, etc.) live in lemur/common/celery.py or in the relevant domain package.
+sync, etc.) do not belong here.
 """
 
 import sys
