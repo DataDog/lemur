@@ -123,6 +123,8 @@ def parse_ca_vendor(chain):
         return "DigiCert"
     elif "Sectigo" in org_name:
         return "Sectigo"
+    elif "Let's Encrypt" in org_name or "Lets Encrypt" in org_name:
+        return "LetsEncrypt"
     return re.sub(r"[^A-Za-z0-9]", "", org_name)
 
 
