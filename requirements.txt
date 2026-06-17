@@ -194,16 +194,30 @@ future==1.0.0
 google-api-core[grpc]==2.31.0
     # via
     #   google-cloud-compute
+    #   google-cloud-core
     #   google-cloud-private-ca
+    #   google-cloud-storage
 google-auth==2.55.0
     # via
     #   google-api-core
     #   google-cloud-compute
+    #   google-cloud-core
     #   google-cloud-private-ca
+    #   google-cloud-storage
 google-cloud-compute==1.48.0
     # via -r requirements-datadog.in
+google-cloud-core==2.6.0
+    # via google-cloud-storage
 google-cloud-private-ca==1.18.0
     # via -r requirements-base.in
+google-cloud-storage==3.12.0
+    # via -r requirements-base.in
+google-crc32c==1.8.0
+    # via
+    #   google-cloud-storage
+    #   google-resumable-media
+google-resumable-media==2.10.0
+    # via google-cloud-storage
 googleapis-common-protos[grpc]==1.75.0
     # via
     #   google-api-core
@@ -404,6 +418,7 @@ requests==2.34.2
     #   cert-manager
     #   certsrv
     #   google-api-core
+    #   google-cloud-storage
     #   hvac
     #   msal
     #   msrest
