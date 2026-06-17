@@ -543,9 +543,3 @@ def drop_last_cert_from_chain(full_chain: str) -> str:
         ),
     ).decode()
     return pem_certificate
-
-
-def csr_to_string(csr):
-    if isinstance(csr, str):
-        return csr.encode("ascii")
-    return csr
