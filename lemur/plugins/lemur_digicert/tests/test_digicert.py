@@ -430,7 +430,7 @@ def test_ensure_dcv_valid_expiring_soon_cleans_up_on_failure(mock_dcv_cls, mock_
     with pytest.raises(RuntimeError, match="propagation timed out"):
         _ensure_dcv_valid("sub.example.com")
 
-    mock_writer.delete.assert_called_once_with(dns_record)
+    mock_writer.delete.assert_called_once_with(dns_record.name)
 
 
 @patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=Mock)
@@ -457,4 +457,4 @@ def test_ensure_dcv_valid_expiring_soon_confirm_failure_cleans_up(mock_dcv_cls, 
     with pytest.raises(RuntimeError, match="CA rejected"):
         _ensure_dcv_valid("sub.example.com")
 
-    mock_writer.delete.assert_called_once_with(dns_record)
+    mock_writer.delete.assert_called_once_with(dns_record.name)

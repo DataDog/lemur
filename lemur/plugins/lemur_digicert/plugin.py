@@ -363,7 +363,7 @@ def _ensure_dcv_valid(common_name: str) -> None:
             provider.confirm_validation(base)
         except Exception:
             try:
-                writer.delete(dns_record)
+                writer.delete(dns_record.name)
             except Exception:
                 current_app.logger.warning({"domain": base, "message": "DCV issuance hook: cleanup failed"})
             raise
