@@ -38,6 +38,9 @@ from lemur.pending_certificates import service as pending_certificate_service
 from lemur.plugins.base import plugins
 from lemur.sources.cli import clean, sync, validate_sources
 
+# Register DCV sweep task
+from lemur.plugins.lemur_digicert_dcv.tasks import validate_digicert_domains  # noqa: F401
+
 fips.instance.must_enable_fips_if_needed()
 
 if current_app:

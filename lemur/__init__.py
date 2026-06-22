@@ -32,6 +32,7 @@ from lemur.logs.views import mod as logs_bp
 from lemur.api_keys.views import mod as api_key_bp
 from lemur.pending_certificates.views import mod as pending_certificates_bp
 from lemur.dns_providers.views import mod as dns_providers_bp
+from lemur.plugins.lemur_digicert_dcv.views import mod as dcv_bp
 
 from lemur.__about__ import (
     __author__,
@@ -73,6 +74,7 @@ LEMUR_BLUEPRINTS = (
     api_key_bp,
     pending_certificates_bp,
     dns_providers_bp,
+    dcv_bp,
 )
 
 

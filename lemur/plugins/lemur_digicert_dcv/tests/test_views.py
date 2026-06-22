@@ -111,6 +111,7 @@ def test_register_endpoint_returns_500_on_unexpected_error(mock_provider_cls):
 
         assert result[1] == 500
         assert result[0]["message"] == "An internal error occurred. Please contact support."
+        assert mock_app.logger.exception.called
 
 
 @patch("lemur.plugins.lemur_digicert_dcv.views.DigiCertDCVProvider")

@@ -27,7 +27,7 @@ class DomainDCVRegister(AuthenticatedResource):
         except (DCVAPIError, DCVPropagationTimeout) as e:
             current_app.logger.exception(
                 "DCV register_domain failed for %s",
-                e.domain if hasattr(e, "domain") else domain,
+                e.domain,
             )
             return {"message": "DCV validation failed; see server logs"}, 500
         except Exception:
