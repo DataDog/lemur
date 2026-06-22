@@ -197,3 +197,72 @@ def test_initiate_validation_raises_when_domain_not_registered(mock_app):
 
     with pytest.raises(DCVDomainNotRegistered):
         provider.initiate_validation("unknown.prod.dog")
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.current_app")
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.time.sleep", return_value=None)
+def test_confirm_validation_returns_true_on_success(mock_sleep, mock_app):
+    mock_app.config.get.side_effect = _config
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: _config(k))
+
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+
+    provider = DigiCertDCVProvider()
+    provider._session = MagicMock()
+
+    def get_side_effect(url, params=None):
+        resp = Mock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "domains": [{"id": 42, "name": "ap3.prod.dog", "dcv_expiration_date": "2027-10-01"}]
+        }
+        return resp
+
+    def post_side_effect(url, json=None):
+        resp = Mock()
+        resp.status_code = 200
+        resp.json.return_value = {"status": "active"}
+        return resp
+
+    provider._session.get.side_effect = get_side_effect
+    provider._session.post.side_effect = post_side_effect
+
+    result = provider.confirm_validation("ap3.prod.dog")
+    assert result is True
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.current_app")
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.time.sleep", return_value=None)
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.time.time")
+def test_confirm_validation_raises_on_timeout(mock_time, mock_sleep, mock_app):
+    mock_app.config.get.side_effect = _config  # DIGICERT_DCV_VALIDATION_TIMEOUT_SECS = 5
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: _config(k))
+
+    # time.time() returns 0, then 10 (past deadline of 5s) on second call
+    mock_time.side_effect = [0, 10]
+
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+    from lemur.plugins.lemur_digicert_dcv.provider import DCVAPIError
+
+    provider = DigiCertDCVProvider()
+    provider._session = MagicMock()
+
+    def get_side_effect(url, params=None):
+        resp = Mock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "domains": [{"id": 42, "name": "ap3.prod.dog", "dcv_expiration_date": "2027-10-01"}]
+        }
+        return resp
+
+    def post_side_effect(url, json=None):
+        resp = Mock()
+        resp.status_code = 200
+        resp.json.return_value = {"status": "pending"}  # never becomes active
+        return resp
+
+    provider._session.get.side_effect = get_side_effect
+    provider._session.post.side_effect = post_side_effect
+
+    with pytest.raises(DCVAPIError, match="timeout"):
+        provider.confirm_validation("ap3.prod.dog")

@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -111,7 +112,26 @@ class DigiCertDCVProvider(DCVProvider):
         return DNSRecord(name=f"_dv.{domain}", value=f"{token}.dcv.digicert.com")
 
     def confirm_validation(self, domain: str) -> bool:
-        raise NotImplementedError("Implemented in Task 4")
+        record = self._find_domain_record(domain)
+        if not record:
+            raise DCVDomainNotRegistered(domain)
+        domain_id = record["id"]
+        timeout_secs = current_app.config.get("DIGICERT_DCV_VALIDATION_TIMEOUT_SECS", 1800)
+        deadline = time.time() + timeout_secs
+        delay = 30
+        while time.time() < deadline:
+            result = self._post(f"/services/v2/domain/{domain_id}/dcv/check", {})
+            if result.get("status") == "active":
+                return True
+            remaining = deadline - time.time()
+            if remaining > 0:
+                time.sleep(min(delay, remaining))
+            delay = min(delay * 2, 300)
+        raise DCVAPIError(
+            domain=domain,
+            ca="digicert",
+            reason=f"Validation timeout after {timeout_secs}s",
+        )
 
     def register_domain(self, domain: str) -> None:
         raise NotImplementedError("Implemented in Task 5")
