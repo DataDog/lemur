@@ -29,6 +29,13 @@ from lemur.plugins.bases import IssuerPlugin, SourcePlugin
 from retrying import retry
 from requests.packages.urllib3.util.retry import Retry
 
+try:
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+    from lemur.plugins.lemur_digicert_dcv.route53 import Route53DCVWriter
+    _dcv_available = True
+except ImportError:
+    _dcv_available = False
+
 
 def log_status_code(r, *args, **kwargs):
     """
@@ -297,6 +304,53 @@ def get_cis_certificate(session, base_url, order_id):
     return cert_chain_pem
 
 
+def _base_domain(hostname: str) -> str:
+    """Extract the registrable base domain.
+
+    'sub.ap3.prod.dog' -> 'ap3.prod.dog'
+    'ap3.prod.dog'     -> 'ap3.prod.dog'
+    """
+    try:
+        import tldextract
+        ext = tldextract.extract(hostname)
+        if ext.domain and ext.suffix:
+            return f"{ext.domain}.{ext.suffix}"
+    except ImportError:
+        pass
+    parts = hostname.split(".")
+    if len(parts) > 2:
+        return ".".join(parts[-2:])
+    return hostname
+
+
+def _ensure_dcv_valid(common_name: str) -> None:
+    """Issuance-time DCV safety net.
+
+    If the base domain is MISSING or EXPIRING_SOON within the issuance window,
+    run inline re-validation before the cert request proceeds.
+    """
+    if not _dcv_available:
+        return
+
+    base = _base_domain(common_name)
+    if not base:
+        return
+
+    provider = DigiCertDCVProvider()
+    window_days = current_app.config.get("DIGICERT_DCV_ISSUANCE_WINDOW_DAYS", 30)
+    status = provider.check_validation(base, window_days=window_days)
+
+    if status.status in ("MISSING", "EXPIRING_SOON"):
+        current_app.logger.warning(
+            {"domain": base, "status": status.status, "message": "DCV issuance hook: running inline revalidation"}
+        )
+        writer = Route53DCVWriter()
+        dns_record = provider.initiate_validation(base)
+        writer.upsert(dns_record)
+        writer.wait_for_propagation(dns_record)
+        provider.confirm_validation(base)
+
+
 class DigiCertSourcePlugin(SourcePlugin):
     """Wrap the Digicert Certifcate API."""
 
@@ -387,6 +441,9 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         """
         base_url = current_app.config.get("DIGICERT_URL")
         cert_type = current_app.config.get("DIGICERT_ORDER_TYPE")
+
+        if current_app.config.get("DIGICERT_DCV_ENABLED", False):
+            _ensure_dcv_valid(issuer_options.get("common_name", ""))
 
         # make certificate request
         determinator_url = "{0}/services/v2/order/certificate/{1}".format(
