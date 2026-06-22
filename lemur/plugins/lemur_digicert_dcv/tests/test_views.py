@@ -91,6 +91,48 @@ def test_register_endpoint_returns_500_on_api_error(mock_provider_cls):
         assert "DCV" in result[0]["message"] or "server" in result[0]["message"].lower()
 
 
+@patch("lemur.plugins.lemur_digicert_dcv.views.DigiCertDCVProvider")
+def test_register_endpoint_returns_500_on_unexpected_error(mock_provider_cls):
+    from lemur.plugins.lemur_digicert_dcv.views import DomainDCVRegister
+    from flask import Flask
+
+    app = Flask(__name__)
+    with app.test_request_context(
+        "/domains/dcv/register",
+        method="POST",
+        data=json.dumps({"domain": "ap3.prod.dog"}),
+        content_type="application/json",
+    ):
+        mock_provider_cls.return_value.register_domain.side_effect = RuntimeError("unexpected")
+
+        resource = DomainDCVRegister()
+        with patch("lemur.plugins.lemur_digicert_dcv.views.current_app") as mock_app:
+            result = resource._register("ap3.prod.dog")
+
+        assert result[1] == 500
+        assert result[0]["message"] == "An internal error occurred. Please contact support."
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.views.DigiCertDCVProvider")
+def test_post_method_parses_json_body(mock_provider_cls):
+    """Verify post() reads domain from JSON body and calls _register."""
+    from lemur.plugins.lemur_digicert_dcv.views import DomainDCVRegister
+    from flask import Flask
+
+    app = Flask(__name__)
+    with app.test_request_context(
+        "/domains/dcv/register",
+        method="POST",
+        data=json.dumps({"domain": "ap3.prod.dog"}),
+        content_type="application/json",
+    ):
+        mock_provider_cls.return_value.register_domain.return_value = None
+        resource = DomainDCVRegister()
+        result = resource.post()
+        assert result[1] == 200
+        assert result[0]["domain"] == "ap3.prod.dog"
+
+
 def test_register_endpoint_post_dispatch():
     """Integration: exercises the full post() -> _register() dispatch path."""
     import json as _json

@@ -31,10 +31,8 @@ class DomainDCVRegister(AuthenticatedResource):
             )
             return {"message": "DCV validation failed; see server logs"}, 500
         except Exception:
-            current_app.logger.exception(
-                "Unexpected error in DomainDCVRegister for domain %s", domain
-            )
-            return {"message": "Internal server error"}, 500
+            current_app.logger.exception("Unexpected error in DomainDCVRegister.post")
+            return {"message": "An internal error occurred. Please contact support."}, 500
 
 
 api.add_resource(DomainDCVRegister, "/domains/dcv/register", endpoint="domainDCVRegister")
