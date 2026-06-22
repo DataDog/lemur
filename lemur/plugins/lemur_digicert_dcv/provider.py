@@ -54,7 +54,14 @@ class DCVProvider(ABC):
 
     @abstractmethod
     def register_domain(self, domain: str) -> None:
-        """New-DC pre-flight. Idempotent. Raises DCVRegistrationError on failure."""
+        """New-DC pre-flight: add domain to CA + run full DCV flow.
+
+        Idempotent — if domain is already VALID and not expiring within 30 days,
+        returns immediately with no API calls.
+        Raises DCVRegistrationError on registration/token failure.
+        Raises DCVAPIError on API communication failure.
+        Raises DCVPropagationTimeout if DNS propagation exceeds the configured timeout.
+        """
 
     @abstractmethod
     def initiate_validation(self, domain: str) -> DNSRecord:

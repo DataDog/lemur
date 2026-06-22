@@ -176,14 +176,14 @@ class DigiCertDCVProvider(DCVProvider):
         writer.upsert(dns_record)
         try:
             writer.wait_for_propagation(dns_record)
-            confirmed = self.confirm_validation(domain)
-            if not confirmed:
-                raise DCVRegistrationError(domain=domain, reason="confirm_validation returned False")
+            self.confirm_validation(domain)
         except Exception:
             try:
                 writer.delete(dns_record.name)
-            except Exception:
-                pass
+            except Exception as cleanup_exc:
+                current_app.logger.warning(
+                    {"domain": domain, "message": "DCV cleanup failed — stale CNAME may remain", "error": str(cleanup_exc)}
+                )
             raise
 
     def list_all_domain_names(self) -> list:
