@@ -111,3 +111,34 @@ def test_check_validation_raises_on_api_error(mock_app):
 
     with pytest.raises(DCVAPIError):
         provider.check_validation("ap3.prod.dog")
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.current_app")
+def test_list_all_domain_names_paginates(mock_app):
+    mock_app.config.get.side_effect = _config
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: _config(k))
+
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+
+    provider = DigiCertDCVProvider()
+    provider._session = MagicMock()
+
+    page1 = {"domains": [{"name": f"domain{i}.prod.dog"} for i in range(100)]}
+    page2 = {"domains": [{"name": "last.prod.dog"}]}
+
+    call_count = [0]
+    def get_side_effect(url, params=None):
+        resp = Mock()
+        resp.status_code = 200
+        call_count[0] += 1
+        resp.json.return_value = page1 if call_count[0] == 1 else page2
+        return resp
+
+    provider._session.get.side_effect = get_side_effect
+
+    names = provider.list_all_domain_names()
+
+    assert len(names) == 101
+    assert names[0] == "domain0.prod.dog"
+    assert names[-1] == "last.prod.dog"
+    assert call_count[0] == 2  # exactly 2 pages

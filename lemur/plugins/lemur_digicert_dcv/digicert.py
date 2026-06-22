@@ -1,4 +1,3 @@
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -7,8 +6,6 @@ from flask import current_app
 
 from lemur.plugins.lemur_digicert_dcv.provider import (
     DCVAPIError,
-    DCVDomainNotRegistered,
-    DCVRegistrationError,
     DCVProvider,
     DNSRecord,
     ValidationStatus,
@@ -66,7 +63,13 @@ class DigiCertDCVProvider(DCVProvider):
         if window_days is None:
             window_days = current_app.config.get("DIGICERT_DCV_RENEWAL_WINDOW_DAYS", 60)
 
-        record = self._find_domain_record(domain)
+        try:
+            record = self._find_domain_record(domain)
+        except DCVAPIError as exc:
+            if not exc.domain:
+                raise DCVAPIError(domain=domain, ca=exc.ca, reason=exc.reason) from exc
+            raise
+
         if not record:
             return ValidationStatus(status="MISSING")
 
@@ -74,7 +77,15 @@ class DigiCertDCVProvider(DCVProvider):
         if not expiry_str:
             return ValidationStatus(status="MISSING")
 
-        expiry = datetime.strptime(expiry_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        try:
+            expiry = datetime.strptime(expiry_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise DCVAPIError(
+                domain=domain,
+                ca="digicert",
+                reason=f"Unexpected dcv_expiration_date format: {expiry_str!r}",
+            )
+
         now = datetime.now(tz=timezone.utc)
 
         if expiry < now:
