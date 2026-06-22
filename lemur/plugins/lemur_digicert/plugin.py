@@ -326,8 +326,13 @@ def _base_domain(hostname: str) -> str:
 def _ensure_dcv_valid(common_name: str) -> None:
     """Issuance-time DCV safety net.
 
-    If the base domain is MISSING or EXPIRING_SOON within the issuance window,
-    run inline re-validation before the cert request proceeds.
+    For EXPIRING_SOON: runs inline initiate→DNS→propagate→confirm with cleanup on failure.
+    For MISSING: delegates to register_domain() which handles the full registration flow.
+
+    Raises:
+        DCVAPIError: on CA API failure
+        DCVPropagationTimeout: if DNS propagation times out
+        DCVRegistrationError: if domain registration fails (MISSING path only)
     """
     if not _dcv_available:
         return
@@ -344,11 +349,22 @@ def _ensure_dcv_valid(common_name: str) -> None:
         current_app.logger.warning(
             {"domain": base, "status": status.status, "message": "DCV issuance hook: running inline revalidation"}
         )
+
+    if status.status == "MISSING":
+        provider.register_domain(base)
+    elif status.status == "EXPIRING_SOON":
         writer = Route53DCVWriter()
         dns_record = provider.initiate_validation(base)
         writer.upsert(dns_record)
-        writer.wait_for_propagation(dns_record)
-        provider.confirm_validation(base)
+        try:
+            writer.wait_for_propagation(dns_record)
+            provider.confirm_validation(base)
+        except Exception:
+            try:
+                writer.delete(dns_record)
+            except Exception:
+                current_app.logger.warning({"domain": base, "message": "DCV issuance hook: cleanup failed"})
+            raise
 
 
 class DigiCertSourcePlugin(SourcePlugin):
