@@ -1,5 +1,4 @@
 import time
-from typing import Optional
 
 import boto3
 import dns.exception
@@ -12,10 +11,9 @@ from lemur.plugins.lemur_digicert_dcv.provider import DCVPropagationTimeout, DNS
 class Route53DCVWriter:
     def _client(self):
         sts = boto3.client("sts")
-        role_arn = current_app.config.get(
-            "DIGICERT_DCV_ROUTE53_ROLE_ARN",
-            "arn:aws:iam::911167910923:role/lemur",
-        )
+        role_arn = current_app.config.get("DIGICERT_DCV_ROUTE53_ROLE_ARN")
+        if not role_arn:
+            raise ValueError("DIGICERT_DCV_ROUTE53_ROLE_ARN not configured")
         role = sts.assume_role(RoleArn=role_arn, RoleSessionName="lemur-dcv")
         creds = role["Credentials"]
         return boto3.client(
@@ -53,25 +51,22 @@ class Route53DCVWriter:
         )
 
     def delete(self, record_name: str) -> None:
-        """Delete the CNAME record for record_name. Silent if already gone."""
+        """Delete the CNAME record for record_name. Silent if not found."""
         client = self._client()
         zone_id = self._zone_id(client)
-        try:
-            resp = client.list_resource_record_sets(
-                HostedZoneId=zone_id,
-                StartRecordName=record_name,
-                StartRecordType="CNAME",
-                MaxItems="1",
-            )
-            for rrs in resp.get("ResourceRecordSets", []):
-                if rrs["Name"].rstrip(".") == record_name.rstrip(".") and rrs["Type"] == "CNAME":
-                    client.change_resource_record_sets(
-                        HostedZoneId=zone_id,
-                        ChangeBatch={"Changes": [{"Action": "DELETE", "ResourceRecordSet": rrs}]},
-                    )
-                    return
-        except Exception:
-            pass
+        resp = client.list_resource_record_sets(
+            HostedZoneId=zone_id,
+            StartRecordName=record_name,
+            StartRecordType="CNAME",
+            MaxItems="1",
+        )
+        for rrs in resp.get("ResourceRecordSets", []):
+            if rrs["Name"].rstrip(".") == record_name.rstrip(".") and rrs["Type"] == "CNAME":
+                client.change_resource_record_sets(
+                    HostedZoneId=zone_id,
+                    ChangeBatch={"Changes": [{"Action": "DELETE", "ResourceRecordSet": rrs}]},
+                )
+                return
 
     def wait_for_propagation(self, record: DNSRecord) -> None:
         timeout_secs = current_app.config.get("DIGICERT_DCV_PROPAGATION_TIMEOUT_SECS", 600)
