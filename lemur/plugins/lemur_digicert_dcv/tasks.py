@@ -41,7 +41,22 @@ def validate_digicert_domains():
     writer = Route53DCVWriter()
     window_days = current_app.config.get("DIGICERT_DCV_RENEWAL_WINDOW_DAYS", 60)
 
-    for domain_name in provider.list_all_domain_names():
+    try:
+        domains = provider.list_all_domain_names()
+    except Exception as e:
+        metrics.send(
+            "lemur.dcv.sweep_error",
+            "counter",
+            1,
+            metric_tags={"ca": "digicert", "reason": type(e).__name__},
+        )
+        current_app.logger.error(
+            {"error": str(e), "message": "DCV sweep failed to list domains"},
+            exc_info=True,
+        )
+        return
+
+    for domain_name in domains:
         status = provider.check_validation(domain_name, window_days=window_days)
         metrics.send(
             "lemur.dcv.validation_status",
@@ -105,7 +120,7 @@ def _revalidate(
                 "reason": type(exc).__name__,
             },
         )
-        current_app.logger.error(
+        current_app.logger.exception(
             {
                 "domain": domain_name,
                 "error": str(exc),

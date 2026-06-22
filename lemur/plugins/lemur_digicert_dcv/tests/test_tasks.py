@@ -94,9 +94,11 @@ def test_sweep_emits_failure_metric_and_continues_on_error(mock_writer_cls, mock
     # failure metric emitted for bad.prod.dog
     failure_calls = [
         c for c in mock_metrics.send.call_args_list
-        if "validation_failed" in str(c)
+        if c.args[0] == "lemur.dcv.validation_failed"
     ]
     assert len(failure_calls) == 1
+    # Verify the reason tag matches the exception type
+    assert failure_calls[0].kwargs["metric_tags"]["reason"] == "Exception"
 
     # good.prod.dog was still processed
     mock_writer_cls.return_value.upsert.assert_called_once()
