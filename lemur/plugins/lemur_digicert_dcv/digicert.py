@@ -6,6 +6,7 @@ from flask import current_app
 
 from lemur.plugins.lemur_digicert_dcv.provider import (
     DCVAPIError,
+    DCVDomainNotRegistered,
     DCVProvider,
     DNSRecord,
     ValidationStatus,
@@ -95,7 +96,19 @@ class DigiCertDCVProvider(DCVProvider):
         return ValidationStatus(status="VALID", expiry=expiry)
 
     def initiate_validation(self, domain: str) -> DNSRecord:
-        raise NotImplementedError("Implemented in Task 3")
+        record = self._find_domain_record(domain)
+        if not record:
+            raise DCVDomainNotRegistered(domain)
+        domain_id = record["id"]
+        data = self._post(f"/services/v2/domain/{domain_id}/dcv/token", {})
+        token = data.get("token") or (data.get("dcv_token") or {}).get("token")
+        if not token:
+            raise DCVAPIError(
+                domain=domain,
+                ca="digicert",
+                reason=f"No token in /dcv/token response: {data}",
+            )
+        return DNSRecord(name=f"_dv.{domain}", value=f"{token}.dcv.digicert.com")
 
     def confirm_validation(self, domain: str) -> bool:
         raise NotImplementedError("Implemented in Task 4")

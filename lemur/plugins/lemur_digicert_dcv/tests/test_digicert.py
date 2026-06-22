@@ -142,3 +142,58 @@ def test_list_all_domain_names_paginates(mock_app):
     assert names[0] == "domain0.prod.dog"
     assert names[-1] == "last.prod.dog"
     assert call_count[0] == 2  # exactly 2 pages
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.current_app")
+def test_initiate_validation_returns_dns_record(mock_app):
+    mock_app.config.get.side_effect = _config
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: _config(k))
+
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+    from lemur.plugins.lemur_digicert_dcv.provider import DNSRecord
+
+    provider = DigiCertDCVProvider()
+    provider._session = MagicMock()
+
+    def get_side_effect(url, params=None):
+        resp = Mock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "domains": [{"id": 42, "name": "ap3.prod.dog", "dcv_expiration_date": "2027-10-01"}]
+        }
+        return resp
+
+    def post_side_effect(url, json=None):
+        resp = Mock()
+        resp.status_code = 200
+        resp.json.return_value = {"token": "abc123xyz"}
+        return resp
+
+    provider._session.get.side_effect = get_side_effect
+    provider._session.post.side_effect = post_side_effect
+
+    record = provider.initiate_validation("ap3.prod.dog")
+
+    assert isinstance(record, DNSRecord)
+    assert record.name == "_dv.ap3.prod.dog"
+    assert record.value == "abc123xyz.dcv.digicert.com"
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.current_app")
+def test_initiate_validation_raises_when_domain_not_registered(mock_app):
+    mock_app.config.get.side_effect = _config
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: _config(k))
+
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+    from lemur.plugins.lemur_digicert_dcv.provider import DCVDomainNotRegistered
+
+    provider = DigiCertDCVProvider()
+    provider._session = MagicMock()
+
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"domains": []}
+    provider._session.get.return_value = mock_resp
+
+    with pytest.raises(DCVDomainNotRegistered):
+        provider.initiate_validation("unknown.prod.dog")
