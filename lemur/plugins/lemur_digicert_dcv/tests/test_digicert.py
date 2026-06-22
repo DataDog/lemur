@@ -266,3 +266,77 @@ def test_confirm_validation_raises_on_timeout(mock_time, mock_sleep, mock_app):
 
     with pytest.raises(DCVAPIError, match="timeout"):
         provider.confirm_validation("ap3.prod.dog")
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.current_app")
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.Route53DCVWriter")
+def test_register_domain_full_flow(mock_writer_cls, mock_app):
+    mock_app.config.get.side_effect = _config
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: _config(k))
+
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+
+    provider = DigiCertDCVProvider()
+    provider._session = MagicMock()
+
+    call_count = [0]
+
+    def get_side_effect(url, params=None):
+        resp = Mock()
+        resp.status_code = 200
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # First call: check_validation → domain not yet registered
+            resp.json.return_value = {"domains": []}
+        else:
+            # Subsequent calls: domain now exists
+            resp.json.return_value = {
+                "domains": [{"id": 99, "name": "new.prod.dog", "dcv_expiration_date": "2027-10-01"}]
+            }
+        return resp
+
+    def post_side_effect(url, json=None):
+        resp = Mock()
+        resp.status_code = 200
+        if "domain" in url and "dcv" not in url:
+            resp.json.return_value = {"id": 99}  # POST /services/v2/domain → domain created
+        elif "dcv" in url and "token" not in url and "check" not in url:
+            resp.json.return_value = {"token": "newtoken456"}  # POST /dcv → token
+        elif "check" in url:
+            resp.json.return_value = {"status": "active"}
+        return resp
+
+    provider._session.get.side_effect = get_side_effect
+    provider._session.post.side_effect = post_side_effect
+
+    mock_writer = mock_writer_cls.return_value
+
+    provider.register_domain("new.prod.dog")
+
+    mock_writer.upsert.assert_called_once()
+    mock_writer.wait_for_propagation.assert_called_once()
+
+
+@patch("lemur.plugins.lemur_digicert_dcv.digicert.current_app")
+def test_register_domain_noop_when_already_valid(mock_app):
+    mock_app.config.get.side_effect = _config
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: _config(k))
+
+    from lemur.plugins.lemur_digicert_dcv.digicert import DigiCertDCVProvider
+
+    provider = DigiCertDCVProvider()
+    provider._session = MagicMock()
+
+    mock_resp = Mock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "domains": [{"id": 42, "name": "ap3.prod.dog", "dcv_expiration_date": "2027-10-01"}]
+    }
+    provider._session.get.return_value = mock_resp
+
+    from freezegun import freeze_time
+    with freeze_time("2026-06-22"):
+        provider.register_domain("ap3.prod.dog")
+
+    # No POST calls — the domain was already valid with > 30 days remaining
+    provider._session.post.assert_not_called()

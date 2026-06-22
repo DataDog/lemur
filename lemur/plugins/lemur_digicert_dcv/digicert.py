@@ -9,9 +9,11 @@ from lemur.plugins.lemur_digicert_dcv.provider import (
     DCVAPIError,
     DCVDomainNotRegistered,
     DCVProvider,
+    DCVRegistrationError,
     DNSRecord,
     ValidationStatus,
 )
+from lemur.plugins.lemur_digicert_dcv.route53 import Route53DCVWriter
 
 
 class DigiCertDCVProvider(DCVProvider):
@@ -134,7 +136,55 @@ class DigiCertDCVProvider(DCVProvider):
         )
 
     def register_domain(self, domain: str) -> None:
-        raise NotImplementedError("Implemented in Task 5")
+        # Idempotency: skip if already valid and not expiring within 30 days
+        issuance_window = current_app.config.get("DIGICERT_DCV_ISSUANCE_WINDOW_DAYS", 30)
+        status = self.check_validation(domain, window_days=issuance_window)
+        if status.status == "VALID":
+            current_app.logger.info(
+                {"domain": domain, "expiry": str(status.expiry), "message": "DCV already valid, skipping register"}
+            )
+            return
+
+        # Register the domain if not present
+        existing = self._find_domain_record(domain)
+        if not existing:
+            resp = self._post("/services/v2/domain", {
+                "name": domain,
+                "org": {"id": current_app.config.get("DIGICERT_ORG_ID")},
+            })
+            domain_id = resp.get("id")
+            if not domain_id:
+                raise DCVRegistrationError(
+                    domain=domain,
+                    reason=f"No id in POST /services/v2/domain response: {resp}",
+                )
+        else:
+            domain_id = existing["id"]
+
+        # Request CNAME DCV token
+        token_resp = self._post(f"/services/v2/domain/{domain_id}/dcv", {"dcv_method": "dns-cname-token"})
+        token = token_resp.get("token") or (token_resp.get("dcv_token") or {}).get("token")
+        if not token:
+            raise DCVRegistrationError(
+                domain=domain,
+                reason=f"No token in /dcv response: {token_resp}",
+            )
+
+        dns_record = DNSRecord(name=f"_dv.{domain}", value=f"{token}.dcv.digicert.com")
+
+        writer = Route53DCVWriter()
+        writer.upsert(dns_record)
+        try:
+            writer.wait_for_propagation(dns_record)
+            confirmed = self.confirm_validation(domain)
+            if not confirmed:
+                raise DCVRegistrationError(domain=domain, reason="confirm_validation returned False")
+        except Exception:
+            try:
+                writer.delete(dns_record.name)
+            except Exception:
+                pass
+            raise
 
     def list_all_domain_names(self) -> list:
         """Page through all domains in CertCentral. Used by the Celery sweep."""
