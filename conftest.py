@@ -36,7 +36,7 @@ def _try_import(name):
 
 # Only install stubs if Flask is not available (avoids interfering with
 # the full test suite when run in an environment that has all deps).
-if not _try_import("flask"):
+if not _try_import("flask_replicated"):
     _stub("flask", g=object(), request=None, current_app=None,
           jsonify=lambda *a, **k: None)
     _stub("werkzeug")
