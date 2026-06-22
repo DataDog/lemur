@@ -307,8 +307,9 @@ def get_cis_certificate(session, base_url, order_id):
 def _base_domain(hostname: str) -> str:
     """Extract the registrable base domain.
 
-    'sub.ap3.prod.dog' -> 'ap3.prod.dog'
-    'ap3.prod.dog'     -> 'ap3.prod.dog'
+    'sub.ap3.prod.dog' -> 'prod.dog'
+    'ap3.prod.dog'     -> 'prod.dog'
+    'prod.dog'         -> 'prod.dog'
     """
     try:
         import tldextract
@@ -345,18 +346,19 @@ def _ensure_dcv_valid(common_name: str) -> None:
     window_days = current_app.config.get("DIGICERT_DCV_ISSUANCE_WINDOW_DAYS", 30)
     status = provider.check_validation(base, window_days=window_days)
 
-    if status.status in ("MISSING", "EXPIRING_SOON"):
-        current_app.logger.warning(
-            {"domain": base, "status": status.status, "message": "DCV issuance hook: running inline revalidation"}
-        )
-
     if status.status == "MISSING":
+        current_app.logger.warning(
+            {"domain": base, "status": status.status, "message": "DCV issuance hook: domain not registered, delegating to register_domain"}
+        )
         provider.register_domain(base)
     elif status.status == "EXPIRING_SOON":
+        current_app.logger.warning(
+            {"domain": base, "status": status.status, "message": "DCV issuance hook: domain expiring soon, running inline revalidation"}
+        )
         writer = Route53DCVWriter()
         dns_record = provider.initiate_validation(base)
-        writer.upsert(dns_record)
         try:
+            writer.upsert(dns_record)
             writer.wait_for_propagation(dns_record)
             provider.confirm_validation(base)
         except Exception:

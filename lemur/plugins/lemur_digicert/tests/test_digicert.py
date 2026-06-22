@@ -431,3 +431,30 @@ def test_ensure_dcv_valid_expiring_soon_cleans_up_on_failure(mock_dcv_cls, mock_
         _ensure_dcv_valid("sub.example.com")
 
     mock_writer.delete.assert_called_once_with(dns_record)
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=Mock)
+@patch("lemur.plugins.lemur_digicert.plugin.Route53DCVWriter")
+@patch("lemur.plugins.lemur_digicert.plugin.DigiCertDCVProvider")
+def test_ensure_dcv_valid_expiring_soon_confirm_failure_cleans_up(mock_dcv_cls, mock_writer_cls, mock_app):
+    """EXPIRING_SOON: writer.delete() is called when confirm_validation raises."""
+    from lemur.plugins.lemur_digicert_dcv.provider import ValidationStatus
+    from lemur.plugins.lemur_digicert.plugin import _ensure_dcv_valid
+
+    mock_app.config.get.side_effect = lambda k, d=None: {
+        "DIGICERT_DCV_ISSUANCE_WINDOW_DAYS": 30,
+    }.get(k, d)
+
+    mock_dcv = mock_dcv_cls.return_value
+    mock_dcv.check_validation.return_value = ValidationStatus(status="EXPIRING_SOON")
+    dns_record = Mock()
+    mock_dcv.initiate_validation.return_value = dns_record
+    mock_dcv.confirm_validation.side_effect = RuntimeError("CA rejected")
+
+    mock_writer = mock_writer_cls.return_value
+    mock_writer.wait_for_propagation.return_value = None
+
+    with pytest.raises(RuntimeError, match="CA rejected"):
+        _ensure_dcv_valid("sub.example.com")
+
+    mock_writer.delete.assert_called_once_with(dns_record)
