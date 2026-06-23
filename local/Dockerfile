@@ -96,10 +96,7 @@ RUN apt-get purge -y --auto-remove \
 # Install development and test dependencies
 RUN pip install --no-cache-dir -e ."[dev]" -e ."[tests]"
 
-# Datadog internal wheels (cert_orchestration_adapter + dd_internal_authentication)
-# and their transitive deps such as cachetools, which lemur/auth/vault_jwt_auth.py
-# imports. make develop installs these on the host; the image needs them too or
-# lemur fails to import and the container crash-loops.
+# The image needs Datadog internal wheels
 RUN pip3 install --no-cache-dir -r requirements-dd-source.in
 
 COPY local/src/lemur.conf.py /home/lemur/.lemur/lemur.conf.py
