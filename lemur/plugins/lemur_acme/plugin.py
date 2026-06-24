@@ -12,6 +12,8 @@
 .. moduleauthor:: Curtis Castrapel <ccastrapel@netflix.com>
 """
 
+from urllib.parse import urlparse
+
 from acme.errors import PollError, WildcardUnsupportedError
 from acme.messages import Error as AcmeError
 from botocore.exceptions import ClientError
@@ -24,11 +26,31 @@ from lemur.constants import CRLReason, EMAIL_RE
 from lemur.dns_providers import service as dns_provider_service
 from lemur.exceptions import InvalidConfiguration
 from lemur.extensions import metrics
-
 from lemur.plugins import lemur_acme as acme
 from lemur.plugins.bases import IssuerPlugin
 from lemur.plugins.lemur_acme.acme_handlers import AcmeHandler, AcmeDnsHandler
 from lemur.plugins.lemur_acme.challenge_types import AcmeHttpChallenge, AcmeDnsChallenge
+
+
+def _validate_acme_url(url):
+    """Reject acme_url values that are not in the configured allowlist.
+
+    Called at authority creation time only — existing authorities in the DB
+    were already trusted when they were created and are not re-validated.
+    """
+    allowed_hosts = current_app.config.get(
+        "ACME_DIRECTORY_HOST_ALLOWLIST",
+        {
+            "acme-v02.api.letsencrypt.org",
+            "acme-staging-v02.api.letsencrypt.org",
+            "dv.acme-v02.api.pki.goog",
+        },
+    )
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in allowed_hosts:
+        raise InvalidConfiguration(
+            f"acme_url host not in ACME_DIRECTORY_HOST_ALLOWLIST: {parsed.hostname}"
+        )
 
 
 class ACMEIssuerPlugin(IssuerPlugin):
@@ -46,7 +68,7 @@ class ACMEIssuerPlugin(IssuerPlugin):
             "type": "str",
             "required": True,
             "validation": check_validation(
-                r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+                r"http[s]?://(?:[a-zA-Z]|[0-9]|[$_@.&+-]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
             ),
             "helpMessage": "ACME resource URI. Must be a valid web url starting with http[s]://",
         },
@@ -308,7 +330,7 @@ class ACMEIssuerPlugin(IssuerPlugin):
 
         plugin_options = options.get("plugin", {}).get("plugin_options")
         if not plugin_options:
-            error = "Invalid options for lemur_acme plugin: {}".format(options)
+            error = f"Invalid options for lemur_acme plugin: {options}"
             current_app.logger.error(error)
             raise InvalidConfiguration(error)
         # Define static acme_root based off configuration variable by default. However, if user has passed a
@@ -317,6 +339,8 @@ class ACMEIssuerPlugin(IssuerPlugin):
         for option in plugin_options:
             if option.get("name") == "certificate":
                 acme_root = option.get("value")
+            if option.get("name") == "acme_url":
+                _validate_acme_url(option.get("value", ""))
         return acme_root, "", [role]
 
     def cancel_ordered_certificate(self, pending_cert, **kwargs):
@@ -347,7 +371,7 @@ class ACMEHttpIssuerPlugin(IssuerPlugin):
             "type": "str",
             "required": True,
             "validation": check_validation(
-                r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+                r"http[s]?://(?:[a-zA-Z]|[0-9]|[$_@.&+-]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
             ),
             "helpMessage": "Must be a valid web url starting with http[s]://",
         },
@@ -450,7 +474,7 @@ class ACMEHttpIssuerPlugin(IssuerPlugin):
 
         plugin_options = options.get("plugin", {}).get("plugin_options")
         if not plugin_options:
-            error = "Invalid options for lemur_acme plugin: {}".format(options)
+            error = f"Invalid options for lemur_acme plugin: {options}"
             current_app.logger.error(error)
             raise InvalidConfiguration(error)
         # Define static acme_root based off configuration variable by default. However, if user has passed a
@@ -459,6 +483,8 @@ class ACMEHttpIssuerPlugin(IssuerPlugin):
         for option in plugin_options:
             if option.get("name") == "certificate":
                 acme_root = option.get("value")
+            if option.get("name") == "acme_url":
+                _validate_acme_url(option.get("value", ""))
         return acme_root, "", [role]
 
     def cancel_ordered_certificate(self, pending_cert, **kwargs):

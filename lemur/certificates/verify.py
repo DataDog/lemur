@@ -5,9 +5,12 @@
     :license: Apache, see LICENSE for more details.
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
-
+import ipaddress
 import requests
+import socket
 import subprocess
+from collections import OrderedDict
+from urllib.parse import urlparse
 from flask import current_app
 from requests.exceptions import ConnectionError, InvalidSchema, Timeout
 from cryptography import x509
@@ -19,7 +22,38 @@ from lemur.utils import mktempfile
 from lemur.common.utils import parse_certificate
 from lemur.extensions import metrics
 
-crl_cache = {}
+_CRL_CACHE_MAX_SIZE = 1000
+crl_cache: OrderedDict = OrderedDict()
+
+
+def _validate_revocation_url(url, config_key):
+    """
+    Reject URLs that point at private/loopback/link-local destinations (SSRF prevention).
+    If config_key is present in app config, also enforce a hostname allowlist.
+
+    Raises ValueError with a descriptive message if the URL is not permitted.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Disallowed URL scheme '{parsed.scheme}': {url}")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"URL has no hostname: {url}")
+
+    allowed_hosts = current_app.config.get(config_key, [])
+    if allowed_hosts and hostname not in allowed_hosts:
+        raise ValueError(f"Host '{hostname}' is not in {config_key} allowlist: {url}")
+
+    # Always block internal destinations regardless of allowlist to defeat DNS rebinding
+    # and misconfigured allowlists.
+    try:
+        addr = ipaddress.ip_address(socket.gethostbyname(hostname))
+    except (socket.gaierror, ValueError) as e:
+        raise ValueError(f"Unable to resolve host '{hostname}': {e}")
+
+    if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+        raise ValueError(f"URL resolves to a disallowed internal address ({addr}): {url}")
 
 
 def ocsp_verify(cert, cert_path, issuer_chain_path):
@@ -35,11 +69,21 @@ def ocsp_verify(cert, cert_path, issuer_chain_path):
     """
     command = ["openssl", "x509", "-noout", "-ocsp_uri", "-in", cert_path]
     p1 = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    url, err = p1.communicate()
+    url_bytes, err = p1.communicate()
 
-    if not url:
+    if not url_bytes:
         current_app.logger.debug(
-            "No OCSP URL in certificate {}".format(cert.serial_number)
+            f"No OCSP URL in certificate {cert.serial_number}"
+        )
+        return None
+
+    url = url_bytes.decode("utf-8").strip()
+
+    try:
+        _validate_revocation_url(url, "LEMUR_TRUSTED_OCSP_HOSTS")
+    except ValueError as e:
+        current_app.logger.warning(
+            f"OCSP URL rejected for certificate {cert.serial_number:02X}: {e}"
         )
         return None
 
@@ -52,13 +96,11 @@ def ocsp_verify(cert, cert_path, issuer_chain_path):
             "-cert",
             cert_path,
             "-url",
-            url.strip(),
+            url,
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    if not isinstance(url, str):
-        url = url.decode("utf-8")
     try:
         message, err = p2.communicate(timeout=6)
     except TimeoutExpired:
@@ -74,17 +116,18 @@ def ocsp_verify(cert, cert_path, issuer_chain_path):
     p_message = message.decode("utf-8")
 
     if "unauthorized" in p_message:
-        # indicates the OCSP server does not know this certificate
+        # indicates the OCSP server does not know this certificate. this is a retriable error.
         metrics.send(
             "check_revocation_ocsp_verify",
             "counter",
             1,
             metric_tags={"status": "unauthorized", "url": url},
         )
-        raise Exception(
-            f"OCSP unauthorized error: {url}, certificate serial number {cert.serial_number:02X}. Response:"
-            f" {p_message}"
+        current_app.logger.warning(
+            f"OCSP unauthorized error: {url}, "
+            f"certificate serial number {cert.serial_number:02X}. Response: {p_message}"
         )
+        return None
 
     elif "error" in p_message or "Error" in p_message:
         metrics.send(
@@ -128,7 +171,7 @@ def crl_verify(cert, cert_path):
         ).value
     except x509.ExtensionNotFound:
         current_app.logger.debug(
-            "No CRLDP extension in certificate {}".format(cert.serial_number)
+            f"No CRLDP extension in certificate {cert.serial_number}"
         )
         return None
 
@@ -136,6 +179,14 @@ def crl_verify(cert, cert_path):
         point = p.full_name[0].value
 
         if point not in crl_cache:
+            try:
+                _validate_revocation_url(point, "LEMUR_TRUSTED_CRL_HOSTS")
+            except ValueError as e:
+                current_app.logger.warning(
+                    f"CRL URL rejected for certificate {cert.serial_number:02X}: {e}"
+                )
+                continue
+
             current_app.logger.debug(
                 f"Retrieving CRL: {point}, serial {cert.serial_number:02X}"
             )
@@ -154,11 +205,14 @@ def crl_verify(cert, cert_path):
                     f"Unable to retrieve CRL: {point}, serial {cert.serial_number:02X}"
                 )
 
+            if len(crl_cache) >= _CRL_CACHE_MAX_SIZE:
+                crl_cache.popitem(last=False)
+
             crl_cache[point] = x509.load_der_x509_crl(
                 response.content, backend=default_backend()
             )
         else:
-            current_app.logger.debug("CRL point is cached {}".format(point))
+            current_app.logger.debug(f"CRL point is cached {point}")
 
         for r in crl_cache[point]:
             if cert.serial_number == r.serial_number:
@@ -189,7 +243,7 @@ def verify(cert_path, issuer_chain_path):
     :param issuer_chain_path:
     :return: True if valid, False otherwise
     """
-    with open(cert_path, "rt") as c:
+    with open(cert_path) as c:
         try:
             cert = parse_certificate(c.read())
         except ValueError as e:
@@ -217,7 +271,7 @@ def verify(cert_path, issuer_chain_path):
             crl_err = 1
 
     if verify_result is None:
-        current_app.logger.debug("Failed to verify {}".format(cert.serial_number))
+        current_app.logger.warning(f"Failed to verify {cert.serial_number}")
 
     return verify_result, ocsp_err, crl_err
 

@@ -15,7 +15,7 @@ from sqlalchemy.event import listen
 
 from sqlalchemy_utils.types.arrow import ArrowType
 
-from lemur.database import db
+from lemur.database import BaseModel, db
 from lemur.models import roles_users
 
 from lemur.extensions import bcrypt
@@ -52,7 +52,7 @@ def hash_password(mapper, connect, target):
     target.hash_password()
 
 
-class User(db.Model):
+class User(BaseModel):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     password = Column(String(128))
@@ -97,7 +97,7 @@ class User(db.Model):
 
         :return:
         """
-        if self.password:
+        if self.password and not self.password.startswith("$2"):
             self.password = bcrypt.generate_password_hash(self.password).decode("utf-8")
 
     @property
@@ -112,8 +112,21 @@ class User(db.Model):
             if role.name == "admin":
                 return True
 
+    @property
+    def is_admin_or_global_cert_issuer(self):
+        """
+        Determine if the current user is a global cert issuer. The user has either 'admin' or 'global_cert_issuer' role
+        associated with them.
+
+        :return:
+        """
+        for role in self.roles:
+            if role.name == "admin" or role.name == "global_cert_issuer":
+                return True
+
     def __repr__(self):
-        return "User(username={username})".format(username=self.username)
+        return f"User(username={self.username})"
 
 
 listen(User, "before_insert", hash_password)
+listen(User, "before_update", hash_password)

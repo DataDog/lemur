@@ -11,16 +11,16 @@ Lemur
 
 .. image:: https://img.shields.io/badge/NetflixOSS-active-brightgreen.svg
 
-.. image:: https://coveralls.io/repos/github/Netflix/lemur/badge.svg?branch=master
-    :target: https://coveralls.io/github/Netflix/lemur?branch=master
+.. image:: https://coveralls.io/repos/github/Netflix/lemur/badge.svg?branch=main
+    :target: https://coveralls.io/github/Netflix/lemur?branch=main
 
 
 
 Lemur manages TLS certificate creation. While not able to issue certificates itself, Lemur acts as a broker between CAs
 and environments providing a central portal for developers to issue TLS certificates with 'sane' defaults.
 
-Lemur runs on Python 3.10.
-We deploy on Ubuntu and develop mostly on OS X.
+Lemur aims to support the 3 most recent python releases which have been released for at least a year. For example, if python3.14 released last month, we'd aim to support versions 3.10, 3.11, 3.12, and 3.13.
+We deploy on Ubuntu 22.04 and develop mostly on OS X.
 
 
 Project resources
@@ -31,94 +31,3 @@ Project resources
 - `Source code <https://github.com/netflix/lemur>`_
 - `Issue tracker <https://github.com/netflix/lemur/issues>`_
 - `Docker <https://github.com/Netflix/lemur-docker>`_
-
-
-Docker Environments
-===================
-
-This repository contains multiple Dockerfiles for different purposes:
-
-``Dockerfile`` (root directory)
-    **Testing environment** - Minimal build based on ``ubuntu:22.04`` with Python 3.10 and Node.js 18 for running tests.
-    Used by ``docker-compose.yml`` to run the test suite.
-
-    Usage: ``docker compose up test``
-
-``local/Dockerfile``
-    **Local development environment** - Full-featured development setup based on ``ubuntu:22.04``
-    with Python 3.10 and Node.js 18, including nginx, supervisor, and celery workers.
-    Provides a complete Lemur stack for local development. Used by ``local/docker-compose.yml``.
-
-    Usage: ``cd local && docker compose up -d``
-
-    Access at ``http://localhost:8087`` (HTTP) and ``https://localhost:8447`` (HTTPS)
-
-``publish/Dockerfile``
-    **Production and staging images** - Multi-stage build using DataDog's GBI Ubuntu 22.04 base image
-    (Python 3.10). Used by GitLab CI to build both regular and FIPS-compliant images for deployment.
-
-    Controlled by ``.gitlab-ci.yml`` via ``.campaigns/build_and_push_image.sh``
-
-
-Local Development and Testing
-==============================
-
-Development with Docker (Recommended)
---------------------------------------
-
-The fastest way to get started. Uses containerized environments matching production.
-
-**Run tests:**
-
-.. code-block:: bash
-
-    docker compose up test
-
-**Build and start local dev environment:**
-
-.. code-block:: bash
-    source .venv/bin/activate && make develop
-    cd local && docker compose up -d
-
-Access at http://localhost:8087 (HTTP) or https://localhost:8447 (HTTPS)
-
-Development without Docker
----------------------------
-
-For local development without containers. Requires Python 3.10 installed on your system.
-
-**Prerequisites:**
-
-- Python 3.10 (verify with ``python3 --version``)
-- Node.js 18 and npm (for frontend build)
-- PostgreSQL (can use Docker for just the database)
-
-**Setup:**
-
-1. Create and activate a virtual environment with Python 3.10::
-
-    python3 -m venv venv
-    source venv/bin/activate
-
-2. Verify Python version::
-
-    python --version  # Should show Python 3.10.x
-
-3. Start PostgreSQL database::
-
-    docker compose up -d postgres
-
-4. Install dependencies and build frontend::
-
-    make develop
-
-   This installs npm dependencies, Python dependencies in development mode, and builds frontend assets with gulp.
-
-**Run tests:**
-
-.. code-block:: bash
-
-    export SQLALCHEMY_DATABASE_URI=postgresql://lemur:lemur@localhost:5432/lemur
-    make test            # Run linting and tests
-    make test-python     # Run Python tests only
-    pytest -v            # Run tests with verbose output

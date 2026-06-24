@@ -277,7 +277,7 @@ class AcmeHandler:
                 if dns_name.value not in domains:
                     domains.append(dns_name.value)
 
-        current_app.logger.debug("Got these domains: {0}".format(domains))
+        current_app.logger.debug(f"Got these domains: {domains}")
         return domains
 
     def revoke_certificate(self, certificate, crl_reason=0):
@@ -391,7 +391,7 @@ class AcmeDnsHandler(AcmeHandler):
         }
         provider = provider_types.get(type)
         if not provider:
-            raise UnknownProvider("No such DNS provider: {}".format(type))
+            raise UnknownProvider(f"No such DNS provider: {type}")
         return provider
 
     def start_dns_challenge(
@@ -451,7 +451,7 @@ class AcmeDnsHandler(AcmeHandler):
 
     def complete_dns_challenge(self, acme_client, authz_record):
         current_app.logger.debug(
-            "Finalizing DNS challenge for {0}".format(
+            "Finalizing DNS challenge for {}".format(
                 authz_record.authz[0].body.identifier.value
             )
         )
@@ -459,9 +459,7 @@ class AcmeDnsHandler(AcmeHandler):
         if not dns_providers:
             metrics.send("complete_dns_challenge_error_no_dnsproviders", "counter", 1)
             raise Exception(
-                "No DNS providers found for domain: {}".format(
-                    authz_record.target_domain
-                )
+                f"No DNS providers found for domain: {authz_record.target_domain}"
             )
 
         for dns_provider in dns_providers:
@@ -535,9 +533,7 @@ class AcmeDnsHandler(AcmeHandler):
                 metrics.send(
                     "get_authorizations_no_dns_provider_for_domain", "counter", 1
                 )
-                raise Exception(
-                    "No DNS providers found for domain: {}".format(target_domain)
-                )
+                raise Exception(f"No DNS providers found for domain: {target_domain}")
 
             for dns_provider in self.dns_providers_for_domain[target_domain]:
                 dns_provider_plugin = self.get_dns_provider(dns_provider.provider_type)
@@ -619,10 +615,7 @@ class AcmeDnsHandler(AcmeHandler):
         on an exception
 
         :param acme_client:
-        :param account_number:
-        :param dns_provider:
         :param authorizations:
-        :param dns_provider_options:
         :return:
         """
         for authz_record in authorizations:

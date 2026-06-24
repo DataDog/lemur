@@ -35,10 +35,41 @@ Basic Configuration
 
         LOG_UPGRADE_FILE = "/logs/lemur/db_upgrade.log"
 
+.. data:: LOG_REQUEST_HEADERS
+    :noindex:
+
+    ::
+        Defaults to False (off).  This adds logging similar to a webserver, where each request made to the API is logged.
+        Useful for tracing where requests are being made from, or for auditing purposes.
+
+        LOG_REQUEST_HEADERS = True
+
+.. data:: LOG_SANITIZE_REQUEST_HEADERS
+    :noindex:
+
+    ::
+        Defaults to True (on).  This sanitizes the requests logging to remove the query parameters,
+        as those parameters often contain sensitivity information.
+
+        LOG_SANITIZE_REQUEST_HEADERS = True
+
+    .. warning::
+        This should never be used in a production environment as it exposes sensitivite information.
+
+.. data:: LOG_REQUEST_HEADERS_SKIP_ENDPOINT
+    :noindex:
+
+    ::
+        Defaults to the metrics and healthcheck endpoints.  Some endpoints are not useful to log and can generate a lot of noise.
+        If an endpoint is listed here, it will be skipped and not logged.  It is only recommended to add endpoints that are purely
+        informational or only used internally.
+
+        LOG_REQUEST_HEADERS_SKIP_ENDPOINT = ["/metrics", "/healthcheck"]
+
 .. data:: DEBUG
     :noindex:
 
-    Sets the flask debug flag to true (if supported by the webserver)
+        Sets the flask debug flag to true (if supported by the webserver)
 
     ::
 
@@ -52,15 +83,33 @@ Basic Configuration
 .. data:: CORS
     :noindex:
 
-    Allows for cross domain requests, this is most commonly used for development but could
-    be use in production if you decided to host the webUI on a different domain than the server.
+        Allows for cross domain requests, this is most commonly used for development but could
+        be use in production if you decided to host the webUI on a different domain than the server.
 
-    Use this cautiously, if you're not sure. Set it to `False`
+        For CORS configuration options, please refer to `Flask-CORS Documentation <https://flask-cors.readthedocs.io/en/latest/configuration.html>`_
+
+        Use this cautiously, if you're not sure. Set it to `False`
 
     ::
 
         CORS = False
 
+
+.. data:: CUSTOM_RESPONSE_HEADERS
+    :noindex:
+
+        Allows for the creation of multiple response headers. A response header is an HTTP header that can be used in an HTTP response and that doesn't relate to the content of the message. Response headers, like Age, Location or Server are used to give a more detailed context of the response.
+
+    ::
+
+        CUSTOM_RESPONSE_HEADERS = {}
+
+        Example:
+
+        CUSTOM_RESPONSE_HEADERS = {
+            "Content-Security-Policy": "default-src 'self'",
+            "X-Frame-Options": "DENY"
+        }
 
 .. data:: SQLALCHEMY_DATABASE_URI
     :noindex:
@@ -75,8 +124,8 @@ Basic Configuration
 .. data:: SQLALCHEMY_ENGINE_OPTIONS
     :noindex:
 
-        This is an optional config that handles all engine_options to SQLAlchemy.
-        Please refer to the `flask-sqlalchemy website <https://flask-sqlalchemy.palletsprojects.com/en/2.x/config/>`_ for
+        This is an optional config that handles all engine_options to SQLAlchemy. 
+        Please refer to the `flask-sqlalchemy website <https://flask-sqlalchemy.palletsprojects.com/en/2.x/config/>`_ for 
         more details about the individual configs.
 
         The default connection pool size is 5 for sqlalchemy managed connections.
@@ -135,19 +184,64 @@ Basic Configuration
 .. data:: LEMUR_TOKEN_SECRET
     :noindex:
 
-        The TOKEN_SECRET is the secret used to create JWT tokens that are given out to users. This should be securely generated and kept private.
+        The TOKEN_SECRET is the secret used to create JWT tokens for users and api keys. This should be securely generated and kept private.
 
     ::
 
         LEMUR_TOKEN_SECRET = 'supersecret'
 
-    An example of how you might generate a random string:
+        An example of how you might generate a random string:
 
         >>> import secrets
-        >>> secret_key = ''.join(secrets.choice(string.ascii_uppercase) for x in range(6))
-        >>> secret_key = secret_key + ''.join(secrets.choice("~!@#$%^&*()_+") for x in range(6))
-        >>> secret_key = secret_key + ''.join(secrets.choice(string.ascii_lowercase) for x in range(6))
-        >>> secret_key = secret_key + ''.join(secrets.choice(string.digits) for x in range(6))
+		>>> import string
+        >>> chars = string.ascii_uppercase + string.ascii_lowercase + string.digits + "~!@#$%^&*()_+"
+        >>> secret_key = ''.join(secrets.choice(chars) for x in range(24))
+
+
+.. data:: LEMUR_TOKEN_SECRETS
+    :noindex:
+
+        Defines a priority ordering of versions of LEMUR_TOKEN_SECRET. This is useful when rotating the token secret.
+        The first element is used to create new JWTs. When verifying JWTs, each token is attempted in order. If all verifies
+        fail, the exception from the first verify will be raised.
+
+    ::
+
+        LEMUR_TOKEN_SECRETS = [LEMUR_TOKEN_SECRET]
+
+
+.. data:: LEMUR_TOKEN_ALGORITHMS
+    :noindex:
+
+        The list of JWT signing algorithms the server will accept when verifying session tokens. The server
+        always uses this list — it never trusts the algorithm name in the token header (GHSA-r9gp-7f88-9r54).
+        Defaults to ``["HS256"]``, which is the only algorithm Lemur has ever used to issue tokens, so
+        existing deployments require no config change.
+
+        The **first element** is also used as the signing algorithm for new tokens issued by ``create_token``.
+        This means the signing algorithm is always guaranteed to be in the accepted list — they share the
+        same config key and cannot drift out of sync.
+
+        If you are migrating to a different algorithm, add both the old and new values here during the
+        transition window (the length of ``LEMUR_TOKEN_EXPIRATION``), then remove the old value once all
+        tokens issued under it have expired::
+
+            LEMUR_TOKEN_ALGORITHMS = ["HS256"]          # default; signs and accepts HS256
+            LEMUR_TOKEN_ALGORITHMS = ["RS256", "HS256"]  # migration: sign new tokens with RS256, still accept old HS256 tokens
+            LEMUR_TOKEN_ALGORITHMS = ["RS256"]           # post-migration: HS256 tokens have all expired
+
+
+.. data:: LEMUR_TOKEN_EXPIRATION
+    :noindex:
+
+        Controls how long a JWT issued by Lemur remains valid. Accepts an integer (number of days), or a string
+        suffixed with ``h`` (hours) or ``m`` (minutes). Defaults to ``1`` (one day) if not set.
+
+    ::
+
+        LEMUR_TOKEN_EXPIRATION = 1       # 1 day (default)
+        LEMUR_TOKEN_EXPIRATION = "12h"   # 12 hours
+        LEMUR_TOKEN_EXPIRATION = "30m"   # 30 minutes
 
 
 .. data:: LEMUR_ENCRYPTION_KEYS
@@ -178,11 +272,24 @@ Basic Configuration
         LEMUR_ENCRYPTION_KEYS = ['1YeftooSbxCiX2zo8m1lXtpvQjy27smZcUUaGmffhMY=', 'LAfQt6yrkLqOK5lwpvQcT4jf2zdeTQJV1uYeh9coT5s=']
 
 
+.. data:: PUBLIC_CA_DEFAULT_VALIDITY_DAYS
+    :noindex:
+
+        Use this config to set a default validity for certificates issued by CA/Browser compliant authorities.
+        The authorities with cab_compliant option set to true will use this config. This value defaults to
+        `PUBLIC_CA_MAX_VALIDITY_DAYS` (see below) if not configured. The example below overrides the default validity
+        to 365 days.
+
+    ::
+
+        PUBLIC_CA_DEFAULT_VALIDITY_DAYS = 365
+
+
 .. data:: PUBLIC_CA_MAX_VALIDITY_DAYS
     :noindex:
 
         Use this config to override the limit of 397 days of validity for certificates issued by CA/Browser compliant authorities.
-        The authorities with cab_compliant option set to true will use this config. The example below overrides the default validity
+        The authorities with cab_compliant option set to true will use this config. The example below overrides the default max validity
         of 397 days and sets it to 365 days.
 
     ::
@@ -201,6 +308,117 @@ Basic Configuration
     ::
 
         DEFAULT_VALIDITY_DAYS = 1095
+
+
+.. data:: LEMUR_AUTOROTATION_USE_DEFAULT_VALIDITY
+    :noindex:
+
+        When set to True, certificates with autorotation enabled will use the authority's default validity period upon
+        reissuance, instead of maintaining the original certificate's validity span. This is useful when you want all
+        autorotated certificates to use a standardized validity period based on the authority's configuration (e.g.,
+        PUBLIC_CA_DEFAULT_VALIDITY_DAYS for CAB-compliant authorities, or DEFAULT_VALIDITY_DAYS for other authorities).
+
+        This feature only affects certificates that have autorotation (rotation flag) enabled. Certificates without
+        autorotation will continue to maintain their original validity span during reissuance, regardless of this setting.
+
+        The default value is False, which maintains backward compatibility by preserving the original certificate's
+        validity span during reissuance.
+
+    ::
+
+        LEMUR_AUTOROTATION_USE_DEFAULT_VALIDITY = False
+
+
+.. data:: ENABLE_AUTOROTATION_FILTER
+    :noindex:
+
+        An optional callable used to control whether autorotation can be enabled for a given certificate.
+        The callback receives the certificate object and should return ``True`` to allow enabling autorotation
+        or ``False`` to reject it. This is useful for enforcing business rules (e.g., disallowing autorotation
+        on certificates that have notifications disabled).
+
+    ::
+
+        def my_autorotation_filter(certificate):
+            return certificate.notify
+
+        ENABLE_AUTOROTATION_FILTER = my_autorotation_filter
+
+
+.. data:: DISABLE_AUTOROTATION_FILTER
+    :noindex:
+
+        An optional callable used by the ``disable_autorotate_without_endpoint`` Celery task to determine
+        when autorotation should be disabled for a certificate. The callback receives the certificate object
+        and should return ``True`` to disable autorotation or ``False`` to leave it unchanged.
+        By default (when not configured), the task makes no changes.
+
+    ::
+
+        def my_disable_filter(certificate):
+            return not certificate.endpoints
+
+        DISABLE_AUTOROTATION_FILTER = my_disable_filter
+
+
+.. data:: REISSUE_FILTER
+    :noindex:
+
+        An optional callable used to reject reissuance requests based on custom business logic.
+        The callback receives the certificate object and should return ``True`` to allow reissuance
+        or ``False`` to reject it.
+
+    ::
+
+        def my_reissue_filter(certificate):
+            return bool(certificate.destinations)
+
+        REISSUE_FILTER = my_reissue_filter
+
+
+.. data:: CERTIFICATE_CREATE_REQUEST_VALIDATION
+    :noindex:
+
+        An optional callable invoked on every certificate creation request. The callback receives the
+        request data and should raise an exception (or return a falsy value) to reject the request.
+        Useful for enforcing organization-wide issuance policies.
+
+    ::
+
+        CERTIFICATE_CREATE_REQUEST_VALIDATION = my_create_validator
+
+
+.. data:: CERTIFICATE_UPDATE_REQUEST_VALIDATION
+    :noindex:
+
+        An optional callable invoked on every certificate update request. Works the same way as
+        ``CERTIFICATE_CREATE_REQUEST_VALIDATION``.
+
+    ::
+
+        CERTIFICATE_UPDATE_REQUEST_VALIDATION = my_update_validator
+
+
+.. data:: CERTIFICATE_EXPORT_KEY_REQUEST_VALIDATION
+    :noindex:
+
+        An optional callable invoked when a private key export is requested. Useful for blocking
+        specific API keys or users from exporting private keys for migrated certificates.
+
+    ::
+
+        CERTIFICATE_EXPORT_KEY_REQUEST_VALIDATION = my_export_validator
+
+
+.. data:: ENABLE_AUTO_ROTATE_ALL_AUTHORITIES
+    :noindex:
+
+        When set to ``True``, all authorities are considered for destination autorotation regardless
+        of per-authority settings. Defaults to ``False``.
+
+    ::
+
+        ENABLE_AUTO_ROTATE_ALL_AUTHORITIES = False
 
 
 .. data:: DEBUG_DUMP
@@ -229,6 +447,54 @@ Basic Configuration
        Specifies the AWS partition that Lemur should use. Valid values are 'aws', 'aws-us-gov', and 'aws-cn'. Defaults to 'aws'.
        If Lemur is deployed in and managing endpoints AWS GovCloud, for example, you must set this to `aws-us-gov`.
 
+
+.. data:: LEMUR_EXCLUDED_REGIONS
+   :noindex:
+
+       A list of AWS region names that Lemur should skip when discovering endpoints. Useful for temporarily excluding
+       regions that are unreachable or experiencing disruptions. For example::
+
+           LEMUR_EXCLUDED_REGIONS = ["me-south-1"]
+
+.. data:: LEMUR_STRICT_ROLE_ENFORCEMENT
+    :noindex:
+
+        Controls role-based access enforcement for write operations. The default Lemur roles are
+        ``admin``, ``operator``, and ``read-only``.
+
+        **By design**, the default behavior (unset or ``False``) allows any authenticated user to
+        perform write operations: issuing certificates, managing notifications, uploading certificates,
+        and so on. Authorization for specific resources (e.g. which Certificate
+        Authority a user may issue from) is governed by role membership on those resources, not by this
+        flag. This is intentional — most deployments rely on per-resource role membership rather than
+        a global write restriction.
+
+        The ``read-only`` role is an explicit opt-in restriction. Assigning it to a user signals that
+        they should only be able to view resources, not modify them. Users without the ``read-only``
+        role are permitted to perform write operations by default.
+
+        Set to ``True`` to additionally restrict all write operations to only ``admin`` and ``operator``
+        users, regardless of per-resource role membership.
+
+        .. note::
+            **Security considerations for the default (open) model.** By default, any authenticated
+            user may create or modify notifications (including webhook URLs, which can reach arbitrary
+            internal hosts), upload certificates with attacker-supplied keys to configured destinations
+            (e.g. AWS), create Certificate Authorities (if ``ADMIN_ONLY_AUTHORITY_CREATION`` is
+            ``False``), and manipulate the domain registry. These are intentional defaults that support
+            normal workflows in environments where all authenticated users are trusted.
+
+            In deployments where credential compromise is a realistic threat (phished employee, leaked
+            SSO token, insider access), any authenticated identity has meaningful access to the PKI
+            issuance plane. Setting ``LEMUR_STRICT_ROLE_ENFORCEMENT = True`` restricts all write
+            operations to ``admin`` and ``operator`` users, significantly reducing blast radius at
+            the cost of requiring explicit role provisioning for all users who need write access.
+
+    ::
+
+        LEMUR_STRICT_ROLE_ENFORCEMENT = True
+
+
 .. data:: SENTRY_DSN
     :noindex:
 
@@ -247,6 +513,13 @@ Basic Configuration
             >>>  capture_exception()
             >>>  # supplying extra information
             >>>  capture_exception(extra={"certificate_name": str(certificate.name)})
+
+.. data:: ADMIN_ONLY_AUTHORITY_CREATION
+    :noindex:
+
+        Controls who may create new Certificate Authorities. By default (unset or ``True``), only ``admin``
+        users can create authorities. Set to ``False`` to explicitly opt in to allowing any authenticated
+        user to create authorities.
 
 
 Certificate Default Options
@@ -425,6 +698,15 @@ This needs 2 configurations
         AUTHORITY_TO_DISABLE_ROTATE_OF_DUPLICATE_CERTIFICATES = ["LetsEncrypt"]
 
 
+
+**Certificate re-issuance**
+
+When a cert is reissued (i.e. a new certificate is minted to replace it), *and* the re-issuance either fails or
+succeeds but the certificate has no associated endpoints (meaning the subsequent rotation step will not occur),
+Lemur will send a notification via email to the certificate owner. This notification is disabled by default;
+to enable it, you must set the option ``--notify`` (when using cron) or the configuration parameter
+``ENABLE_REISSUE_NOTIFICATION`` (when using celery).
+
 .. data:: DAYS_SINCE_ISSUANCE_DISABLE_ROTATE_OF_DUPLICATE_CERTIFICATES
     :noindex:
 
@@ -438,13 +720,51 @@ This needs 2 configurations
         DAYS_SINCE_ISSUANCE_DISABLE_ROTATE_OF_DUPLICATE_CERTIFICATES = 7
 
 
-**Certificate re-issuance**
 
-When a cert is reissued (i.e. a new certificate is minted to replace it), *and* the re-issuance either fails or
-succeeds but the certificate has no associated endpoints (meaning the subsequent rotation step will not occur),
-Lemur will send a notification via email to the certificate owner. This notification is disabled by default;
-to enable it, you must set the option ``--notify`` (when using cron) or the configuration parameter
-``ENABLE_REISSUE_NOTIFICATION`` (when using celery).
+.. data:: ROTATE_AUTHORITY_TRANSLATION
+    :noindex:
+
+        Use this config (optional) to migrate from one authority id to another on reissuance (useful for expiring authorities,
+        key migrations, etc).
+
+        This configuration supports two types of values:
+
+        1. **Static mapping** (integer): Maps an old authority ID directly to a new authority ID.
+        2. **Dynamic callback** (callable): A function that receives a certificate object and returns the new authority ID based on certificate properties.
+
+    Static mapping example::
+
+        ROTATE_AUTHORITY_TRANSLATION = {1: 2}
+
+    Callback function example::
+
+        def select_authority_for_renewal(certificate):
+            """
+            Dynamically determine the authority for certificate renewal.
+
+            Args:
+                certificate: Certificate object with properties like:
+                    - owner: str
+                    - destinations: list of Destination objects
+                    - key_type: str
+                    - cn: str
+                    - san: str
+                    - authority: Authority object
+                    - authority_id: int
+
+            Returns:
+                int: The new authority ID to use
+            """
+            # Example: Select authority based on destinations
+            destination_labels = [dest.label for dest in certificate.destinations]
+            if 'production-aws' in destination_labels:
+                return 3  # Use cross-signed chain for production AWS
+            elif 'legacy-systems' in destination_labels:
+                return 4  # Use older authority for legacy compatibility
+            return certificate.authority_id  # Keep original authority
+
+        ROTATE_AUTHORITY_TRANSLATION = {1: select_authority_for_renewal}
+
 
 **Certificate rotation**
 
@@ -695,9 +1015,214 @@ Since the celery module, relies on the RedisHandler, the following options also 
 
         Which redis database to be used, by default redis offers databases 0-15 (default: 0)
 
+Roles and Authorization
+-----------------------
+
+Lemur has three built-in roles:
+
+``admin``
+    Required for managing Lemur's own infrastructure: creating and updating users, roles, sources,
+    destinations, and DNS providers. Admins also pass all other permission checks that normal users pass.
+
+``operator``
+    Has no dedicated enforcement beyond what a normal authenticated user has, except when
+    ``LEMUR_STRICT_ROLE_ENFORCEMENT = True``, in which case ``operator`` (alongside ``admin``) is
+    required for write operations such as issuing certificates and managing notifications.
+
+``read-only``
+    Explicitly restricts a user to read access only. Users with this role cannot issue certificates,
+    create or modify notifications, upload certificates, or perform any other write operation. This role
+    is an **opt-in restriction** — it is not assigned automatically and must be explicitly given to users
+    who should only be able to view resources.
+
+In addition to these built-in roles, Lemur creates and assigns **custom roles** based on group memberships
+provided by your identity provider (see `IDP Configuration Options`_ and `LDAP Options`_). These custom
+roles govern per-resource access — for example, which Certificate Authorities a user may issue from.
+
+By default, any authenticated user may perform write operations unless they have been explicitly assigned the
+``read-only`` role. This is intentional: authorization for specific resources is handled by per-resource role
+membership, not by a global write restriction. See ``LEMUR_STRICT_ROLE_ENFORCEMENT`` if you need to restrict write access to
+``admin`` and ``operator`` users only.
+
 Authentication Options
 ----------------------
 Lemur currently supports Basic Authentication, LDAP Authentication, Ping OAuth2, and Google out of the box. Additional flows can be added relatively easily.
+
+IDP Configuration Options
+-------------------------
+Lemur historically was hard coded for supporting creating or adding groups from the `googleGroups` key. This was great if you used Google, but a limitation
+if you used another IDP. These settings allow you to customize your IDP and do one of two things:
+* Uses a fixed mapping in our config, if the user has that group we give a specified Lemur role.
+* Dynamically takes all the groups assigned to a user (such as `profile['roles']` or `profile['googleGroups']`), creates a Lemur group if it doesn't already exist, then assigns it to the user.
+
+Group to role mapping can be either very static with a hard mapping (`IDP_ROLES_MAPPING`) or entirely dynamic from your designated IDP groups (`IDP_GROUPS_KEYS`).
+Using both methods at once is supported.
+
+Here is an example IDP configuration stanza you can add to your config. Adjust to suit your environment of course.
+
+.. code-block:: python
+
+        IDP_ROLES_MAPPING = {"security": "admin", "engineering": "operator", "jane_from_accounting": "read-only"}
+        IDP_GROUPS_KEYS = ["googleGroups", "roles"]
+        IDP_ASSIGN_ROLES_FROM_USER_GROUPS = True
+        IDP_CREATE_ROLES_FROM_USER_GROUPS = True
+        IDP_CREATE_PER_USER_ROLE = True
+        IDP_PROTECT_BUILTINS = True
+
+.. data:: IDP_ROLES_MAPPING
+    :noindex:
+
+        Defaults to `{}`.
+
+        This is used to create a fixed user mapping from an IDP group to a Lemur group.  This is very useful if you have do very static assigments using a set number of groups.
+        The dynamic group assignment will not assign built-in groups (`admin`, `operator`, or `read-only`) by default, using `IDP_ROLES_MAPPING` is the recommended way to assign
+        these groups.
+
+        Custom created Lemur groups may be assigned through `IDP_ROLES_MAPPING`, but they must be created before attempting to assign them, this will not automatically create any groups.
+        
+        The dictionary is defined with the IDP group as the dictionary key, and the matching Lemur group as the value. (e.g. `{"idp_group": "lemur_group"`)
+
+        ::
+
+            IDP_ROLES_MAPPING = {"security": "admin", "engineering": "operator", "jane_from_accounting": "read-only"}
+
+.. data:: IDP_GROUPS_KEYS
+    :noindex:
+
+        Defaults to `["googleGroups"]` as this is historically what was hard coded in Lemur.
+
+        Provide a list of dictionary keys used by IDP(s) to return user groups.  In code, you can look at the dictionary object provided by your IDP and find the dictionary key that contains
+        the groups you would like to add.  You can also check in Lemur code and look at the `profile` dictionary object for the user.
+
+        You can chain as many fields as you desire, this could be useful if pulling from multiple IDPs or if an IDP provides two different types of groups.
+
+        .. note::
+            Here is a list of key names that may be useful. Double check that these keys match your environment as your results may differ.
+
+            GCP: `googleGroups`
+            LDAP: `roles`
+
+        .. warning::
+            Any keys provided here will be used additively, so care must be taken as unintentional group assignments may be made if using multiple IDPs.
+
+            It is highly recommended to use `IDP_ROLES_PREFIX` and/or `IDP_ROLES_SUFFIX` to create a naming schema to avoid importing all groups assigned in your IDP.
+
+            The groups that are built into Lemur (`admin`, `operator`, `read-only`) will not be assigned by default. See: `IDP_PROTECT_BUILTINS`
+
+        ::
+
+            IDP_GROUPS_KEYS = ["googleGroups"]
+
+.. data:: IDP_ROLES_PREFIX
+    :noindex:
+
+        Defaults to `""`. (No filtering, all groups will be included)
+
+        This is used to create a naming schema/convention to provide a method for only importing a certain set of groups.  A simple string comparison is used
+        to see if the group name starts with the prefix provided here.  If it matches the group will be used; if it doesn't it will be skipped.
+
+        ::
+
+            IDP_ROLES_PREFIX = "LEMUR-"
+
+.. data:: IDP_ROLES_SUFFIX
+    :noindex:
+
+        Defaults to `""`. (No filtering, all groups will be included)
+
+        This is used to create a naming schema/convention to provide a method for only importing a certain set of groups.  A simple string comparison is used
+        to see if the group name ends with the suffix provided here.  If it matches the group will be used; if it doesn't it will be skipped.
+
+        ::
+
+            IDP_ROLES_SUFFIX = "_LEMUR"
+
+.. data:: IDP_ROLES_DESCRIPTION
+    :noindex:
+
+        Defaults to `Identity provider role from '{idp_groups_key}' (generated by Lemur)`.
+
+        Allows for a custom group description for automatically created groups.
+        
+        .. note::
+            While the default description will automatically inject the IDP group key into the description, a custom version will not.
+            If you are using multiple group fields or IDPs, you may want to leave this at the default.
+
+        ::
+
+            IDP_ROLES_DESCRIPTION = "Automatically generated role from my IDP"
+
+.. data:: IDP_ASSIGN_ROLES_FROM_USER_GROUPS
+    :noindex:
+
+        Defaults to `True`.
+
+        Enables automatic assignment of groups found in the IDP key to the user.  This is used to dynamically assign groups based on your IDP groups assignments.
+        
+        .. note::
+            This does not create groups if they are not found, for that functionality see `IDP_CREATE_ROLES_FROM_USER_GROUPS`.
+        
+        .. warning::
+            While automatic group assignment can be very useful, this can potentially assign groups unexpectedly as once this is enabled group assignment is done from the IDP.
+            If you want more strict or controlled group assignments, it is recommended to use `IDP_ROLES_MAPPING`.
+
+        ::
+
+            IDP_ASSIGN_ROLES_FROM_USER_GROUPS = True
+
+.. data:: IDP_CREATE_ROLES_FROM_USER_GROUPS
+    :noindex:
+
+        Defaults to `True`.
+
+        Enables automatic creation of groups found in the IDP key to the user.  This is used to dynamically create groups based on your IDP groups assignments.
+        
+        .. note::
+            This does not assign groups to a user, for that functionality see `IDP_ASSIGN_ROLES_FROM_USER_GROUPS`.
+        
+        .. warning::
+            While automatic group creation can be very useful, this can potentially create groups unexpectedly as once this is enabled group assignment is done from the IDP.
+            If you want more strict or controlled group assignments, it is recommended to use `IDP_ROLES_MAPPING`.
+
+        ::
+
+            IDP_CREATE_ROLES_FROM_USER_GROUPS = True
+
+
+.. data:: IDP_CREATE_PER_USER_ROLE
+    :noindex:
+
+        Defaults to `True`.
+
+        Creates a group for each user.  While this is very noisy, this can be useful to assign a cert to a singular user.
+        
+        .. note::
+            Organizations with very large numbers of users may want to condsider disabling this, due to the potential load.
+
+        ::
+
+            IDP_CREATE_PER_USER_ROLE = True
+
+.. data:: IDP_PROTECT_BUILTINS
+    :noindex:
+
+        Defaults to `True`.
+
+        Prevents dynamic assignment of the built in groups (`admin`, `operator`, `read-only`) to users. If a group provided by the IDP key has these values,
+        it is skipped.  The built in groups are protected by default as accidential adding assignments is very easy to do.  For example, an LDAP administrator
+        adds a group named `admin` and now all of your LDAP admins are also Lemur admins.
+
+        If you want to assign built in groups, it is recommended to use `IDP_ROLES_MAPPING`.
+
+        .. note::
+            Historically Lemur allowed for dynamic assignment of the built-in groups.
+
+        .. warning::
+            Disabling this protection is not recommended.
+
+        ::
+
+            IDP_PROTECT_BUILTINS = True
 
 LDAP Options
 ~~~~~~~~~~~~
@@ -969,6 +1494,13 @@ For more information about how to use social logins, see: `Satellizer <https://g
 
             OAUTH2_VERIFY_CERT = True
 
+.. data:: OAUTH2_SCOPE
+    :noindex:
+
+        ::
+
+            OAUTH2_SCOPE = ["openid", "email", "profile", "groups"]
+
 .. data:: OAUTH_STATE_TOKEN_SECRET
     :noindex:
 
@@ -1110,11 +1642,9 @@ account. See :ref:`Using a pre-existing ACME account <AcmeAccountReuse>` for mor
     :noindex:
 
             This is an optional parameter to indicate the preferred chain to retrieve from ACME when finalizing the order.
-            This is applicable to Let's Encrypts recent `migration <https://letsencrypt.org/certificates/>`_ to their
-            own root, where they provide two distinct certificate chains (fullchain_pem vs. alternative_fullchains_pem);
-            the main chain will be the long chain that is rooted in the expiring DTS root, whereas the alternative chain
-            is rooted in X1 root CA.
-            Select "X1" to get the shorter chain (currently alternative), leave blank or "DST Root CA X3" for the longer chain.
+            Some ACME CAs provide multiple certificate chains; this parameter selects which chain to use by matching
+            against the issuer name. For Let's Encrypt, leaving this blank uses the default chain (rooted in ISRG Root X1).
+            Refer to `Let's Encrypt's certificates page <https://letsencrypt.org/certificates/>`_ for current chain options.
 
 
 Active Directory Certificate Services Plugin
@@ -1149,7 +1679,7 @@ Active Directory Certificate Services Plugin
     :noindex:
 
         Template to be used for certificate issuing. Usually display name w/o spaces
-
+        
 .. data:: ADCS_TEMPLATE_<upper(authority.name)>
     :noindex:
 
@@ -1163,8 +1693,8 @@ Active Directory Certificate Services Plugin
 .. data:: ADCS_STOP
     :noindex:
 
-        Used for ADCS-Sourceplugin. Maximum id of the certificates returned.
-
+        Used for ADCS-Sourceplugin. Maximum id of the certificates returned. 
+        
 
 .. data:: ADCS_ISSUING
     :noindex:
@@ -1180,59 +1710,59 @@ Active Directory Certificate Services Plugin
 Entrust Plugin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Enables the creation of Entrust certificates. You need to set the API access up with Entrust support. Check the information in the Entrust Portal as well.
+Enables the creation of Entrust certificates. You need to set the API access up with Entrust support. Check the information in the Entrust Portal as well. 
 Certificates are created as "SERVER_AND_CLIENT_AUTH".
-Caution: Sometimes the entrust API does not respond in a timely manner. This error is handled and reported by the plugin. Should this happen you just have to hit the create button again after to create a valid certificate.
+Caution: Sometimes the entrust API does not respond in a timely manner. This error is handled and reported by the plugin. Should this happen you just have to hit the create button again after to create a valid certificate. 
 The following parameters have to be set in the configuration files.
 
 .. data:: ENTRUST_URL
     :noindex:
-
+    
        This is the url for the Entrust API. Refer to the API documentation.
-
+       
 .. data:: ENTRUST_API_CERT
     :noindex:
-
+    
        Path to the certificate file in PEM format. This certificate is created in the onboarding process. Refer to the API documentation.
-
+       
 .. data:: ENTRUST_API_KEY
     :noindex:
-
+    
        Path to the key file in RSA format. This certificate is created in the onboarding process. Refer to the API documentation. Caution: the request library cannot handle encrypted keys. The keyfile therefore has to contain the unencrypted key. Please put this in a secure location on the server.
-
+       
 .. data:: ENTRUST_API_USER
     :noindex:
-
-       String with the API user. This user is created in the onboarding process. Refer to the API documentation.
-
+    
+       String with the API user. This user is created in the onboarding process. Refer to the API documentation.   
+       
 .. data:: ENTRUST_API_PASS
     :noindex:
-
+    
        String with the password for the API user. This password is created in the onboarding process. Refer to the API documentation.
 
 .. data:: ENTRUST_NAME
     :noindex:
-
+    
         String with the name that should appear as certificate owner in the Entrust portal. Refer to the API documentation.
 
 .. data:: ENTRUST_EMAIL
     :noindex:
-
-        String with the email address that should appear as certificate contact email in the Entrust portal. Refer to the API documentation.
+    
+        String with the email address that should appear as certificate contact email in the Entrust portal. Refer to the API documentation.       
 
 .. data:: ENTRUST_PHONE
     :noindex:
-
-        String with the phone number that should appear as certificate contact in the Entrust portal. Refer to the API documentation.
+    
+        String with the phone number that should appear as certificate contact in the Entrust portal. Refer to the API documentation.        
 
 .. data:: ENTRUST_ISSUING
     :noindex:
-
+    
         Contains the issuing cert of the CA
 
 .. data:: ENTRUST_ROOT
     :noindex:
-
+    
         Contains the root cert of the CA
 
 .. data:: ENTRUST_PRODUCT_<upper(authority.name)>
@@ -1259,6 +1789,15 @@ The following parameters have to be set in the configuration files.
         If set to True, Entrust will use the primary client ID of 1, which applies to most use-case.
         Otherwise, Entrust will first lookup the clientId before ordering the certificate.
 
+.. data:: ENTRUST_CLIENT_IDS
+    :noindex:
+
+        If set and ENTRUST_USE_DEFAULT_CLIENT_ID is not set, Entrust will randomly pick a client id from the provided list.
+
+.. data:: ENTRUST_INFER_EKU
+    :noindex:
+
+        When set, we attempt to determine the appropriate EKU field setting; if we can't tell, we default to "SERVER_AND_CLIENT_AUTH"; default = False.
 
 Verisign Issuer Plugin
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -1362,6 +1901,99 @@ The following configuration properties are required to use the Digicert issuer p
             This is whether or not to issue a private certificate. (Default: False)
 
 
+
+Digicert Source
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Digicert Source Plugin will read from one Digicert organization.
+
+
+.. data:: DIGICERT_SOURCE_ENABLED
+    :noindex:
+
+            Boolean. This enables or disables the plugin.
+
+
+.. data:: DIGICERT_URL
+    :noindex:
+
+            This is the url for the Digicert API (e.g. https://www.digicert.com)
+
+
+.. data:: DIGICERT_API_KEY
+    :noindex:
+
+            This is the Digicert API key
+
+
+.. data:: DIGICERT_ORG_ID
+    :noindex:
+
+            This is the Digicert organization ID
+
+
+Digicert CIS Issuer Plugin
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following configuration properties are required to use the Digicert CIS issuer plugin.
+
+
+.. data:: DIGICERT_CIS_URL
+    :noindex:
+
+            This is the url for the Digicert CIS API (e.g. https://ws.digicert.com)
+
+
+.. data:: DIGICERT_CIS_API_KEY
+    :noindex:
+
+            This is the Digicert API key
+
+
+.. data:: DIGICERT_CIS_PROFILE_NAMES
+    :noindex:
+
+            A string->string mapping from human readable representations to profile identifiers. For example {"Digicert": "my_company_ssl"} specifies that when users
+	    request a Digicert issuer cert, the plugin will pass profile=my_company_ssl to the API.
+
+The following configuration properties are optional when using the Digicert CIS issuer plugin.
+
+
+.. data:: DIGICERT_CIS_SIGNING_ALGORITHMS
+    :noindex:
+
+            Defines the default signing algorithm for a given issuer name e.g. {"Digicert": "sha1"} will result in sha1 certs issued with the Digicert issuer (default = {}).
+
+
+
+
+.. data:: DIGICERT_CIS_USE_CSR_FIELDS
+    :noindex:
+
+            Controls the setting of the `use_csr_fields` parameter of the create certificate endpoint. When set, certificates will be issued with values from the csr instead of via API fields (default = False).
+
+
+.. data:: DIGICERT_CIS_ROOTS
+    :noindex:
+
+            A string->string mapping from authority name to root certificate PEM. This is used during authority creation to store the root certificate in Lemur's database.
+
+
+.. data:: DIGICERT_CIS_ALTERNATE_CHAINS
+    :noindex:
+
+            A string->string mapping from authority name to alternate/cross-signed chain PEM. When configured, the specified chain will be appended to certificates issued by that authority. This is useful for providing cross-signed roots for compatibility with older systems.
+
+            Example::
+
+                DIGICERT_CIS_ALTERNATE_CHAINS = {
+                    "DigiCert-G2-RSA-Cross-Global": """-----BEGIN CERTIFICATE-----
+                MIIEgjCCA2qgAwIBAgIQBEbB7LuEYrWpF3L5qhjmezANBgkqhkiG9w0BAQsFADBh
+                ...
+                -----END CERTIFICATE-----"""
+                }
+
+
 CFSSL Issuer Plugin
 ~~~~~~~~~~~~~~~~~~~
 
@@ -1410,12 +2042,94 @@ A Vault destination can be one object in Vault or a directory where all certific
 Vault Destination supports a regex filter to prevent certificates with SAN that do not match the regex filter from being deployed. This is an optional feature per destination defined.
 
 
+GCS Destination Plugin
+~~~~~~~~~~~~~~~~~~~~~~
+
+Lemur can upload certificates and private keys to Google Cloud Storage (GCS).
+
+Authentication is handled via the ``GOOGLE_APPLICATION_CREDENTIALS`` environment variable, which must point to a valid GCP service account credentials JSON file:
+
+.. code-block:: bash
+
+    export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
+
+The service account must have ``storage.objects.create`` and ``storage.objects.delete`` permissions on the target bucket.
+
+Each GCS destination is configured through the Lemur UI with the following per-destination options:
+
+* **Bucket Name** — the GCS bucket to upload certificates to (required)
+* **Certificate Object Name** — GCS object path for the certificate file; supports template variables ``{CN}``, ``{OU}``, ``{O}``, ``{L}``, ``{S}``, ``{C}`` (default: ``{CN}.crt``)
+* **Key Object Name** — GCS object path for the private key file; supports the same template variables (default: ``{CN}.key.pem``)
+
+
+Azure Destination Plugin
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Lemur can upload certificates and private keys to an Azure Key Vault instance. Certificates are uploaded in PKCS12 format, which is compatible with Azure Application Gateway.
+
+Each Azure destination is configured through the Lemur UI with the following per-destination options:
+
+* **Vault URL** — the full URL to the Azure Key Vault instance (e.g. ``https://mykeyvault.vault.azure.net``)
+* **Azure Tenant** — the Azure Active Directory tenant ID
+* **App ID** — the Application (client) ID used to authenticate to the Key Vault
+* **App Password** — the client secret for the application
+
+
+Google CA Issuer Plugin
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Lemur can issue certificates from a `Google Certificate Authority Service <https://cloud.google.com/certificate-authority-service>`_ (CAS) CA pool.
+
+Authentication requires the ``GOOGLE_APPLICATION_CREDENTIALS`` environment variable to point to a valid GCP service account credentials JSON file:
+
+.. code-block:: bash
+
+    export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
+
+Each Google CA authority is configured through the Lemur UI with the following per-authority options:
+
+* **Project** — the GCP project containing the CA pool
+* **Location** — the GCP region where the CA pool is located (e.g. ``us-east1``)
+* **CA Pool** — the name of the Certificate Authority pool
+* **CA Name** — the name of the specific CA within the pool (leave blank to let CAS choose)
+
+
 AWS Source/Destination Plugin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In order for Lemur to manage its own account and other accounts we must ensure it has the correct AWS permissions.
 
 .. note:: AWS usage is completely optional. Lemur can upload, find and manage TLS certificates in AWS. But is not required to do so.
+
+.. data:: AWS_ELB_IGNORE_TAGS
+    :noindex:
+
+        A list of ELB tag key/value pairs that Lemur should ignore during endpoint discovery. ELBs matching
+        any of these tags will be skipped.
+
+    ::
+
+        AWS_ELB_IGNORE_TAGS = [{"Key": "lemur:ignore", "Value": "true"}]
+
+
+.. data:: AWS_CLOUDFRONT_IGNORE_TAGS
+    :noindex:
+
+        A list of CloudFront distribution tag key/value pairs that Lemur should ignore during source sync.
+
+    ::
+
+        AWS_CLOUDFRONT_IGNORE_TAGS = [{"Key": "lemur:ignore", "Value": "true"}]
+
+
+.. data:: AWS_IAM_IGNORE_TAGS
+    :noindex:
+
+        A list of IAM certificate tag key/value pairs that Lemur should ignore during source sync.
+
+    ::
+
+        AWS_IAM_IGNORE_TAGS = [{"Key": "lemur:ignore", "Value": "true"}]
 
 Setting up IAM roles
 """"""""""""""""""""
@@ -1671,7 +2385,7 @@ If you're using a non-standard configuration location, you'll need to prefix eve
 For a list of commands, you can also use ``lemur help``, or ``lemur [command] --help``
 for help on a specific command.
 
-.. note:: The script is powered by a library called `Flask-Script <https://github.com/smurfix/flask-script>`_
+.. note:: The CLI is powered by `Click <https://click.palletsprojects.com/>`_ via Flask's built-in CLI support.
 
 Builtin Commands
 ----------------
@@ -1795,12 +2509,12 @@ To get the latest code from github run
 
         cd <lemur-source-directory>
         git pull -t <version>
-        python setup.py develop
+        pip install -e .
 
 
 .. note::
     It's important to grab the latest release by specifying the release tag. This tags denote stable versions of Lemur.
-    If you want to try the bleeding edge version of Lemur you can by using the master branch.
+    If you want to try the bleeding edge version of Lemur you can by using the main branch.
 
 
 After you have the latest version of the Lemur code base you must run any needed database migrations. To run migrations
@@ -2009,6 +2723,39 @@ Vault
     Destination
 :Description:
     Destination plugin to deploy certificates to Hashicorp Vault secret store.
+
+
+GCS
+---
+
+:Authors:
+    The Lemur developers
+:Type:
+    Destination
+:Description:
+    Destination plugin to upload certificates to Google Cloud Storage (GCS).
+
+
+Azure
+-----
+
+:Authors:
+    Sirferl
+:Type:
+    Destination
+:Description:
+    Destination plugin to upload certificates to an Azure Key Vault as PKCS12 secrets.
+
+
+Google CA
+---------
+
+:Authors:
+    The Lemur developers
+:Type:
+    Issuer
+:Description:
+    Issuer plugin to create certificates via Google Certificate Authority Service (CAS).
 
 
 3rd Party Plugins

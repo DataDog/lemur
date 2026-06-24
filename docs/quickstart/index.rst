@@ -2,7 +2,7 @@ Quickstart
 **********
 
 This guide will step you through setting up a Python-based virtualenv, installing the required packages, and configuring the basic web service.
-This guide assumes a clean Ubuntu 18.04/20.04 instance, commands may differ based on the OS and configuration being used.
+This guide assumes a clean Ubuntu 22.04 instance, commands may differ based on the OS and configuration being used.
 
 For a quicker alternative, see the Lemur docker file on `Github <https://github.com/Netflix/lemur-docker>`_.
 
@@ -12,13 +12,12 @@ Dependencies
 
 Some basic prerequisites which you'll need in order to run Lemur:
 
-* A UNIX-based operating system (we test on Ubuntu, develop on macOS)
-* Python 3.7 or greater
-* PostgreSQL 9.4 or greater
+* A UNIX-based operating system (we test on Ubuntu 22.04, develop on macOS)
+* Python 3.10 or greater
+* PostgreSQL 13 or greater
 * Nginx
-* Node v10.x (LTS)
+* Node v20.x (LTS)
 
-.. note:: Ubuntu 18.04 supports by default Python 3.6.x and Node v8.x
 .. note:: Lemur was built with AWS in mind. This means that things such as databases (RDS), mail (SES), and TLS (ELB), are largely handled for us.  Lemur does **not** require AWS to function. Our guides and documentation try to be as generic as possible and are not intended to document every step of launching Lemur into a given environment.
 
 
@@ -30,7 +29,7 @@ If installing Lemur on a bare Ubuntu OS you will need to grab the following pack
 .. code-block:: bash
 
     sudo apt-get update
-    sudo apt-get install nodejs npm python-pip python-dev python3-dev libpq-dev build-essential libssl-dev libffi-dev libsasl2-dev libldap2-dev nginx git supervisor postgresql
+    sudo apt-get install nodejs npm python3-pip python3-dev libpq-dev build-essential libssl-dev libffi-dev libsasl2-dev libldap2-dev nginx git supervisor postgresql
 
 .. note:: PostgreSQL is only required if your database is going to be on the same host as the webserver.  npm is needed if you're installing Lemur from the source (e.g., from git).
 
@@ -90,6 +89,7 @@ And then run:
 
 .. code-block:: bash
 
+  make up-reqs
   make release
 
 .. note:: This command will install npm dependencies as well as compile static assets.
@@ -174,7 +174,7 @@ Next, we will create our new database:
     For this guide we assume you will use the `postgres` user to connect to your database, when deploying to a VM or container this is often all you will need. If you have a shared database it is recommend you give Lemur its own user.
 
 .. note::
-    Postgres 9.4 or greater is required as Lemur relies advanced data columns (e.g. JSON Column type)
+    Postgres 13 or greater is required.
 
 Initializing Lemur
 ------------------
@@ -193,12 +193,18 @@ Your database installation requires the pg_trgm extension. If you do not have th
 
 Additional notifications can be created through the UI or API.  See :ref:`Notification Options <NotificationOptions>` and :ref:`Command Line Interface <CommandLineInterface>` for details.
 
-**Make note of the password used as this will be used during first login to the Lemur UI.**
-
 .. code-block:: bash
 
     cd /www/lemur/lemur
+    lemur db init
+
+Then
+
+.. code-block:: bash
+
     lemur init
+
+**Make note of the password used as this will be used during first login to the Lemur UI.**
 
 .. note:: If you added the SUPERUSER permission to the lemur database user above, it is recommended you revoke that permission now.
 
@@ -311,7 +317,7 @@ Lemur uses periodic sync tasks to make sure it is up-to-date with its environmen
 Additional Utilities
 --------------------
 
-If you're familiar with Python you'll quickly find yourself at home, and even more so if you've used Flask.  The ``lemur`` command is just a simple wrapper around Flask's ``manage.py``, which means you get all of the power and flexibility that goes with it.
+If you're familiar with Python you'll quickly find yourself at home, and even more so if you've used Flask.  The ``lemur`` command is a Flask CLI wrapper that gives you all of the power and flexibility that goes with it.
 
 Some of the features which you'll likely find useful are listed below.
 
