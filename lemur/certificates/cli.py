@@ -729,6 +729,82 @@ def check_revoked():
 
 
 @manager.command
+def audit_cert_parent_parity():
+    """
+    For each valid certificate that replaces an older one, verify that
+    its destinations, sources, and endpoints match the parent's. Emit a
+    metric on every mismatch so a Datadog monitor can route the alert
+    to the cert owner.
+
+    Parity violations usually indicate a botched rotation, source-sync
+    drift, or a manual override that left the cert in an inconsistent
+    state.
+    """
+    log_data = {
+        "function": f"{__name__}.{sys._getframe().f_code.co_name}",
+        "message": "Auditing certificate parent parity",
+    }
+    current_app.logger.info(log_data)
+
+    there_are_still_certs = True
+    page = 1
+    count = 1000
+    total_violations = 0
+
+    while there_are_still_certs:
+        query = (
+            database.session_query(Certificate)
+            .filter(Certificate.not_after > arrow.now().format("YYYY-MM-DD"))
+            .filter(Certificate.replaces.any())
+        )
+        items = database.paginate(query, page, count)
+        certs = items["items"]
+
+        if len(certs) < count:
+            there_are_still_certs = False
+        else:
+            page += 1
+
+        for cert in certs:
+            if not cert.replaces:
+                continue
+            parent = cert.replaces[0]
+
+            for attr in ("destinations", "sources", "endpoints"):
+                cert_set = {x.id for x in getattr(cert, attr)}
+                parent_set = {x.id for x in getattr(parent, attr)}
+                if cert_set == parent_set:
+                    continue
+
+                total_violations += 1
+                violation_log = dict(log_data)
+                violation_log["msg"] = "Parent parity violation"
+                violation_log["certificate_id"] = cert.id
+                violation_log["parent_certificate_id"] = parent.id
+                violation_log["mismatch_type"] = attr
+                violation_log["owner"] = cert.owner
+                current_app.logger.warning(violation_log)
+
+                metrics.send(
+                    "certificate_parent_parity_violation",
+                    "counter",
+                    1,
+                    metric_tags={
+                        "certificate_id": str(cert.id),
+                        "parent_certificate_id": str(parent.id),
+                        "owner": cert.owner,
+                        "mismatch_type": attr,
+                    },
+                )
+
+    metrics.send(
+        "certificate_parent_parity_audit_complete",
+        "gauge",
+        total_violations,
+    )
+
+
+@manager.command
 def automatically_enable_autorotate_with_endpoint():
     """
     This function automatically enables auto-rotation for unexpired certificates that are
