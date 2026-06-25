@@ -13,7 +13,13 @@ def render(args):
     :param args:
     :return:
     """
+    filt = args.pop("filter", None)
     query = database.session_query(DnsProvider)
+
+    if filt:
+        terms = filt.split(";")
+        if len(terms) == 2 and terms[1]:
+            query = database.filter(query, DnsProvider, terms)
 
     return database.sort_and_page(query, DnsProvider, args)
 

@@ -90,6 +90,20 @@
                 </ui-select-choices>
             </ui-select>
 
+            <!-- DnsProviderSelect options -->
+            <ui-select class="input-md" ng-model="item.value" theme="bootstrap" title="choose a DNS provider" ng-if="item.type == 'dnsProviderSelect'">
+                <ui-select-match placeholder="select a DNS provider...">{{$select.selected.name}}</ui-select-match>
+                <ui-select-choices class="form-control"
+                             refresh="getDnsProviders()"
+                             refresh-delay="300"
+                             repeat="dnsProvider.id as dnsProvider in dnsProviders | filter: $select.search">
+                    <div ng-bind-html="dnsProvider.name | highlight: $select.search"></div>
+                    <small>
+                        <span ng-bind-html="''+dnsProvider.providerType | highlight: $select.search"></span>
+                    </small>
+                </ui-select-choices>
+            </ui-select>
+
             <input name="sub" ng-if="item.type == 'bool'" class="form-control" type="checkbox" ng-model="item.value">
             <input name="sub" ng-if="item.type == 'str'" type="text" class="form-control" ng-model="item.value"/>
               <textarea name="sub" ng-if="item.type == 'textarea'" class="form-control" ng-model="item.value"></textarea>

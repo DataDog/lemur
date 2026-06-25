@@ -104,6 +104,12 @@ class ACMEIssuerPlugin(IssuerPlugin):
             "helpMessage": "Account Registration",
         },
         {
+            "name": "dnsProvider",
+            "type": "dnsProviderSelect",
+            "required": False,
+            "helpMessage": "Default DNS provider to use for DNS-01 challenges. If unset, Lemur auto-detects based on domain.",
+        },
+        {
             "name": "drop_last_cert_from_chain",
             "type": "bool",
             "required": False,
