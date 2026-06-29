@@ -170,6 +170,11 @@ class DnsProviders(AuthenticatedResource):
     def get(self, dns_provider_id):
         return service.get_friendly(dns_provider_id)
 
+    @validate_schema(dns_provider_input_schema, None)
+    @admin_permission.require(http_exception=403)
+    def put(self, dns_provider_id, data=None):
+        return service.update(dns_provider_id, data)
+
     @admin_permission.require(http_exception=403)
     def delete(self, dns_provider_id):
         service.delete(dns_provider_id)

@@ -124,6 +124,34 @@ def get_types():
     return provider_config
 
 
+def update(dns_provider_id, data):
+    """
+    Updates an existing DNS provider.
+
+    :param dns_provider_id: Lemur assigned ID
+    :param data: dict with name, description, provider_type
+    :rtype: DnsProvider
+    """
+    dns_provider = get(dns_provider_id)
+    if not dns_provider:
+        return None
+
+    provider_name = data.get("name")
+    credentials = {}
+    for item in data.get("provider_type", {}).get("requirements", []):
+        credentials[item["name"]] = item["value"]
+
+    dns_provider.name = provider_name
+    dns_provider.description = data.get("description")
+    dns_provider.provider_type = data.get("provider_type", {}).get("name")
+    dns_provider.credentials = json.dumps(credentials)
+
+    log_service.audit_log(
+        "update_dns_provider", provider_name, "Updating DNS provider"
+    )
+    return database.update(dns_provider)
+
+
 def set_domains(dns_provider, domains):
     """
     Increments pending certificate attempt counter and updates it in the database.
