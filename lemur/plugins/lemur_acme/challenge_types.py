@@ -25,6 +25,7 @@ from lemur.exceptions import LemurException, InvalidConfiguration
 from lemur.extensions import metrics
 from lemur.plugins.base import plugins
 from lemur.destinations import service as destination_service
+from lemur.dns_providers import service as dns_provider_service
 from lemur.plugins.lemur_acme.acme_handlers import AcmeHandler, AcmeDnsHandler
 
 from retrying import retry
