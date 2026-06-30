@@ -41,6 +41,31 @@ from lemur.tests.vectors import (
 )
 
 
+def test_certificate_init_sets_authority_id_from_authority(session):
+    # Regression: create()/reissue construct a Certificate with the `authority` object
+    # (not `authority_id`). The FK must be populated directly here, not left to a later
+    # relationship assignment that can fail to flush under the bulk reissue task and
+    # leave authority_id NULL (which permanently breaks future rotations).
+    from lemur.certificates.models import Certificate
+    from lemur.tests.factories import AuthorityFactory
+
+    authority = AuthorityFactory()
+    session.commit()
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com", authority=authority)
+
+    assert cert.authority_id == authority.id
+
+
+def test_certificate_init_allows_no_authority(session):
+    # Imported certs legitimately have no Lemur authority; authority_id must stay None.
+    from lemur.certificates.models import Certificate
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com")
+
+    assert cert.authority_id is None
+
+
 def test_get_or_increase_name(session, certificate):
     from lemur.certificates.models import get_or_increase_name
     from lemur.tests.factories import CertificateFactory

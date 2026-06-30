@@ -234,6 +234,16 @@ class Certificate(db.Model):
         self.bits = defaults.bitstrength(cert)
         self.external_id = kwargs.get("external_id")
         self.authority_id = kwargs.get("authority_id")
+        # Most callers (create, reissue) pass the resolved Authority object as `authority`
+        # rather than `authority_id`. Historically the FK was populated only by a later
+        # `cert.authority = ...` relationship assignment in the service layer, and that
+        # relationship->FK sync could fail to flush under the bulk reissue task, leaving
+        # authority_id NULL. A cert with a NULL authority can never be reissued (the
+        # rotation pipeline can't resolve a CA), so set the FK directly from the object
+        # here. Imported certs legitimately have no authority, so only do this when one
+        # was actually provided.
+        if self.authority_id is None and kwargs.get("authority") is not None:
+            self.authority_id = kwargs["authority"].id
         self.dns_provider_id = kwargs.get("dns_provider_id")
 
         for domain in defaults.domains(cert):
