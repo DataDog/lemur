@@ -233,9 +233,7 @@ class Certificate(db.Model):
         self.signing_algorithm = defaults.signing_algorithm(cert)
         self.bits = defaults.bitstrength(cert)
         self.external_id = kwargs.get("external_id")
-        self.authority_id = kwargs.get("authority_id")
-        if self.authority_id is None and kwargs.get("authority") is not None:
-            self.authority_id = kwargs["authority"].id
+        self.authority_id = kwargs.get("authority_id") or getattr(kwargs.get("authority"), "id", None)
         self.dns_provider_id = kwargs.get("dns_provider_id")
 
         for domain in defaults.domains(cert):

@@ -63,6 +63,19 @@ def test_certificate_init_allows_no_authority(session):
     assert cert.authority_id is None
 
 
+def test_certificate_init_transient_authority_leaves_id_none(session):
+    # An authority with no id yet (e.g. not flushed) must not raise; authority_id stays None.
+    from lemur.certificates.models import Certificate
+    from lemur.tests.factories import AuthorityFactory
+
+    transient = AuthorityFactory.build()
+    assert transient.id is None
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com", authority=transient)
+
+    assert cert.authority_id is None
+
+
 def test_get_or_increase_name(session, certificate):
     from lemur.certificates.models import get_or_increase_name
     from lemur.tests.factories import CertificateFactory
