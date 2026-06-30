@@ -15,9 +15,6 @@ from .vectors import (
 
 
 def test_pending_certificate_init_sets_authority_id_from_authority(session):
-    # The ACME/async path goes through PendingCertificate, which must also set authority_id
-    # from the authority object (not rely on a later relationship assignment that can leave
-    # it NULL under the reissue race; see Netflix/lemur#5447). The resolved cert inherits this.
     from lemur.pending_certificates.models import PendingCertificate
     from lemur.tests.factories import AuthorityFactory
 
