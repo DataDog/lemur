@@ -77,10 +77,7 @@ def test_certificate_init_transient_authority_leaves_id_none(session):
 
 
 def test_certificate_init_sets_user_id_from_creator(session):
-    # create()/reissue construct a Certificate with the `creator` user object (not `user_id`).
-    # Persist user_id at construction so it lands in the INSERT, not a deferrable post-INSERT
-    # UPDATE the bulk certificate_reissue task can lose. Same fix/shape as authority_id (#316);
-    # a NULL user_id later crashes reissue on creator=None. See CLOUDR-1948 / Netflix/lemur#5447.
+    # Regression: create()/reissue construct a Certificate with the `creator` object (not `creator_id`).
     from lemur.certificates.models import Certificate
     from lemur.tests.factories import UserFactory
 
