@@ -47,7 +47,6 @@ def test_json(dns_provider):
     assert "account_id" in json.loads(dns_provider.credentials)
 
 
-
 def test_update(dns_provider, session):
     from lemur.dns_providers import service as dns_provider_service
 
