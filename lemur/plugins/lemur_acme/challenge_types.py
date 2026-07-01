@@ -25,7 +25,6 @@ from lemur.exceptions import LemurException, InvalidConfiguration
 from lemur.extensions import metrics
 from lemur.plugins.base import plugins
 from lemur.destinations import service as destination_service
-from lemur.dns_providers import service as dns_provider_service
 from lemur.plugins.lemur_acme.acme_handlers import AcmeHandler, AcmeDnsHandler
 
 from retrying import retry
@@ -250,15 +249,6 @@ class AcmeDnsChallenge(AcmeChallenge):
         acme_client, registration = self.acme.setup_acme_client(authority)
         domains = self.acme.get_domains(issuer_options)
         dns_provider = issuer_options.get("dns_provider")
-
-        if not dns_provider:
-            # Fall back to the DNS provider configured at the authority level, if any.
-            authority = issuer_options.get("authority")
-            if authority and authority.options:
-                for option in json.loads(authority.options):
-                    if option.get("name") == "dnsProvider" and option.get("value"):
-                        dns_provider = dns_provider_service.get(option["value"])
-                        break
 
         if dns_provider:
             for domain in domains:
