@@ -14,6 +14,20 @@ from .vectors import (
 )
 
 
+def test_pending_certificate_init_sets_authority_id_from_authority(session):
+    from lemur.pending_certificates.models import PendingCertificate
+    from lemur.tests.factories import AuthorityFactory
+
+    authority = AuthorityFactory()
+    session.commit()
+
+    pc = PendingCertificate(
+        csr=CSR_STR, authority=authority, owner="joe@example.com", name="pending-authfix-test"
+    )
+
+    assert pc.authority_id == authority.id
+
+
 def test_increment_attempt(pending_certificate):
     from lemur.pending_certificates.service import increment_attempt
 
