@@ -45,3 +45,29 @@ def test_output_schema(dns_provider):
 def test_json(dns_provider):
     # we can still get credentials using json.load
     assert "account_id" in json.loads(dns_provider.credentials)
+
+
+
+def test_update(dns_provider, session):
+    from lemur.dns_providers import service as dns_provider_service
+
+    new_data = {
+        "name": "updated-provider",
+        "description": "updated description",
+        "provider_type": {
+            "name": "route53",
+            "requirements": [
+                {"name": "account_id", "value": "123456789"},
+            ],
+        },
+    }
+    updated = dns_provider_service.update(dns_provider.id, new_data)
+
+    assert updated is not None
+    assert updated.name == "updated-provider"
+    assert updated.description == "updated description"
+    assert updated.provider_type == "route53"
+
+    import json
+    creds = json.loads(updated.credentials)
+    assert creds["account_id"] == "123456789"

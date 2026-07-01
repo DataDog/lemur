@@ -147,7 +147,13 @@ def update(dns_provider_id, data):
     dns_provider.credentials = json.dumps(credentials)
 
     log_service.audit_log(
-        "update_dns_provider", provider_name, "Updating DNS provider"
+        "update_dns_provider",
+        provider_name,
+        "Updated DNS provider: name={name}, description={description}, provider_type={provider_type}".format(
+            name=provider_name,
+            description=data.get("description"),
+            provider_type=data.get("provider_type", {}).get("name"),
+        ),
     )
     return database.update(dns_provider)
 
