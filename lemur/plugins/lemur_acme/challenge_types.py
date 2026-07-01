@@ -248,7 +248,7 @@ class AcmeDnsChallenge(AcmeChallenge):
         create_immediately = issuer_options.get("create_immediately", False)
         acme_client, registration = self.acme.setup_acme_client(authority)
         domains = self.acme.get_domains(issuer_options)
-        dns_provider = issuer_options.get("dns_provider")
+        dns_provider = issuer_options.get("dns_provider", {})
 
         if dns_provider:
             for domain in domains:
