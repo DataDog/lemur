@@ -28,6 +28,20 @@ def test_pending_certificate_init_sets_authority_id_from_authority(session):
     assert pc.authority_id == authority.id
 
 
+def test_pending_certificate_init_sets_user_id_from_creator(session):
+    from lemur.pending_certificates.models import PendingCertificate
+    from lemur.tests.factories import UserFactory
+
+    user = UserFactory()
+    session.commit()
+
+    pc = PendingCertificate(
+        csr=CSR_STR, creator=user, owner="joe@example.com", name="pending-userfix-test"
+    )
+
+    assert pc.user_id == user.id
+
+
 def test_increment_attempt(pending_certificate):
     from lemur.pending_certificates.service import increment_attempt
 

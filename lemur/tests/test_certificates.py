@@ -76,6 +76,28 @@ def test_certificate_init_transient_authority_leaves_id_none(session):
     assert cert.authority_id is None
 
 
+def test_certificate_init_sets_user_id_from_creator(session):
+    # Regression: create()/reissue construct a Certificate with the `creator` object (not `creator_id`).
+    from lemur.certificates.models import Certificate
+    from lemur.tests.factories import UserFactory
+
+    user = UserFactory()
+    session.commit()
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com", creator=user)
+
+    assert cert.user_id == user.id
+
+
+def test_certificate_init_allows_no_creator(session):
+    # Some paths construct without a creator (e.g. imports); user_id must stay None (no crash).
+    from lemur.certificates.models import Certificate
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com")
+
+    assert cert.user_id is None
+
+
 def test_get_or_increase_name(session, certificate):
     from lemur.certificates.models import get_or_increase_name
     from lemur.tests.factories import CertificateFactory
