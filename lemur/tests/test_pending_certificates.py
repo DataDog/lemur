@@ -15,9 +15,6 @@ from .vectors import (
 
 
 def test_pending_certificate_init_sets_authority_id_from_authority(session):
-    # ACME/async path goes through PendingCertificate; persist authority_id at construction
-    # (same fix as #316 for the sync Certificate) so it lands in the INSERT, not a deferrable
-    # post-INSERT UPDATE the reissue race can drop. See CLOUDR-1948 / Netflix/lemur#5447.
     from lemur.pending_certificates.models import PendingCertificate
     from lemur.tests.factories import AuthorityFactory
 
@@ -32,7 +29,6 @@ def test_pending_certificate_init_sets_authority_id_from_authority(session):
 
 
 def test_pending_certificate_init_sets_user_id_from_creator(session):
-    # Same construction-time fix for the creator FK on the ACME PendingCertificate path.
     from lemur.pending_certificates.models import PendingCertificate
     from lemur.tests.factories import UserFactory
 
