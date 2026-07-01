@@ -1,5 +1,4 @@
 # lemur/plugins/lemur_digicert_dcv/tests/test_digicert.py
-from datetime import datetime, timezone
 from unittest.mock import patch, Mock, MagicMock
 
 import pytest
@@ -127,6 +126,7 @@ def test_list_all_domain_names_paginates(mock_app):
     page2 = {"domains": [{"name": "last.prod.dog"}]}
 
     call_count = [0]
+
     def get_side_effect(url, params=None):
         resp = Mock()
         resp.status_code = 200

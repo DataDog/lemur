@@ -1,5 +1,5 @@
 # lemur/plugins/lemur_digicert_dcv/tests/test_route53.py
-from unittest.mock import patch, Mock, MagicMock, call
+from unittest.mock import patch, Mock
 import pytest
 
 

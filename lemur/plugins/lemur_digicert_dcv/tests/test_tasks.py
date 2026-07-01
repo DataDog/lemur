@@ -1,5 +1,4 @@
-from unittest.mock import patch, Mock, MagicMock
-import pytest
+from unittest.mock import patch
 
 
 def _config(key, default=None):

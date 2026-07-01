@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 
 @patch("lemur.plugins.lemur_digicert_dcv.views.DigiCertDCVProvider")
