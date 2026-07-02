@@ -138,6 +138,8 @@ class PendingCertificate(db.Model):
             # If the request does not send private key, the key exists but the value is None
             self.private_key = self.private_key.strip()
         self.external_id = kwargs.get("external_id")
+        self.authority_id = kwargs.get("authority_id") or getattr(kwargs.get("authority"), "id", None)  # authority_id if passed, else derive it from the authority object
+        self.user_id = kwargs.get("user_id") or getattr(kwargs.get("creator"), "id", None)  # user_id if passed, else derive it from the creator object
 
         # when destinations are appended they require a valid name.
         if kwargs.get("name"):
