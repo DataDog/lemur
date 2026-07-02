@@ -306,3 +306,155 @@ def test_create_cis_authority(mock_current_app, authority):
             "name": "digicert_test_Digicert_CIS_authority_admin",
         }
     ]
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=Mock)
+@patch("lemur.plugins.lemur_digicert.plugin.DigiCertDCVProvider")
+def test_create_certificate_calls_dcv_hook_when_enabled(mock_dcv_cls, mock_app):
+    """DCV hook fires when DIGICERT_DCV_ENABLED is True."""
+    from lemur.plugins.lemur_digicert_dcv.provider import ValidationStatus
+
+    mock_app.config.get.side_effect = lambda k, d=None: {
+        "DIGICERT_URL": "https://www.digicert.com",
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_DCV_ENABLED": True,
+        "DIGICERT_DCV_ISSUANCE_WINDOW_DAYS": 30,
+    }.get(k, d)
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: {
+        "DIGICERT_API_KEY": "test-key",
+    }.get(k))
+
+    mock_dcv = mock_dcv_cls.return_value
+    mock_dcv.check_validation.return_value = ValidationStatus(status="VALID")
+
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+    plugin = DigiCertIssuerPlugin.__new__(DigiCertIssuerPlugin)
+    plugin.session = Mock()
+    plugin.session.post.return_value = Mock(
+        status_code=201,
+        json=Mock(return_value={"id": 99})
+    )
+
+    # Will raise after the hook because get_certificate_id isn't mocked,
+    # but that's fine — we only care that the hook fired.
+    try:
+        plugin.create_certificate("fake_csr", {"common_name": "test.example.com"})
+    except Exception:
+        pass
+
+    mock_dcv.check_validation.assert_called_once()
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=Mock)
+@patch("lemur.plugins.lemur_digicert.plugin.DigiCertDCVProvider")
+def test_create_certificate_skips_dcv_hook_when_disabled(mock_dcv_cls, mock_app):
+    """DCV hook is skipped when DIGICERT_DCV_ENABLED is False or unset."""
+    mock_app.config.get.side_effect = lambda k, d=None: {
+        "DIGICERT_URL": "https://www.digicert.com",
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_DCV_ENABLED": False,
+    }.get(k, d)
+
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+    plugin = DigiCertIssuerPlugin.__new__(DigiCertIssuerPlugin)
+    plugin.session = Mock()
+    plugin.session.post.return_value = Mock(
+        status_code=201,
+        json=Mock(return_value={"id": 99})
+    )
+
+    try:
+        plugin.create_certificate("fake_csr", {"common_name": "test.example.com"})
+    except Exception:
+        pass
+
+    mock_dcv_cls.assert_not_called()
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=Mock)
+@patch("lemur.plugins.lemur_digicert.plugin.DigiCertDCVProvider")
+def test_create_certificate_calls_register_domain_when_missing(mock_dcv_cls, mock_app):
+    """MISSING status triggers register_domain() instead of initiate_validation()."""
+    from lemur.plugins.lemur_digicert_dcv.provider import ValidationStatus
+
+    mock_app.config.get.side_effect = lambda k, d=None: {
+        "DIGICERT_URL": "https://www.digicert.com",
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_DCV_ENABLED": True,
+        "DIGICERT_DCV_ISSUANCE_WINDOW_DAYS": 30,
+    }.get(k, d)
+    mock_app.config.__getitem__ = Mock(side_effect=lambda k: {
+        "DIGICERT_API_KEY": "test-key",
+    }.get(k))
+
+    mock_dcv = mock_dcv_cls.return_value
+    mock_dcv.check_validation.return_value = ValidationStatus(status="MISSING")
+
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+    p = DigiCertIssuerPlugin.__new__(DigiCertIssuerPlugin)
+    p.session = Mock()
+    p.session.post.return_value = Mock(
+        status_code=201,
+        json=Mock(return_value={"id": 99})
+    )
+
+    try:
+        p.create_certificate("fake_csr", {"common_name": "test.example.com"})
+    except Exception:
+        pass
+
+    mock_dcv.register_domain.assert_called_once_with("example.com")
+    mock_dcv.initiate_validation.assert_not_called()
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=Mock)
+@patch("lemur.plugins.lemur_digicert.plugin.Route53DCVWriter")
+@patch("lemur.plugins.lemur_digicert.plugin.DigiCertDCVProvider")
+def test_ensure_dcv_valid_expiring_soon_cleans_up_on_failure(mock_dcv_cls, mock_writer_cls, mock_app):
+    """EXPIRING_SOON: writer.delete() is called when wait_for_propagation raises."""
+    from lemur.plugins.lemur_digicert_dcv.provider import ValidationStatus
+    from lemur.plugins.lemur_digicert.plugin import _ensure_dcv_valid
+
+    mock_app.config.get.side_effect = lambda k, d=None: {
+        "DIGICERT_DCV_ISSUANCE_WINDOW_DAYS": 30,
+    }.get(k, d)
+
+    mock_dcv = mock_dcv_cls.return_value
+    mock_dcv.check_validation.return_value = ValidationStatus(status="EXPIRING_SOON")
+    dns_record = Mock()
+    mock_dcv.initiate_validation.return_value = dns_record
+
+    mock_writer = mock_writer_cls.return_value
+    mock_writer.wait_for_propagation.side_effect = RuntimeError("propagation timed out")
+
+    with pytest.raises(RuntimeError, match="propagation timed out"):
+        _ensure_dcv_valid("sub.example.com")
+
+    mock_writer.delete.assert_called_once_with(dns_record.name)
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=Mock)
+@patch("lemur.plugins.lemur_digicert.plugin.Route53DCVWriter")
+@patch("lemur.plugins.lemur_digicert.plugin.DigiCertDCVProvider")
+def test_ensure_dcv_valid_expiring_soon_confirm_failure_cleans_up(mock_dcv_cls, mock_writer_cls, mock_app):
+    """EXPIRING_SOON: writer.delete() is called when confirm_validation raises."""
+    from lemur.plugins.lemur_digicert_dcv.provider import ValidationStatus
+    from lemur.plugins.lemur_digicert.plugin import _ensure_dcv_valid
+
+    mock_app.config.get.side_effect = lambda k, d=None: {
+        "DIGICERT_DCV_ISSUANCE_WINDOW_DAYS": 30,
+    }.get(k, d)
+
+    mock_dcv = mock_dcv_cls.return_value
+    mock_dcv.check_validation.return_value = ValidationStatus(status="EXPIRING_SOON")
+    dns_record = Mock()
+    mock_dcv.initiate_validation.return_value = dns_record
+    mock_dcv.confirm_validation.side_effect = RuntimeError("CA rejected")
+
+    mock_writer = mock_writer_cls.return_value
+    mock_writer.wait_for_propagation.return_value = None
+
+    with pytest.raises(RuntimeError, match="CA rejected"):
+        _ensure_dcv_valid("sub.example.com")
+
+    mock_writer.delete.assert_called_once_with(dns_record.name)

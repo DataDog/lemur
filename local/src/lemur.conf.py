@@ -62,6 +62,15 @@ OAUTH_STATE_TOKEN_SECRET = repr(
     )
 )
 
+# DCV Automation (RDNA-1000)
+DIGICERT_DCV_ENABLED = False                    # set True after sandbox validation
+DIGICERT_DCV_RENEWAL_WINDOW_DAYS = 60          # sweep: revalidate if expiry < 60 days
+DIGICERT_DCV_ISSUANCE_WINDOW_DAYS = 30         # issuance hook threshold
+DIGICERT_DCV_DNS_ZONE = "acme-certs.prod.dog"
+DIGICERT_DCV_ROUTE53_ROLE_ARN = os.environ.get("DIGICERT_DCV_ROUTE53_ROLE_ARN", "")
+DIGICERT_DCV_PROPAGATION_TIMEOUT_SECS = 600
+DIGICERT_DCV_VALIDATION_TIMEOUT_SECS = 1800
+
 REDIS_HOST = "redis"
 REDIS_PORT = 6379
 REDIS_DB = 0
@@ -167,7 +176,16 @@ CELERYBEAT_SCHEDULE = {
     #         'expires': 180
     #     },
     #     'schedule': crontab(hour=10, minute=0, day_of_week='mon-fri'),
-    # }
+    # },
+    # DCV automation: daily DigiCert domain revalidation sweep (RDNA-1000)
+    # Enable after sandbox validation. Requires DIGICERT_DCV_ENABLED=True.
+    # 'validate_digicert_domains': {
+    #     'task': 'lemur.plugins.lemur_digicert_dcv.tasks.validate_digicert_domains',
+    #     'options': {
+    #         'expires': 3600
+    #     },
+    #     'schedule': crontab(hour=2, minute=0),  # 2 AM UTC daily
+    # },
 }
 CELERY_TIMEZONE = "UTC"
 
