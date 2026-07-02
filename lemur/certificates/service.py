@@ -1047,9 +1047,7 @@ def is_attached_to_endpoint(certificate_name, endpoint_name):
     :return: True if certificate is attached to the given endpoint, False otherwise
     """
     endpoint = endpoint_service.get_by_name(endpoint_name)
-    attached_certificates = endpoint.source.plugin.get_endpoint_certificate_names(
-        endpoint
-    )
+    attached_certificates = endpoint.source.plugin.get_endpoint_certificate_names(endpoint)
     return certificate_name in attached_certificates
 
 

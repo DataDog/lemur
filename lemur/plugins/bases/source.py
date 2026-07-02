@@ -32,6 +32,9 @@ class SourcePlugin(Plugin):
     def clean(self, certificate, options, **kwargs):
         raise NotImplementedError
 
+    def get_endpoint_certificate_names(self, endpoint):
+        return []
+
     @property
     def options(self):
         """
