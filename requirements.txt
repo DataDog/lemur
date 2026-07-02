@@ -233,7 +233,7 @@ httpx==0.28.1
     # via cloudflare
 hvac==2.4.0
     # via -r requirements-base.in
-idna==3.11
+idna==3.18
     # via
     #   anyio
     #   httpx
@@ -279,7 +279,7 @@ lockfile==0.12.2
     # via -r requirements-base.in
 logmatic-python==0.1.7
     # via -r requirements-datadog.in
-mako==1.3.10
+mako==1.3.12
     # via alembic
 markupsafe==2.1.5
     # via
@@ -358,7 +358,7 @@ pydantic-core==2.41.5
     # via pydantic
 pyjks==20.0.0
     # via -r requirements-base.in
-pyjwt[crypto]==2.12.1
+pyjwt[crypto]==2.13.0
     # via
     #   -r requirements-base.in
     #   msal
@@ -396,7 +396,7 @@ redis==6.4.0
     # via
     #   -r requirements-base.in
     #   kombu
-requests==2.32.5
+requests==2.34.2
     # via
     #   -r requirements-base.in
     #   acme
@@ -475,7 +475,7 @@ tzdata==2025.3
     #   kombu
 tzlocal==5.3.1
     # via celery
-urllib3==2.6.3
+urllib3==2.7.0
     # via
     #   -r requirements-datadog.in
     #   botocore
