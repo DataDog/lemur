@@ -35,12 +35,12 @@ angular.module('lemur')
     };
   })
 
-  .controller('DnsProviderEditController', function ($scope, $uibModalInstance, DnsProviderService, DnsProviderApi, PluginService, toaster, editId) {
+  .controller('DnsProviderEditController', function ($scope, $uibModalInstance, DnsProviderService, LemurRestangular, PluginService, toaster, editId) {
     DnsProviderService.getDnsProviderOptions().then(function(res) {
       $scope.options = res;
     });
 
-    DnsProviderApi.get(editId).then(function (dns_provider) {
+    LemurRestangular.one('dns_providers', editId).get().then(function (dns_provider) {
       $scope.dns_provider = dns_provider;
     });
 
