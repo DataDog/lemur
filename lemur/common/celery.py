@@ -1132,3 +1132,11 @@ def certificate_expirations_metrics():
 
     metrics.send(f"{function}.success", "counter", 1)
     return log_data
+
+
+# Import monitoring task module so its @celery_app.task() decorators register
+# with the worker on startup. Keep this at the bottom of the file: monitoring
+# imports `celery_app` from this module, and a top-of-file import here would
+# create a circular import. By the time we reach this line, `celery_app` is
+# already defined and importable.
+from lemur.common import monitoring  # noqa: E402, F401
