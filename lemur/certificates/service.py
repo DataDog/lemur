@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from flask import current_app
 from sentry_sdk import capture_exception
 from sqlalchemy import and_, func, or_, not_, cast, Integer
+from sqlalchemy.orm import joinedload
 from sqlalchemy.sql import text
 from sqlalchemy.sql.expression import false, true
 
@@ -1402,8 +1403,21 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "common_name": certificate.cn.replace("*", "star"),
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
+                    "issuer": certificate.issuer,
+                    "signing_algorithm": certificate.signing_algorithm,
                 },
             )
+            for destination in certificate.destinations:
+                metrics.send(
+                    "certificates.by_destination",
+                    "gauge",
+                    1,
+                    metric_tags={
+                        "cert_id": certificate.id,
+                        "destination": destination.label,
+                        "has_active_endpoints": has_active_endpoints,
+                    },
+                )
             success += 1
         except Exception as e:
             current_app.logger.warn(
@@ -1423,6 +1437,7 @@ def get_certificates_for_expiration_metrics(expiry_window):
     """
     query = (
         database.db.session.query(Certificate)
+        .options(joinedload(Certificate.destinations))
         .filter(Certificate.expired == false())
         .filter(Certificate.revoked == false())
         .filter(not_(Certificate.replaced.any()))
