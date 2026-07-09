@@ -1,6 +1,6 @@
 """Tests for check_dcv_expiration Celery task and IssuerPlugin DCV base (RDNA-1000)."""
 import datetime
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 
 def test_issuer_plugin_dcv_default_returns_empty():
