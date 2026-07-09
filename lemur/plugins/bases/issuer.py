@@ -32,3 +32,11 @@ class IssuerPlugin(Plugin):
 
     def cancel_ordered_certificate(self, pending_cert, **kwargs):
         raise NotImplementedError
+
+    def get_dcv_expiration_data(self):
+        """
+        Returns DCV expiration data for all domains managed by this CA.
+        Each entry: {"domain": str, "dcv_expiration": str (ISO 8601), "validation_type": str, "org_id": str}
+        Returns [] if this CA does not support DCV checking.
+        """
+        return []

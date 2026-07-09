@@ -167,8 +167,18 @@ CELERYBEAT_SCHEDULE = {
     #         'expires': 180
     #     },
     #     'schedule': crontab(hour=10, minute=0, day_of_week='mon-fri'),
+    # },
+    # 'check_dcv_expiration': {
+    #     'task': 'lemur.common.celery.check_dcv_expiration',
+    #     'options': {
+    #         'expires': 86400
+    #     },
+    #     'schedule': crontab(hour=6, minute=0),
     # }
 }
+
+DIGICERT_DCV_CHECK_ENABLED = True
+DIGICERT_DCV_CHECK_INTERVAL = 86400  # daily
 CELERY_TIMEZONE = "UTC"
 
 SQLALCHEMY_ENABLE_FLASK_REPLICATED = False

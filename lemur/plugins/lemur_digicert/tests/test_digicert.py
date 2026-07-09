@@ -306,3 +306,70 @@ def test_create_cis_authority(mock_current_app, authority):
             "name": "digicert_test_Digicert_CIS_authority_admin",
         }
     ]
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app")
+def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
+    import requests_mock as rm
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    mock_current_app.config.get = Mock(side_effect=lambda key, default=None: {
+        "DIGICERT_API_KEY": "api-key",
+        "DIGICERT_URL": "mock://www.digicert.com",
+        "DIGICERT_ORG_ID": 111111,
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_ROOT": "ROOT",
+        "DIGICERT_DCV_CHECK_ENABLED": True,
+    }.get(key, default))
+
+    subject = DigiCertIssuerPlugin()
+    adapter = rm.Adapter()
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain",
+        text=json.dumps({
+            "domains": [
+                {
+                    "name": "example.com",
+                    "status": "active",
+                    "dcv_expiration": "2026-09-01T00:00:00Z",
+                    "validation": {"type": "ov"},
+                    "organization": {"id": 42},
+                },
+                {
+                    "name": "inactive.com",
+                    "status": "inactive",
+                    "dcv_expiration": "2026-09-01T00:00:00Z",
+                    "validation": {"type": "ov"},
+                    "organization": {"id": 42},
+                },
+            ]
+        }),
+    )
+    subject.session.mount("mock", adapter)
+
+    result = subject.get_dcv_expiration_data()
+
+    assert len(result) == 1
+    assert result[0]["domain"] == "example.com"
+    assert result[0]["dcv_expiration"] == "2026-09-01T00:00:00Z"
+    assert result[0]["validation_type"] == "ov"
+    assert result[0]["org_id"] == "42"
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app")
+def test_get_dcv_expiration_data_disabled(mock_current_app):
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    mock_current_app.config.get = Mock(side_effect=lambda key, default=None: {
+        "DIGICERT_API_KEY": "api-key",
+        "DIGICERT_URL": "mock://www.digicert.com",
+        "DIGICERT_ORG_ID": 111111,
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_ROOT": "ROOT",
+        "DIGICERT_DCV_CHECK_ENABLED": False,
+    }.get(key, default))
+
+    subject = DigiCertIssuerPlugin()
+    result = subject.get_dcv_expiration_data()
+    assert result == []
