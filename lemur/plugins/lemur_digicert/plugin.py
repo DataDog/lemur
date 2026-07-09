@@ -503,6 +503,8 @@ class DigiCertIssuerPlugin(IssuerPlugin):
             return []
 
         base_url = current_app.config.get("DIGICERT_URL")
+        if not base_url:
+            raise ValueError("DIGICERT_URL is not configured; cannot perform DCV expiration check")
         results = []
         page = 1
         page_size = 1000

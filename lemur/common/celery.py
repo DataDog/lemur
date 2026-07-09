@@ -1140,8 +1140,6 @@ def check_dcv_expiration():
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
     and emits lemur.dcv.days_until_expiration gauge per domain (RDNA-1000).
     """
-    import datetime
-
     function = f"{__name__}.{sys._getframe().f_code.co_name}"
     task_id = None
     if celery_app.current_task:
@@ -1168,16 +1166,24 @@ def check_dcv_expiration():
             ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
             try:
                 dcv_data = plugin.get_dcv_expiration_data()
+            except SoftTimeLimitExceeded:
+                raise
             except Exception as e:
-                current_app.logger.warning(f"check_dcv_expiration: {ca_name} raised {e}")
+                current_app.logger.warning(
+                    f"check_dcv_expiration: {ca_name} raised {e}", exc_info=True
+                )
+                capture_exception()
                 total_errors += 1
                 continue
 
-            now = datetime.datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             for entry in dcv_data:
                 try:
-                    expiry_dt = datetime.datetime.fromisoformat(
-                        entry["dcv_expiration"].replace("Z", "+00:00")
+                    dcv_expiration = entry.get("dcv_expiration")
+                    if not dcv_expiration:
+                        continue
+                    expiry_dt = datetime.fromisoformat(
+                        dcv_expiration.replace("Z", "+00:00")
                     ).replace(tzinfo=None)
                     days_remaining = (expiry_dt - now).days
                     metrics.send(
@@ -1185,17 +1191,21 @@ def check_dcv_expiration():
                         "gauge",
                         days_remaining,
                         metric_tags={
-                            "domain": entry["domain"],
+                            "domain": entry.get("domain", "unknown"),
                             "ca": ca_name,
                             "validation_type": entry.get("validation_type", "unknown"),
                             "org_id": entry.get("org_id", "unknown"),
                         },
                     )
                     total_domains += 1
+                except SoftTimeLimitExceeded:
+                    raise
                 except Exception as e:
                     current_app.logger.warning(
-                        f"check_dcv_expiration: failed on {entry.get('domain')}: {e}"
+                        f"check_dcv_expiration: failed on entry for ca={ca_name}: {e}",
+                        exc_info=True,
                     )
+                    capture_exception()
                     total_errors += 1
     except SoftTimeLimitExceeded:
         log_data["message"] = "Time limit exceeded."

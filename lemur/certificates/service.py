@@ -1393,8 +1393,7 @@ def send_certificate_expiration_metrics(expiry_window=None):
             days_until_expiration = _get_cert_expiry_in_days(certificate.not_after)
             has_active_endpoints = len(certificate.endpoints) > 0
             is_replacement = len(certificate.replaces) > 0
-            replaced_by_ids = [r.id for r in certificate.replaced]
-            has_been_replaced = bool(replaced_by_ids) and certificate.id not in replaced_by_ids
+            has_been_replaced = bool(certificate.replaced)
 
             metrics.send(
                 "certificates.days_until_expiration",
@@ -1440,6 +1439,7 @@ def get_certificates_for_expiration_metrics(expiry_window):
     query = (
         database.db.session.query(Certificate)
         .options(joinedload(Certificate.destinations))
+        .options(joinedload(Certificate.replaced))
         .filter(Certificate.expired == false())
         .filter(Certificate.revoked == false())
     )
