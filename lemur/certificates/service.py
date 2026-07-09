@@ -1403,8 +1403,8 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "common_name": certificate.cn.replace("*", "star"),
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
-                    "issuer": certificate.issuer,
-                    "signing_algorithm": certificate.signing_algorithm,
+                    "issuer": certificate.issuer or "unknown",
+                    "signing_algorithm": certificate.signing_algorithm or "unknown",
                 },
             )
             for destination in certificate.destinations:
@@ -1413,14 +1413,13 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "gauge",
                     1,
                     metric_tags={
-                        "cert_id": certificate.id,
                         "destination": destination.label,
                         "has_active_endpoints": has_active_endpoints,
                     },
                 )
             success += 1
         except Exception as e:
-            current_app.logger.warn(
+            current_app.logger.warning(
                 f"Error sending expiry metric for certificate: {certificate.name}",
                 exc_info=True,
             )
