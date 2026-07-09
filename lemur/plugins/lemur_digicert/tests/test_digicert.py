@@ -313,14 +313,14 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
     import requests_mock as rm
     from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
 
-    mock_current_app.config.get = Mock(side_effect=lambda key, default=None: {
+    mock_current_app.config = {
         "DIGICERT_API_KEY": "api-key",
         "DIGICERT_URL": "mock://www.digicert.com",
         "DIGICERT_ORG_ID": 111111,
         "DIGICERT_ORDER_TYPE": "ssl_plus",
         "DIGICERT_ROOT": "ROOT",
         "DIGICERT_DCV_CHECK_ENABLED": True,
-    }.get(key, default))
+    }
 
     subject = DigiCertIssuerPlugin()
     adapter = rm.Adapter()
@@ -361,14 +361,14 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
 def test_get_dcv_expiration_data_disabled(mock_current_app):
     from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
 
-    mock_current_app.config.get = Mock(side_effect=lambda key, default=None: {
+    mock_current_app.config = {
         "DIGICERT_API_KEY": "api-key",
         "DIGICERT_URL": "mock://www.digicert.com",
         "DIGICERT_ORG_ID": 111111,
         "DIGICERT_ORDER_TYPE": "ssl_plus",
         "DIGICERT_ROOT": "ROOT",
         "DIGICERT_DCV_CHECK_ENABLED": False,
-    }.get(key, default))
+    }
 
     subject = DigiCertIssuerPlugin()
     result = subject.get_dcv_expiration_data()
