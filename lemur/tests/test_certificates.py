@@ -1884,10 +1884,32 @@ def test_allowed_issuance_for_domain(
 def test_send_certificate_expiration_metrics(certificate):
     from lemur.certificates.service import send_certificate_expiration_metrics
 
-    new_cert = create_cert_that_expires_in_days(10)
+    create_cert_that_expires_in_days(10)
 
     success, failure = send_certificate_expiration_metrics()
     assert failure == 0
+
+
+def test_send_certificate_expiration_metrics_has_been_replaced_tag(session):
+    from lemur.certificates.service import send_certificate_expiration_metrics
+    from lemur.tests.factories import CertificateFactory
+
+    old_cert = create_cert_that_expires_in_days(10)
+    new_cert = CertificateFactory()
+    new_cert.replaces.append(old_cert)
+    session.flush()
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        send_certificate_expiration_metrics()
+
+    expiry_calls = [
+        c for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.days_until_expiration"
+    ]
+    tags_by_cert_id = {c.kwargs["metric_tags"]["cert_id"]: c.kwargs["metric_tags"] for c in expiry_calls}
+
+    assert old_cert.id in tags_by_cert_id
+    assert tags_by_cert_id[old_cert.id]["has_been_replaced"] is True
 
 
 @pytest.mark.parametrize(

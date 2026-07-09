@@ -1393,6 +1393,8 @@ def send_certificate_expiration_metrics(expiry_window=None):
             days_until_expiration = _get_cert_expiry_in_days(certificate.not_after)
             has_active_endpoints = len(certificate.endpoints) > 0
             is_replacement = len(certificate.replaces) > 0
+            replaced_by_ids = [r.id for r in certificate.replaced]
+            has_been_replaced = bool(replaced_by_ids) and certificate.id not in replaced_by_ids
 
             metrics.send(
                 "certificates.days_until_expiration",
@@ -1403,6 +1405,7 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "common_name": certificate.cn.replace("*", "star"),
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
+                    "has_been_replaced": has_been_replaced,
                     "issuer": certificate.issuer or "unknown",
                     "signing_algorithm": certificate.signing_algorithm or "unknown",
                 },
@@ -1439,7 +1442,6 @@ def get_certificates_for_expiration_metrics(expiry_window):
         .options(joinedload(Certificate.destinations))
         .filter(Certificate.expired == false())
         .filter(Certificate.revoked == false())
-        .filter(not_(Certificate.replaced.any()))
     )
 
     # if expiry_window param was passed in then get only certs within that window

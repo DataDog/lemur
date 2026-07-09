@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 
 import arrow
 import pytest
@@ -308,7 +308,7 @@ def test_create_cis_authority(mock_current_app, authority):
     ]
 
 
-@patch("lemur.plugins.lemur_digicert.plugin.current_app")
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
 def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
     import requests_mock as rm
     from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
@@ -357,7 +357,7 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
     assert result[0]["org_id"] == "42"
 
 
-@patch("lemur.plugins.lemur_digicert.plugin.current_app")
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
 def test_get_dcv_expiration_data_disabled(mock_current_app):
     from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
 
