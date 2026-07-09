@@ -15,7 +15,7 @@ def test_issuer_plugin_dcv_default_returns_empty():
 @patch("lemur.common.celery.current_app")
 @patch("lemur.common.celery.celery_app")
 def test_check_dcv_expiration_emits_metric_for_active_domain(
-    mock_celery_app, mock_current_app, mock_metrics, mock_plugins
+    mock_celery_app, mock_current_app, mock_metrics, mock_plugins, app
 ):
     mock_celery_app.current_task = None
 
@@ -36,7 +36,7 @@ def test_check_dcv_expiration_emits_metric_for_active_domain(
 
     from lemur.common.celery import check_dcv_expiration
 
-    check_dcv_expiration()
+    check_dcv_expiration.run()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
     dcv_calls = [c for c in gauge_calls if "dcv.days_until_expiration" in c.args[0]]
@@ -54,7 +54,7 @@ def test_check_dcv_expiration_emits_metric_for_active_domain(
 @patch("lemur.common.celery.current_app")
 @patch("lemur.common.celery.celery_app")
 def test_check_dcv_expiration_plugin_exception_does_not_stop_others(
-    mock_celery_app, mock_current_app, mock_metrics, mock_plugins
+    mock_celery_app, mock_current_app, mock_metrics, mock_plugins, app
 ):
     mock_celery_app.current_task = None
 
@@ -79,7 +79,7 @@ def test_check_dcv_expiration_plugin_exception_does_not_stop_others(
 
     from lemur.common.celery import check_dcv_expiration
 
-    check_dcv_expiration()
+    check_dcv_expiration.run()
 
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
@@ -101,7 +101,7 @@ def test_check_dcv_expiration_plugin_exception_does_not_stop_others(
 @patch("lemur.common.celery.current_app")
 @patch("lemur.common.celery.celery_app")
 def test_check_dcv_expiration_empty_data_no_metric(
-    mock_celery_app, mock_current_app, mock_metrics, mock_plugins
+    mock_celery_app, mock_current_app, mock_metrics, mock_plugins, app
 ):
     mock_celery_app.current_task = None
 
@@ -112,7 +112,7 @@ def test_check_dcv_expiration_empty_data_no_metric(
 
     from lemur.common.celery import check_dcv_expiration
 
-    check_dcv_expiration()
+    check_dcv_expiration.run()
 
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
