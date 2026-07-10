@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from flask import current_app
 from sentry_sdk import capture_exception
 from sqlalchemy import and_, func, or_, not_, cast, Integer
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import text
 from sqlalchemy.sql.expression import false, true
 
