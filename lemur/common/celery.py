@@ -1187,7 +1187,7 @@ def check_dcv_expiration():
                     ).replace(tzinfo=None)
                     days_remaining = (expiry_dt - now).days
                     metrics.send(
-                        "dcv.days_until_expiration",
+                        "lemur.dcv.days_until_expiration",
                         "gauge",
                         days_remaining,
                         metric_tags={
@@ -1214,8 +1214,8 @@ def check_dcv_expiration():
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
         return
 
-    metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
-    metrics.send("dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
+    metrics.send("lemur.dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
+    metrics.send("lemur.dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
     current_app.logger.info(
         f"check_dcv_expiration: done. domains={total_domains} errors={total_errors}"
     )
