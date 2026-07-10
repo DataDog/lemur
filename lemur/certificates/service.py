@@ -1438,8 +1438,8 @@ def get_certificates_for_expiration_metrics(expiry_window):
     """
     query = (
         database.db.session.query(Certificate)
-        .options(joinedload(Certificate.destinations))
-        .options(joinedload(Certificate.replaced))
+        .options(selectinload(Certificate.destinations))
+        .options(selectinload(Certificate.replaced))
         .filter(Certificate.expired == false())
         .filter(Certificate.revoked == false())
     )
