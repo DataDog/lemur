@@ -1892,9 +1892,14 @@ def test_send_certificate_expiration_metrics(certificate):
 
 def test_send_certificate_expiration_metrics_has_been_replaced_tag(session):
     from lemur.certificates.service import send_certificate_expiration_metrics
-    from lemur.tests.factories import CertificateFactory
+    from lemur.tests.factories import CertificateFactory, DestinationFactory
 
     old_cert = create_cert_that_expires_in_days(10)
+    old_cert.issuer = None
+    old_cert.signing_algorithm = None
+    dest = DestinationFactory()
+    old_cert.destinations.append(dest)
+
     new_cert = CertificateFactory()
     new_cert.replaces.append(old_cert)
     session.flush()
@@ -1903,14 +1908,29 @@ def test_send_certificate_expiration_metrics_has_been_replaced_tag(session):
         send_certificate_expiration_metrics()
 
     expiry_calls = [
-        c for c in mock_metrics.send.call_args_list
+        c
+        for c in mock_metrics.send.call_args_list
         if c.args[0] == "certificates.days_until_expiration"
     ]
-    tags_by_cert_id = {c.kwargs["metric_tags"]["cert_id"]: c.kwargs["metric_tags"] for c in expiry_calls}
+    tags_by_cert_id = {
+        c.kwargs["metric_tags"]["cert_id"]: c.kwargs["metric_tags"]
+        for c in expiry_calls
+    }
 
     assert old_cert.id in tags_by_cert_id
     assert tags_by_cert_id[old_cert.id]["has_been_replaced"] is True
+    assert tags_by_cert_id[old_cert.id]["issuer"] == "unknown"
+    assert tags_by_cert_id[old_cert.id]["signing_algorithm"] == "unknown"
 
+    dest_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.by_destination"
+    ]
+    assert any(
+        c.kwargs["metric_tags"]["destination"] == dest.label
+        for c in dest_calls
+    )
 
 @pytest.mark.parametrize(
     "cert_expiry, expiry_window, expected_result",

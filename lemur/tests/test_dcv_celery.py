@@ -82,8 +82,11 @@ def test_check_dcv_expiration_plugin_exception_does_not_stop_others(
     check_dcv_expiration.run()
 
     dcv_calls = [
-        c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.days_until_expiration" in c.args[0]
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "good.com"
