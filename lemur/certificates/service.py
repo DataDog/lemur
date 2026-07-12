@@ -6,6 +6,7 @@
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
 
+import json
 import re
 import time
 from collections import defaultdict
@@ -1379,52 +1380,53 @@ def allowed_issuance_for_domain(common_name, extensions):
 
 
 _ISSUER_MAP = [
-    ("letsencrypt", "Let's Encrypt"),
-    ("lets encrypt", "Let's Encrypt"),
-    ("digicert", "DigiCert"),
-    ("sectigo", "Sectigo"),
-    ("usertrust", "Sectigo"),
-    ("comodo", "Sectigo"),
-    ("globalsign", "GlobalSign"),
-    ("entrust", "Entrust"),
-    ("amazon", "Amazon"),
-    ("awspca", "Amazon"),
-    ("google", "Google"),
-    ("microsoft", "Microsoft"),
-    ("verisign", "VeriSign"),
-    ("godaddy", "GoDaddy"),
-    ("selfsigned", "Self-Signed"),
+    ("letsencrypt", "lets-encrypt"),
+    ("lets encrypt", "lets-encrypt"),
+    ("staging", "lets-encrypt-staging"),
+    ("digicert", "digicert"),
+    ("sectigo", "sectigo"),
+    ("usertrust", "sectigo"),
+    ("comodo", "sectigo"),
+    ("globalsign", "globalsign"),
+    ("entrust", "entrust"),
+    ("amazon", "amazon"),
+    ("awspca", "amazon"),
+    ("google", "google"),
+    ("microsoft", "microsoft"),
+    ("verisign", "verisign"),
+    ("godaddy", "godaddy"),
+    ("selfsigned", "self-signed"),
 ]
 
 # LE short intermediate names: R-series (RSA), E-series (ECDSA), Y-series (short-chain, 2024+)
 _LE_INTERMEDIATES = {"r3", "r10", "r11", "r13", "e1", "e5", "e6", "e8", "e9", "yr1", "ye1", "ye2"}
 
 _ALGO_MAP = {
-    "sha256": "RSA-SHA256",
-    "sha384": "RSA-SHA384",
-    "sha256withrsa": "RSA-SHA256",
-    "sha256withrsaencryption": "RSA-SHA256",
-    "sha384withrsa": "RSA-SHA384",
-    "sha384withrsaencryption": "RSA-SHA384",
-    "sha512withrsa": "RSA-SHA512",
-    "sha512withrsaencryption": "RSA-SHA512",
-    "sha1withrsa": "RSA-SHA1",
-    "sha1withrsaencryption": "RSA-SHA1",
-    "ecdsa-with-sha256": "ECDSA-SHA256",
-    "ecdsa-with-sha384": "ECDSA-SHA384",
-    "ecdsa-with-sha512": "ECDSA-SHA512",
-    "id-ecpublickey": "ECDSA",
-    "ed25519": "Ed25519",
-    "ed448": "Ed448",
+    "sha256": "rsa-sha256",
+    "sha384": "rsa-sha384",
+    "sha256withrsa": "rsa-sha256",
+    "sha256withrsaencryption": "rsa-sha256",
+    "sha384withrsa": "rsa-sha384",
+    "sha384withrsaencryption": "rsa-sha384",
+    "sha512withrsa": "rsa-sha512",
+    "sha512withrsaencryption": "rsa-sha512",
+    "sha1withrsa": "rsa-sha1",
+    "sha1withrsaencryption": "rsa-sha1",
+    "ecdsa-with-sha256": "ecdsa-sha256",
+    "ecdsa-with-sha384": "ecdsa-sha384",
+    "ecdsa-with-sha512": "ecdsa-sha512",
+    "id-ecpublickey": "ecdsa",
+    "ed25519": "ed25519",
+    "ed448": "ed448",
 }
 
 
 def _normalize_issuer(raw: str) -> str:
     if not raw or raw.strip() in ("<selfsigned>", "<self-signed>"):
-        return "Self-Signed"
+        return "self-signed"
     lower = raw.strip().lower()
     if lower in _LE_INTERMEDIATES:
-        return "Let's Encrypt"
+        return "lets-encrypt"
     for fragment, name in _ISSUER_MAP:
         if fragment in lower:
             return name
@@ -1469,14 +1471,22 @@ def send_certificate_expiration_metrics(expiry_window=None):
                 },
             )
             for destination in certificate.destinations:
+                plugin = destination.plugin
+                metric_tags = {
+                    "destination_label": destination.label,
+                    "has_active_endpoints": has_active_endpoints,
+                    "plugin_name": destination.plugin_name or "unknown",
+                    "plugin": plugin.get_title() if plugin else "unknown",
+                }
+                destination_data = _parse_destination_description_for(destination.description)
+                if destination_data:
+                    metric_tags["datacenter"] = destination_data["datacenter"]
+                    metric_tags["type"] = destination_data["type"]
                 metrics.send(
                     "certificates.by_destination",
                     "gauge",
                     1,
-                    metric_tags={
-                        "destination": destination.label,
-                        "has_active_endpoints": has_active_endpoints,
-                    },
+                    metric_tags=metric_tags,
                 )
             success += 1
         except Exception as e:

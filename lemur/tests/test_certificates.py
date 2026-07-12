@@ -1897,7 +1897,9 @@ def test_send_certificate_expiration_metrics_has_been_replaced_tag(session):
     old_cert = create_cert_that_expires_in_days(10)
     old_cert.issuer = None
     old_cert.signing_algorithm = None
-    dest = DestinationFactory()
+    dest = DestinationFactory(
+        description='{"datacenter":"us1.release.staging.dog","type":"isp"}'
+    )
     old_cert.destinations.append(dest)
 
     new_cert = CertificateFactory()
@@ -1927,10 +1929,15 @@ def test_send_certificate_expiration_metrics_has_been_replaced_tag(session):
         for c in mock_metrics.send.call_args_list
         if c.args[0] == "certificates.by_destination"
     ]
-    assert any(
-        c.kwargs["metric_tags"]["destination"] == dest.label
+    dest_tags = next(
+        c.kwargs["metric_tags"]
         for c in dest_calls
+        if c.kwargs["metric_tags"]["destination_label"] == dest.label
     )
+    assert dest_tags["plugin_name"] == "test-destination"
+    assert dest_tags["plugin"] == "Test"
+    assert dest_tags["datacenter"] == "us1.release.staging.dog"
+
 
 @pytest.mark.parametrize(
     "cert_expiry, expiry_window, expected_result",
