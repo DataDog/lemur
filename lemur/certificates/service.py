@@ -1378,6 +1378,65 @@ def allowed_issuance_for_domain(common_name, extensions):
         is_authorized_for_domain(common_name)
 
 
+_ISSUER_MAP = [
+    ("letsencrypt", "Let's Encrypt"),
+    ("lets encrypt", "Let's Encrypt"),
+    ("digicert", "DigiCert"),
+    ("sectigo", "Sectigo"),
+    ("usertrust", "Sectigo"),
+    ("comodo", "Sectigo"),
+    ("globalsign", "GlobalSign"),
+    ("entrust", "Entrust"),
+    ("amazon", "Amazon"),
+    ("awspca", "Amazon"),
+    ("google", "Google"),
+    ("microsoft", "Microsoft"),
+    ("verisign", "VeriSign"),
+    ("godaddy", "GoDaddy"),
+    ("selfsigned", "Self-Signed"),
+]
+
+# LE short intermediate names: R-series (RSA), E-series (ECDSA), Y-series (short-chain, 2024+)
+_LE_INTERMEDIATES = {"r3", "r10", "r11", "r13", "e1", "e5", "e6", "e8", "e9", "yr1", "ye1", "ye2"}
+
+_ALGO_MAP = {
+    "sha256": "RSA-SHA256",
+    "sha384": "RSA-SHA384",
+    "sha256withrsa": "RSA-SHA256",
+    "sha256withrsaencryption": "RSA-SHA256",
+    "sha384withrsa": "RSA-SHA384",
+    "sha384withrsaencryption": "RSA-SHA384",
+    "sha512withrsa": "RSA-SHA512",
+    "sha512withrsaencryption": "RSA-SHA512",
+    "sha1withrsa": "RSA-SHA1",
+    "sha1withrsaencryption": "RSA-SHA1",
+    "ecdsa-with-sha256": "ECDSA-SHA256",
+    "ecdsa-with-sha384": "ECDSA-SHA384",
+    "ecdsa-with-sha512": "ECDSA-SHA512",
+    "id-ecpublickey": "ECDSA",
+    "ed25519": "Ed25519",
+    "ed448": "Ed448",
+}
+
+
+def _normalize_issuer(raw: str) -> str:
+    if not raw or raw.strip() in ("<selfsigned>", "<self-signed>"):
+        return "Self-Signed"
+    lower = raw.strip().lower()
+    if lower in _LE_INTERMEDIATES:
+        return "Let's Encrypt"
+    for fragment, name in _ISSUER_MAP:
+        if fragment in lower:
+            return name
+    return raw
+
+
+def _normalize_signing_algorithm(raw: str) -> str:
+    if not raw:
+        return "unknown"
+    return _ALGO_MAP.get(raw.strip().lower(), raw)
+
+
 def send_certificate_expiration_metrics(expiry_window=None):
     """
     Iterate over each certificate and emit a metric for how many days until expiration.
@@ -1405,8 +1464,8 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
                     "has_been_replaced": has_been_replaced,
-                    "issuer": certificate.issuer or "unknown",
-                    "signing_algorithm": certificate.signing_algorithm or "unknown",
+                    "issuer": _normalize_issuer(certificate.issuer or ""),
+                    "signing_algorithm": _normalize_signing_algorithm(certificate.signing_algorithm or ""),
                 },
             )
             for destination in certificate.destinations:
