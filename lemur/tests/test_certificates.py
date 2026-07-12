@@ -1971,26 +1971,27 @@ def test_get_cert_expiry_in_days(certificate):
 def test_normalize_issuer():
     from lemur.certificates.service import _normalize_issuer
 
-    assert _normalize_issuer("DigiCertGlobalG2TLSRSASHA2562020CA1") == "DigiCert"
-    assert _normalize_issuer("R13") == "Let's Encrypt"
-    assert _normalize_issuer("E8") == "Let's Encrypt"
-    assert _normalize_issuer("YE1") == "Let's Encrypt"
-    assert _normalize_issuer("YE2") == "Let's Encrypt"
-    assert _normalize_issuer("YR1") == "Let's Encrypt"
-    assert _normalize_issuer("<selfsigned>") == "Self-Signed"
-    assert _normalize_issuer("SectigoPublicServerAuthenticationCADVR36") == "Sectigo"
-    assert _normalize_issuer("USERTrustRSACertificationAuthority") == "Sectigo"
+    assert _normalize_issuer("DigiCertGlobalG2TLSRSASHA2562020CA1") == "digicert"
+    assert _normalize_issuer("R13") == "lets-encrypt"
+    assert _normalize_issuer("E8") == "lets-encrypt"
+    assert _normalize_issuer("YE1") == "lets-encrypt"
+    assert _normalize_issuer("YE2") == "lets-encrypt"
+    assert _normalize_issuer("YR1") == "lets-encrypt"
+    assert _normalize_issuer("STAGINGArtificialAmaranthYE1") == "lets-encrypt-staging"
+    assert _normalize_issuer("<selfsigned>") == "self-signed"
+    assert _normalize_issuer("SectigoPublicServerAuthenticationCADVR36") == "sectigo"
+    assert _normalize_issuer("USERTrustRSACertificationAuthority") == "sectigo"
     assert _normalize_issuer("SomeUnknownCA") == "SomeUnknownCA"
-    assert _normalize_issuer("") == "Self-Signed"
+    assert _normalize_issuer("") == "self-signed"
 
 
 def test_normalize_signing_algorithm():
     from lemur.certificates.service import _normalize_signing_algorithm
 
-    assert _normalize_signing_algorithm("sha256WithRSAEncryption") == "RSA-SHA256"
-    assert _normalize_signing_algorithm("ecdsa-with-SHA256") == "ECDSA-SHA256"
-    assert _normalize_signing_algorithm("sha1WithRSAEncryption") == "RSA-SHA1"
-    assert _normalize_signing_algorithm("sha256") == "RSA-SHA256"
-    assert _normalize_signing_algorithm("sha384") == "RSA-SHA384"
+    assert _normalize_signing_algorithm("sha256WithRSAEncryption") == "rsa-sha256"
+    assert _normalize_signing_algorithm("ecdsa-with-SHA256") == "ecdsa-sha256"
+    assert _normalize_signing_algorithm("sha1WithRSAEncryption") == "rsa-sha1"
+    assert _normalize_signing_algorithm("sha256") == "rsa-sha256"
+    assert _normalize_signing_algorithm("sha384") == "rsa-sha384"
     assert _normalize_signing_algorithm("") == "unknown"
     assert _normalize_signing_algorithm("someFutureAlgo") == "someFutureAlgo"
