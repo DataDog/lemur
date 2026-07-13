@@ -1500,7 +1500,7 @@ def send_source_destination_pairing_metrics():
     source_labels = {s.label for s in all_sources}
     dest_labels = {d.label for d in all_destinations}
 
-    datacenter = current_app.config.get("LEMUR_DATACENTER", "unknown")
+    datacenter = current_app.config.get("LEMUR_DATACENTER") or "unknown"
 
     for source in all_sources:
         metrics.send(
