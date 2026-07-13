@@ -1379,7 +1379,7 @@ def allowed_issuance_for_domain(common_name, extensions):
         is_authorized_for_domain(common_name)
 
 
-def _parse_destination_description_for(description):
+def _parse_destination_description(description):
     if not description:
         return None
     try:
@@ -1437,7 +1437,7 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "plugin_name": destination.plugin_name,
                     "plugin": plugin_title,
                 }
-                destination_data = _parse_destination_description_for(destination.description)
+                destination_data = _parse_destination_description(destination.description)
                 if destination_data:
                     metric_tags.update(destination_data)
                 metrics.send(
