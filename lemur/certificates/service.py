@@ -6,6 +6,7 @@
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
 
+import json
 import re
 import time
 from collections import defaultdict
@@ -18,6 +19,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from flask import current_app
 from sentry_sdk import capture_exception
 from sqlalchemy import and_, func, or_, not_, cast, Integer
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import text
 from sqlalchemy.sql.expression import false, true
 
@@ -1377,6 +1379,82 @@ def allowed_issuance_for_domain(common_name, extensions):
         is_authorized_for_domain(common_name)
 
 
+def _parse_destination_description_for(description):
+    if not description:
+        return None
+    try:
+        data = json.loads(description)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    result = {k: data[k] for k in ("datacenter", "type") if data.get(k) is not None}
+    return result or None
+
+
+_ISSUER_MAP = [
+    ("staging", "lets-encrypt-staging"),
+    ("letsencrypt", "lets-encrypt"),
+    ("lets encrypt", "lets-encrypt"),
+    ("digicert", "digicert"),
+    ("sectigo", "sectigo"),
+    ("usertrust", "sectigo"),
+    ("comodo", "sectigo"),
+    ("globalsign", "globalsign"),
+    ("entrust", "entrust"),
+    ("amazon", "amazon"),
+    ("awspca", "amazon"),
+    ("google", "google"),
+    ("microsoft", "microsoft"),
+    ("verisign", "verisign"),
+    ("godaddy", "godaddy"),
+    ("selfsigned", "self-signed"),
+]
+
+# LE short intermediate names: R-series (RSA), E-series (ECDSA), Y-series (short-chain, 2024+)
+_LE_INTERMEDIATES = {"r3", "r10", "r11", "r13", "e1", "e5", "e6", "e8", "e9", "yr1", "ye1", "ye2"}
+
+_ALGO_MAP = {
+    "sha256withrsa": "rsa-sha256",
+    "sha256withrsaencryption": "rsa-sha256",
+    "sha384withrsa": "rsa-sha384",
+    "sha384withrsaencryption": "rsa-sha384",
+    "sha512withrsa": "rsa-sha512",
+    "sha512withrsaencryption": "rsa-sha512",
+    "sha1withrsa": "rsa-sha1",
+    "sha1withrsaencryption": "rsa-sha1",
+    "ecdsa-with-sha256": "ecdsa-sha256",
+    "ecdsa-with-sha384": "ecdsa-sha384",
+    "ecdsa-with-sha512": "ecdsa-sha512",
+    "id-ecpublickey": "ecdsa",
+    "ed25519": "ed25519",
+    "ed448": "ed448",
+}
+
+
+def _normalize_issuer(raw) -> str:
+    if not raw:
+        return "unknown"
+    stripped = raw.strip()
+    if stripped in ("<selfsigned>", "<self-signed>", "selfsigned"):
+        return "self-signed"
+    if stripped in ("<unknown>",):
+        return "unknown"
+    lower = stripped.lower()
+    if lower in _LE_INTERMEDIATES:
+        return "lets-encrypt"
+    for fragment, name in _ISSUER_MAP:
+        if fragment in lower:
+            return name
+    return stripped
+
+
+def _normalize_signing_algorithm(raw) -> str:
+    if not raw:
+        return "unknown"
+    return _ALGO_MAP.get(raw.strip().lower(), raw.strip())
+
+
 def send_certificate_expiration_metrics(expiry_window=None):
     """
     Iterate over each certificate and emit a metric for how many days until expiration.
@@ -1392,6 +1470,9 @@ def send_certificate_expiration_metrics(expiry_window=None):
             days_until_expiration = _get_cert_expiry_in_days(certificate.not_after)
             has_active_endpoints = len(certificate.endpoints) > 0
             is_replacement = len(certificate.replaces) > 0
+            has_been_replaced = any(
+                r.id != certificate.id for r in certificate.replaced
+            )
 
             metrics.send(
                 "certificates.days_until_expiration",
@@ -1402,11 +1483,35 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "common_name": certificate.cn.replace("*", "star"),
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
+                    "has_been_replaced": has_been_replaced,
+                    "issuer": _normalize_issuer(certificate.issuer),
+                    "signing_algorithm": _normalize_signing_algorithm(certificate.signing_algorithm),
                 },
             )
+            for destination in certificate.destinations:
+                try:
+                    plugin_title = destination.plugin.get_title()
+                except KeyError:
+                    plugin_title = destination.plugin_name or "unknown"
+                metric_tags = {
+                    "cert_id": certificate.id,
+                    "destination": destination.label,
+                    "has_active_endpoints": has_active_endpoints,
+                    "plugin_name": destination.plugin_name or "unknown",
+                    "plugin": plugin_title,
+                }
+                destination_data = _parse_destination_description_for(destination.description)
+                if destination_data:
+                    metric_tags.update(destination_data)
+                metrics.send(
+                    "certificates.by_destination",
+                    "gauge",
+                    1,
+                    metric_tags=metric_tags,
+                )
             success += 1
         except Exception as e:
-            current_app.logger.warn(
+            current_app.logger.warning(
                 f"Error sending expiry metric for certificate: {certificate.name}",
                 exc_info=True,
             )
@@ -1423,9 +1528,10 @@ def get_certificates_for_expiration_metrics(expiry_window):
     """
     query = (
         database.db.session.query(Certificate)
+        .options(selectinload(Certificate.destinations))
+        .options(selectinload(Certificate.replaced))
         .filter(Certificate.expired == false())
         .filter(Certificate.revoked == false())
-        .filter(not_(Certificate.replaced.any()))
     )
 
     # if expiry_window param was passed in then get only certs within that window
