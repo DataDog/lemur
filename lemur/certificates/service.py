@@ -1500,31 +1500,25 @@ def send_source_destination_pairing_metrics():
     source_labels = {s.label for s in all_sources}
     dest_labels = {d.label for d in all_destinations}
 
-    datacenter = current_app.config.get("LEMUR_DATACENTER") or "unknown"
-
     for source in all_sources:
-        metrics.send(
-            "source.paired",
-            "gauge",
-            1,
-            metric_tags={
-                "source_name": source.label,
-                "plugin_name": source.plugin_name,
-                "active": str(source.active).lower(),
-                "has_destination": str(source.label in dest_labels).lower(),
-                "datacenter": datacenter,
-            },
-        )
+        tags = {
+            "source_name": source.label,
+            "plugin_name": source.plugin_name,
+            "active": str(source.active).lower(),
+            "has_destination": str(source.label in dest_labels).lower(),
+        }
+        parsed = _parse_destination_description(source.description)
+        if parsed:
+            tags.update(parsed)
+        metrics.send("source.paired", "gauge", 1, metric_tags=tags)
 
     for dest in all_destinations:
-        metrics.send(
-            "destination.paired",
-            "gauge",
-            1,
-            metric_tags={
-                "destination_name": dest.label,
-                "plugin_name": dest.plugin_name,
-                "has_source": str(dest.label in source_labels).lower(),
-                "datacenter": datacenter,
-            },
-        )
+        tags = {
+            "destination_name": dest.label,
+            "plugin_name": dest.plugin_name,
+            "has_source": str(dest.label in source_labels).lower(),
+        }
+        parsed = _parse_destination_description(dest.description)
+        if parsed:
+            tags.update(parsed)
+        metrics.send("destination.paired", "gauge", 1, metric_tags=tags)
