@@ -1969,4 +1969,3 @@ def test_get_cert_expiry_in_days(certificate):
     new_cert = create_cert_that_expires_in_days(10)
 
     assert _get_cert_expiry_in_days(new_cert.not_after) == 10
-
