@@ -1507,7 +1507,7 @@ def send_source_destination_pairing_metrics():
             "active": str(source.active).lower(),
             "has_destination": str(source.label in dest_labels).lower(),
         }
-        parsed = _parse_destination_description(source.description)
+        parsed = _parse_plugin_description(source.description)
         if parsed:
             tags.update(parsed)
         metrics.send("source.paired", "gauge", 1, metric_tags=tags)
@@ -1518,7 +1518,7 @@ def send_source_destination_pairing_metrics():
             "plugin_name": dest.plugin_name,
             "has_source": str(dest.label in source_labels).lower(),
         }
-        parsed = _parse_destination_description(dest.description)
+        parsed = _parse_plugin_description(dest.description)
         if parsed:
             tags.update(parsed)
         metrics.send("destination.paired", "gauge", 1, metric_tags=tags)
