@@ -1969,3 +1969,33 @@ def test_get_cert_expiry_in_days(certificate):
     new_cert = create_cert_that_expires_in_days(10)
 
     assert _get_cert_expiry_in_days(new_cert.not_after) == 10
+
+
+def test_send_source_destination_pairing_metrics(certificate):
+    from lemur.certificates.service import send_source_destination_pairing_metrics
+    from lemur.tests.factories import SourceFactory, DestinationFactory
+
+    # "shared" is paired; "orphan-src" has no destination; "orphan-dst" has no source
+    SourceFactory(label="shared")
+    SourceFactory(label="orphan-src")
+    DestinationFactory(label="shared")
+    DestinationFactory(label="orphan-dst")
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        send_source_destination_pairing_metrics()
+
+    calls = {
+        (call.args[0], call.kwargs["metric_tags"]["source_name"], call.kwargs["metric_tags"]["has_destination"])
+        for call in mock_metrics.send.call_args_list
+        if call.args[0] == "source.paired"
+    }
+    assert ("source.paired", "shared", "true") in calls
+    assert ("source.paired", "orphan-src", "false") in calls
+
+    calls_dst = {
+        (call.args[0], call.kwargs["metric_tags"]["destination_name"], call.kwargs["metric_tags"]["has_source"])
+        for call in mock_metrics.send.call_args_list
+        if call.args[0] == "destination.paired"
+    }
+    assert ("destination.paired", "shared", "true") in calls_dst
+    assert ("destination.paired", "orphan-dst", "false") in calls_dst

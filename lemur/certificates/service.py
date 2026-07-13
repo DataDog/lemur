@@ -1484,3 +1484,44 @@ def get_certificates_for_expiration_metrics(expiry_window):
 def _get_cert_expiry_in_days(cert_not_after):
     time_until_expiration = arrow.get(cert_not_after) - arrow.utcnow()
     return time_until_expiration.days
+
+
+def send_source_destination_pairing_metrics():
+    """
+    Emit one gauge per source and one per destination, tagged with whether a matching
+    counterpart (by label) exists. Enables dashboard queries for source/destination parity.
+    """
+    from lemur.sources import service as source_service
+    from lemur.destinations import service as destination_service
+
+    all_sources = source_service.get_all()
+    all_destinations = destination_service.get_all()
+
+    source_labels = {s.label for s in all_sources}
+    dest_labels = {d.label for d in all_destinations}
+
+    datacenter = current_app.config.get("LEMUR_DATACENTER", "unknown")
+
+    for source in all_sources:
+        metrics.send(
+            "source.paired",
+            "gauge",
+            1,
+            metric_tags={
+                "source_name": source.label,
+                "has_destination": str(source.label in dest_labels).lower(),
+                "datacenter": datacenter,
+            },
+        )
+
+    for dest in all_destinations:
+        metrics.send(
+            "destination.paired",
+            "gauge",
+            1,
+            metric_tags={
+                "destination_name": dest.label,
+                "has_source": str(dest.label in source_labels).lower(),
+                "datacenter": datacenter,
+            },
+        )

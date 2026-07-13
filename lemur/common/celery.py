@@ -1130,5 +1130,11 @@ def certificate_expirations_metrics():
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
         return
 
+    try:
+        certificate_service.send_source_destination_pairing_metrics()
+    except Exception:
+        current_app.logger.exception("Error sending source/destination pairing metrics")
+        capture_exception()
+
     metrics.send(f"{function}.success", "counter", 1)
     return log_data
