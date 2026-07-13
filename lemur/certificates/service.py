@@ -1392,94 +1392,6 @@ def _parse_destination_description_for(description):
     return result or None
 
 
-_UNKNOWN = "unknown"
-_SELF_SIGNED = "self-signed"
-_LETS_ENCRYPT = "lets-encrypt"
-_LETS_ENCRYPT_STAGING = "lets-encrypt-staging"
-_DIGICERT = "digicert"
-_SECTIGO = "sectigo"
-_GLOBALSIGN = "globalsign"
-_ENTRUST = "entrust"
-_AMAZON = "amazon"
-_GOOGLE = "google"
-_MICROSOFT = "microsoft"
-_VERISIGN = "verisign"
-_GODADDY = "godaddy"
-
-_RSA_SHA256 = "rsa-sha256"
-_RSA_SHA384 = "rsa-sha384"
-_RSA_SHA512 = "rsa-sha512"
-_RSA_SHA1 = "rsa-sha1"
-_ECDSA_SHA256 = "ecdsa-sha256"
-_ECDSA_SHA384 = "ecdsa-sha384"
-_ECDSA_SHA512 = "ecdsa-sha512"
-_ECDSA = "ecdsa"
-_ED25519 = "ed25519"
-_ED448 = "ed448"
-
-_ISSUER_MAP = [
-    ("staging", _LETS_ENCRYPT_STAGING),
-    ("letsencrypt", _LETS_ENCRYPT),
-    ("lets encrypt", _LETS_ENCRYPT),
-    ("digicert", _DIGICERT),
-    ("sectigo", _SECTIGO),
-    ("usertrust", _SECTIGO),
-    ("comodo", _SECTIGO),
-    ("globalsign", _GLOBALSIGN),
-    ("entrust", _ENTRUST),
-    ("amazon", _AMAZON),
-    ("awspca", _AMAZON),
-    ("google", _GOOGLE),
-    ("microsoft", _MICROSOFT),
-    ("verisign", _VERISIGN),
-    ("godaddy", _GODADDY),
-    ("selfsigned", _SELF_SIGNED),
-]
-
-# LE short intermediate names: R-series (RSA), E-series (ECDSA), Y-series (short-chain, 2024+)
-_LE_INTERMEDIATES = {"r3", "r10", "r11", "r13", "e1", "e5", "e6", "e8", "e9", "yr1", "ye1", "ye2"}
-
-_ALGO_MAP = {
-    "sha256withrsa": _RSA_SHA256,
-    "sha256withrsaencryption": _RSA_SHA256,
-    "sha384withrsa": _RSA_SHA384,
-    "sha384withrsaencryption": _RSA_SHA384,
-    "sha512withrsa": _RSA_SHA512,
-    "sha512withrsaencryption": _RSA_SHA512,
-    "sha1withrsa": _RSA_SHA1,
-    "sha1withrsaencryption": _RSA_SHA1,
-    "ecdsa-with-sha256": _ECDSA_SHA256,
-    "ecdsa-with-sha384": _ECDSA_SHA384,
-    "ecdsa-with-sha512": _ECDSA_SHA512,
-    "id-ecpublickey": _ECDSA,
-    "ed25519": _ED25519,
-    "ed448": _ED448,
-}
-
-
-def _normalize_issuer(raw) -> str:
-    if not raw:
-        return _UNKNOWN
-    stripped = raw.strip()
-    if stripped in ("<selfsigned>", "<self-signed>", "selfsigned"):
-        return _SELF_SIGNED
-    if stripped in ("<unknown>",):
-        return _UNKNOWN
-    lower = stripped.lower()
-    if lower in _LE_INTERMEDIATES:
-        return _LETS_ENCRYPT
-    for fragment, name in _ISSUER_MAP:
-        if fragment in lower:
-            return name
-    return stripped
-
-
-def _normalize_signing_algorithm(raw) -> str:
-    if not raw:
-        return _UNKNOWN
-    return _ALGO_MAP.get(raw.strip().lower(), raw.strip())
-
-
 def send_certificate_expiration_metrics(expiry_window=None):
     """
     Iterate over each certificate and emit a metric for how many days until expiration.
@@ -1509,20 +1421,20 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
                     "has_been_replaced": has_been_replaced,
-                    "issuer": _normalize_issuer(certificate.issuer),
-                    "signing_algorithm": _normalize_signing_algorithm(certificate.signing_algorithm),
+                    "issuer": certificate.issuer,
+                    "signing_algorithm": certificate.signing_algorithm,
                 },
             )
             for destination in certificate.destinations:
                 try:
                     plugin_title = destination.plugin.get_title()
                 except KeyError:
-                    plugin_title = destination.plugin_name or _UNKNOWN
+                    plugin_title = destination.plugin_name
                 metric_tags = {
                     "cert_id": certificate.id,
                     "destination": destination.label,
                     "has_active_endpoints": has_active_endpoints,
-                    "plugin_name": destination.plugin_name or _UNKNOWN,
+                    "plugin_name": destination.plugin_name,
                     "plugin": plugin_title,
                 }
                 destination_data = _parse_destination_description_for(destination.description)

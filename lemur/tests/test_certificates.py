@@ -1893,7 +1893,7 @@ def test_send_certificate_expiration_metrics(certificate):
 def test_send_certificate_expiration_metrics_has_been_replaced_tag(
     session, destination_plugin
 ):
-    from lemur.certificates.service import _UNKNOWN, send_certificate_expiration_metrics
+    from lemur.certificates.service import send_certificate_expiration_metrics
     from lemur.tests.factories import CertificateFactory, DestinationFactory
 
     old_cert = create_cert_that_expires_in_days(10)
@@ -1923,8 +1923,8 @@ def test_send_certificate_expiration_metrics_has_been_replaced_tag(
 
     assert old_cert.id in tags_by_cert_id
     assert tags_by_cert_id[old_cert.id]["has_been_replaced"] is True
-    assert tags_by_cert_id[old_cert.id]["issuer"] == _UNKNOWN
-    assert tags_by_cert_id[old_cert.id]["signing_algorithm"] == _UNKNOWN
+    assert tags_by_cert_id[old_cert.id]["issuer"] is None
+    assert tags_by_cert_id[old_cert.id]["signing_algorithm"] is None
 
     dest_calls = [
         c
@@ -1971,47 +1971,3 @@ def test_get_cert_expiry_in_days(certificate):
     assert _get_cert_expiry_in_days(new_cert.not_after) == 10
 
 
-def test_normalize_issuer():
-    from lemur.certificates.service import (
-        _DIGICERT,
-        _LETS_ENCRYPT,
-        _LETS_ENCRYPT_STAGING,
-        _SECTIGO,
-        _SELF_SIGNED,
-        _UNKNOWN,
-        _normalize_issuer,
-    )
-
-    assert _normalize_issuer("DigiCertGlobalG2TLSRSASHA2562020CA1") == _DIGICERT
-    assert _normalize_issuer("R13") == _LETS_ENCRYPT
-    assert _normalize_issuer("E8") == _LETS_ENCRYPT
-    assert _normalize_issuer("YE1") == _LETS_ENCRYPT
-    assert _normalize_issuer("YE2") == _LETS_ENCRYPT
-    assert _normalize_issuer("YR1") == _LETS_ENCRYPT
-    assert _normalize_issuer("STAGINGArtificialAmaranthYE1") == _LETS_ENCRYPT_STAGING
-    assert _normalize_issuer("<selfsigned>") == _SELF_SIGNED
-    assert _normalize_issuer("SectigoPublicServerAuthenticationCADVR36") == _SECTIGO
-    assert _normalize_issuer("USERTrustRSACertificationAuthority") == _SECTIGO
-    assert _normalize_issuer("SomeUnknownCA") == "SomeUnknownCA"
-    assert _normalize_issuer("") == _UNKNOWN
-    assert _normalize_issuer(None) == _UNKNOWN
-    assert _normalize_issuer("<unknown>") == _UNKNOWN
-
-
-def test_normalize_signing_algorithm():
-    from lemur.certificates.service import (
-        _ECDSA_SHA256,
-        _RSA_SHA1,
-        _RSA_SHA256,
-        _UNKNOWN,
-        _normalize_signing_algorithm,
-    )
-
-    assert _normalize_signing_algorithm("sha256WithRSAEncryption") == _RSA_SHA256
-    assert _normalize_signing_algorithm("ecdsa-with-SHA256") == _ECDSA_SHA256
-    assert _normalize_signing_algorithm("sha1WithRSAEncryption") == _RSA_SHA1
-    assert _normalize_signing_algorithm("sha256") == "sha256"
-    assert _normalize_signing_algorithm("sha384") == "sha384"
-    assert _normalize_signing_algorithm("") == _UNKNOWN
-    assert _normalize_signing_algorithm(None) == _UNKNOWN
-    assert _normalize_signing_algorithm("  someFutureAlgo  ") == "someFutureAlgo"
