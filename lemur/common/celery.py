@@ -1138,7 +1138,7 @@ def certificate_expirations_metrics():
 def check_dcv_expiration():
     """
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
-    and emits lemur.dcv.days_until_expiration gauge per domain (RDNA-1000).
+    and emits dcv.days_until_expiration gauge per domain (RDNA-1000).
     """
     function = f"{__name__}.{sys._getframe().f_code.co_name}"
     task_id = None
@@ -1189,7 +1189,7 @@ def check_dcv_expiration():
                         expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
                     days_remaining = (expiry_dt - now).days
                     metrics.send(
-                        "lemur.dcv.days_until_expiration",
+                        "dcv.days_until_expiration",
                         "gauge",
                         days_remaining,
                         metric_tags={
@@ -1216,8 +1216,8 @@ def check_dcv_expiration():
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
         return
 
-    metrics.send("lemur.dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
-    metrics.send("lemur.dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
+    metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
+    metrics.send("dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
     current_app.logger.info(
         f"check_dcv_expiration: done. domains={total_domains} errors={total_errors}"
     )
