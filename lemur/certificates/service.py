@@ -1421,8 +1421,8 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
                     "has_been_replaced": has_been_replaced,
-                    "issuer": certificate.issuer,
-                    "signing_algorithm": certificate.signing_algorithm,
+                    "issuer": certificate.issuer or "unknown",
+                    "signing_algorithm": certificate.signing_algorithm or "unknown",
                 },
             )
             for destination in certificate.destinations:
