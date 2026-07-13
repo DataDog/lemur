@@ -1509,6 +1509,8 @@ def send_source_destination_pairing_metrics():
             1,
             metric_tags={
                 "source_name": source.label,
+                "plugin_name": source.plugin_name,
+                "active": str(source.active).lower(),
                 "has_destination": str(source.label in dest_labels).lower(),
                 "datacenter": datacenter,
             },
@@ -1521,6 +1523,7 @@ def send_source_destination_pairing_metrics():
             1,
             metric_tags={
                 "destination_name": dest.label,
+                "plugin_name": dest.plugin_name,
                 "has_source": str(dest.label in source_labels).lower(),
                 "datacenter": datacenter,
             },

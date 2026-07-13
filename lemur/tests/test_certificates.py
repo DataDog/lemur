@@ -1984,18 +1984,18 @@ def test_send_source_destination_pairing_metrics(certificate):
     with patch("lemur.certificates.service.metrics") as mock_metrics:
         send_source_destination_pairing_metrics()
 
-    calls = {
-        (call.args[0], call.kwargs["metric_tags"]["source_name"], call.kwargs["metric_tags"]["has_destination"])
+    src_calls = {
+        (call.args[0], tags["source_name"], tags["has_destination"], tags["plugin_name"], tags["active"])
         for call in mock_metrics.send.call_args_list
-        if call.args[0] == "source.paired"
+        if (tags := call.kwargs["metric_tags"]) and call.args[0] == "source.paired"
     }
-    assert ("source.paired", "shared", "true") in calls
-    assert ("source.paired", "orphan-src", "false") in calls
+    assert ("source.paired", "shared", "true", "test-source", "true") in src_calls
+    assert ("source.paired", "orphan-src", "false", "test-source", "true") in src_calls
 
-    calls_dst = {
-        (call.args[0], call.kwargs["metric_tags"]["destination_name"], call.kwargs["metric_tags"]["has_source"])
+    dst_calls = {
+        (call.args[0], tags["destination_name"], tags["has_source"], tags["plugin_name"])
         for call in mock_metrics.send.call_args_list
-        if call.args[0] == "destination.paired"
+        if (tags := call.kwargs["metric_tags"]) and call.args[0] == "destination.paired"
     }
-    assert ("destination.paired", "shared", "true") in calls_dst
-    assert ("destination.paired", "orphan-dst", "false") in calls_dst
+    assert ("destination.paired", "shared", "true", "test-destination") in dst_calls
+    assert ("destination.paired", "orphan-dst", "false", "test-destination") in dst_calls
