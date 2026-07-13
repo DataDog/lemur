@@ -1486,6 +1486,19 @@ def _get_cert_expiry_in_days(cert_not_after):
     return time_until_expiration.days
 
 
+def _parse_plugin_description(description):
+    if not description:
+        return None
+    try:
+        data = json.loads(description)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    result = {k: data[k] for k in ("datacenter", "type") if data.get(k) is not None}
+    return result or None
+
+
 def send_source_destination_pairing_metrics():
     """
     Emit one gauge per source and one per destination, tagged with whether a matching
