@@ -1923,8 +1923,8 @@ def test_send_certificate_expiration_metrics_has_been_replaced_tag(
 
     assert old_cert.id in tags_by_cert_id
     assert tags_by_cert_id[old_cert.id]["has_been_replaced"] is True
-    assert tags_by_cert_id[old_cert.id]["issuer"] is "unknown"
-    assert tags_by_cert_id[old_cert.id]["signing_algorithm"] is "unknown"
+    assert tags_by_cert_id[old_cert.id]["issuer"] == "unknown"
+    assert tags_by_cert_id[old_cert.id]["signing_algorithm"] == "unknown"
 
     dest_calls = [
         c
