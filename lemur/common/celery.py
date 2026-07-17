@@ -200,6 +200,14 @@ def report_successful_task(**kwargs):
         tags = get_celery_request_tags(**kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
+        # Emit failed_task=0 on success so the counter stays dense (0 when healthy)
+        # and the failure monitor can drop default_zero. Low-cardinality tags only.
+        metrics.send(
+            "celery.failed_task",
+            "counter",
+            0,
+            metric_tags={"task_name": tags["task_name"]},
+        )
 
 
 @task_failure.connect
@@ -224,7 +232,7 @@ def report_failed_task(**kwargs):
 
         log_data.update(error_tags)
         current_app.logger.error(log_data)
-        metrics.send("celery.failed_task", "TIMER", 1, metric_tags=error_tags)
+        metrics.send("celery.failed_task", "counter", 1, metric_tags=error_tags)
 
 
 @task_revoked.connect
