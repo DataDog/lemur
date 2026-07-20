@@ -99,6 +99,19 @@ cd lemur && lemur db migrate -m "description"
 - **Dashboard**: https://app.datadoghq.com/dashboard/dm6-549-pqh
 - **Monitors** (prefixed `[Lemur]`): https://app.datadoghq.com/monitors/manage?q=%22%5BLemur%5D%22&p=1
 
+### Metric tag convention (CLOUDR-2084)
+
+| Tag | Meaning | Source | Example values |
+|-----|---------|--------|----------------|
+| `env` | Lemur deployment tier | k8s pod label (`tags.datadoghq.com/env`) — **never set in Python metric_tags** | `staging`, `prod`, `gov` |
+| `datacenter` | Physical location where a cert is deployed | destination/plugin description JSON field `"datacenter"` | `us1`, `us2`, `eu1`, `ap1` |
+| `source` | Lemur source label managing the endpoint | `endpoint.source.label` | `aws-commercial`, `gcp-eu1` |
+
+Rules for adding metrics:
+- **Do not** put a physical location value in an `env` metric tag — `env` is set globally by the Datadog agent from k8s labels.
+- **Do** add `datacenter` to any metric describing where a cert was deployed. Source it from `destination.description` JSON via `_parse_destination_description()` in `certificates/service.py` (or the analogous `_datacenter_from_description()` in `certificates/models.py`).
+- **Do** add `source` to endpoint-scoped metrics using `endpoint.source.label`.
+
 ## Release Process
 
 Master commits build a prod-signed image via GitLab CI, tagged `v<pipeline_id>-<short_sha>` and re-tagged `mutable-latest-prod`.
