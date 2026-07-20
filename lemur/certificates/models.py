@@ -435,10 +435,22 @@ class Certificate(db.Model):
                         "include_crl_dp": value
                     }
 
+                # CA-managed, regenerated at issuance, so intentionally not cloned
+                # (CT SCTs can't be carried in a CSR; policies are set by the CA profile).
+                elif isinstance(
+                    value,
+                    (
+                        x509.CertificatePolicies,
+                        x509.PrecertificateSignedCertificateTimestamps,
+                    ),
+                ):
+                    pass
+
                 # TODO: Not supporting custom OIDs yet. https://github.com/Netflix/lemur/issues/665
                 else:
                     current_app.logger.warning(
-                        "Custom OIDs not yet supported for clone operation."
+                        "Unhandled X.509 extension %s during clone (not cloned)",
+                        extension.oid.dotted_string,
                     )
         except InvalidCodepoint as e:
             capture_exception()
