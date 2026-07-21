@@ -1969,3 +1969,39 @@ def test_get_cert_expiry_in_days(certificate):
     new_cert = create_cert_that_expires_in_days(10)
 
     assert _get_cert_expiry_in_days(new_cert.not_after) == 10
+
+
+def test_send_source_destination_pairing_metrics(certificate):
+    from lemur.certificates.service import send_source_destination_pairing_metrics
+    from lemur.tests.factories import SourceFactory, DestinationFactory
+
+    DC_DESC = '{"datacenter":"us1.prod","type":"aws"}'
+
+    # "shared" is paired; "orphan-src" has no destination; "orphan-dst" has no source
+    SourceFactory(label="shared", description=DC_DESC)
+    SourceFactory(label="orphan-src")
+    DestinationFactory(label="shared", description=DC_DESC)
+    DestinationFactory(label="orphan-dst")
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        send_source_destination_pairing_metrics()
+
+    src_tags_by_name = {
+        tags["source_name"]: tags
+        for call in mock_metrics.send.call_args_list
+        if (tags := call.kwargs["metric_tags"]) and call.args[0] == "source.paired"
+    }
+    assert src_tags_by_name["shared"]["has_destination"] == "true"
+    assert src_tags_by_name["shared"]["datacenter"] == "us1.prod"
+    assert src_tags_by_name["orphan-src"]["has_destination"] == "false"
+    assert "datacenter" not in src_tags_by_name["orphan-src"]
+
+    dst_tags_by_name = {
+        tags["destination_name"]: tags
+        for call in mock_metrics.send.call_args_list
+        if (tags := call.kwargs["metric_tags"]) and call.args[0] == "destination.paired"
+    }
+    assert dst_tags_by_name["shared"]["has_source"] == "true"
+    assert dst_tags_by_name["shared"]["datacenter"] == "us1.prod"
+    assert dst_tags_by_name["orphan-dst"]["has_source"] == "false"
+    assert "datacenter" not in dst_tags_by_name["orphan-dst"]
