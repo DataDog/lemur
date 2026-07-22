@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 
 import arrow
 import pytest
@@ -7,6 +7,22 @@ from cryptography import x509
 from freezegun import freeze_time
 from lemur.plugins.lemur_digicert import plugin
 from lemur.tests.vectors import CSR_STR
+
+# Replace current_app in the plugin module with a MagicMock so that @patch
+# decorators don't call hasattr() on the Flask LocalProxy (which raises
+# RuntimeError when there is no active application context).
+# Use a real dict for config so validate_conf (which uses "key in app.config")
+# and config[] subscript work correctly for tests that don't patch current_app.
+_mock_current_app = MagicMock()
+_mock_current_app.config = {
+    "DIGICERT_API_KEY": "api-key",
+    "DIGICERT_URL": "mock://www.digicert.com",
+    "DIGICERT_ORG_ID": 111111,
+    "DIGICERT_ROOT": "ROOT",
+    "DIGICERT_ORDER_TYPE": "ssl_plus",
+    "DIGICERT_CIS_API_KEY": "api-key",
+}
+plugin.current_app = _mock_current_app
 
 
 def config_mock(*args):
@@ -306,3 +322,78 @@ def test_create_cis_authority(mock_current_app, authority):
             "name": "digicert_test_Digicert_CIS_authority_admin",
         }
     ]
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
+def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
+    import requests_mock as rm
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    mock_current_app.config = {
+        "DIGICERT_API_KEY": "api-key",
+        "DIGICERT_URL": "mock://www.digicert.com",
+        "DIGICERT_ORG_ID": 111111,
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_ROOT": "ROOT",
+        "DIGICERT_DCV_CHECK_ENABLED": True,
+    }
+
+    subject = DigiCertIssuerPlugin()
+    adapter = rm.Adapter()
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain",
+        text=json.dumps({
+            "domains": [
+                {
+                    "name": "example.com",
+                    "is_active": True,
+                    "dcv_expiration": {"ov": "2026-09-01T00:00:00+00:00", "ev": "2026-08-01T00:00:00+00:00"},
+                    "organization": {"id": 42},
+                },
+                {
+                    # inactive — is_active false, should be skipped
+                    "name": "inactive.com",
+                    "is_active": False,
+                    "dcv_expiration": {"ov": "2026-09-01T00:00:00+00:00"},
+                    "organization": {"id": 42},
+                },
+                {
+                    # no dcv_expiration — should be skipped
+                    "name": "nodcv.com",
+                    "is_active": True,
+                    "organization": {"id": 42},
+                },
+            ]
+        }),
+    )
+    subject.session.mount("mock", adapter)
+
+    result = subject.get_dcv_expiration_data()
+
+    # example.com has two validation types → two rows; others are filtered
+    assert len(result) == 2
+    by_type = {r["validation_type"]: r for r in result}
+    assert set(by_type.keys()) == {"ov", "ev"}
+    assert by_type["ov"]["domain"] == "example.com"
+    assert by_type["ov"]["dcv_expiration"] == "2026-09-01T00:00:00+00:00"
+    assert by_type["ov"]["org_id"] == "42"
+    assert by_type["ev"]["dcv_expiration"] == "2026-08-01T00:00:00+00:00"
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
+def test_get_dcv_expiration_data_disabled(mock_current_app):
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    mock_current_app.config = {
+        "DIGICERT_API_KEY": "api-key",
+        "DIGICERT_URL": "mock://www.digicert.com",
+        "DIGICERT_ORG_ID": 111111,
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_ROOT": "ROOT",
+        "DIGICERT_DCV_CHECK_ENABLED": False,
+    }
+
+    subject = DigiCertIssuerPlugin()
+    result = subject.get_dcv_expiration_data()
+    assert result == []
