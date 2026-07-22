@@ -8,7 +8,7 @@
         timezone: "America/Los_Angeles"
       package-ecosystem: "pip"
       reviewers:
-        - "DataDog/fabric-edge-ingress"
+        - "DataDog/resource-management"
       ignore:
         - dependency-name: "cert-orchestration-adapter"
       versioning-strategy: auto
