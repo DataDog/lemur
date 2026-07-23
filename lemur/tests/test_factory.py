@@ -1,2 +1,2 @@
-def test_app_logger_does_not_propagate_to_root(app):
-    assert app.logger.propagate is False
+def test_app_logger_propagates_to_root(app):
+    assert app.logger.propagate is True

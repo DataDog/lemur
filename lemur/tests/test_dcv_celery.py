@@ -16,6 +16,19 @@ import lemur.common.celery as _celery_module  # noqa: E402
 _celery_module.current_app = MagicMock()
 
 
+def test_make_celery_registers_a_receiver_that_clears_app_logger_handlers():
+    fake_app = MagicMock()
+    fake_app.logger = MagicMock()
+
+    with patch("lemur.common.celery.after_setup_logger") as mock_signal:
+        _celery_module.make_celery(fake_app)
+
+    receiver = mock_signal.connect.return_value.call_args.args[0]
+    receiver()
+
+    fake_app.logger.handlers.clear.assert_called_once()
+
+
 def test_issuer_plugin_dcv_default_returns_empty():
     from lemur.plugins.bases.issuer import IssuerPlugin
 
