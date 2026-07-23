@@ -233,6 +233,14 @@ def configure_logging(app):
     stream_handler.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
     app.logger.addHandler(stream_handler)
 
+    # app.logger already emits through its own handlers (above). It also
+    # propagates to the root logger by default, and Celery's worker log setup
+    # hijacks root with its own handler - so inside a task each record would be
+    # re-emitted an extra time through Celery's root handler. Disable
+    # propagation to drop that copy. This runs for the web process too, where
+    # root has no handler, so it's a no-op there.
+    app.logger.propagate = False
+
     if app.config.get("DEBUG_DUMP", False):
         activate_debug_dump()
 

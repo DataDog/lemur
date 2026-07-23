@@ -129,7 +129,3 @@ def test_check_dcv_expiration_empty_data_no_metric(
         if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
     ]
     assert len(dcv_calls) == 0
-
-
-def test_make_celery_disables_root_logger_hijack():
-    assert _celery_module.celery_app.conf.worker_hijack_root_logger is False

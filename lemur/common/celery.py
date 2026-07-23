@@ -55,8 +55,6 @@ def make_celery(app):
         broker=app.config.get("CELERY_BROKER_URL"),
     )
     celery.conf.update(app.config)
-    # Prevent duplicate log entries from current_app.logger calls.
-    celery.conf.worker_hijack_root_logger = False
     TaskBase = celery.Task
 
     class ContextTask(TaskBase):
