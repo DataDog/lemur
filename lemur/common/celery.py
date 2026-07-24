@@ -64,14 +64,9 @@ def make_celery(app):
 
     @after_setup_logger.connect(weak=False)
     def _drop_app_logger_handlers(**kwargs):
-        # Fires only when Celery actually sets up its root logger (worker/beat
-        # startup) - never on a plain import to submit a task from the web
-        # process. app.logger's own handlers (attached in configure_logging)
-        # still propagate to the now-hijacked root logger, so every
-        # current_app.logger call inside a task would otherwise be emitted
-        # twice: once bare/unformatted via app.logger's own StreamHandler,
-        # once cleanly via Celery's root handler. Drop app.logger's own
-        # handlers so only the clean, propagated copy remains.
+        # app.logger's handlers still propagate to root, so every
+        # current_app.logger call would otherwise be emitted twice: once
+        # bare/unformatted here, once cleanly through Celery's root handler.
         app.logger.handlers.clear()
 
     TaskBase = celery.Task
