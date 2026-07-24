@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 import boto3
+import botocore
 from moto import mock_sts, mock_ec2, mock_elb, mock_elbv2, mock_iam
 
 
@@ -164,6 +167,47 @@ def test_create_elb_with_https_listener_miscellaneous(app, aws_credentials):
         account_number=account_number,
         region=region_ue1,
     )
+
+
+def test_retry_throttled_logs_warning_without_traceback(app):
+    from lemur.plugins.lemur_aws import elb
+
+    with patch.object(app.logger, "error") as mock_error, patch.object(
+        app.logger, "warning"
+    ) as mock_warning:
+        # A generic throttling error should be retried.
+        assert elb.retry_throttled(Exception("Throttling")) is True
+
+    # Predicate runs on every attempt: it must not log an ERROR + traceback.
+    mock_error.assert_not_called()
+    mock_warning.assert_called_once()
+    _, warning_kwargs = mock_warning.call_args
+    assert "exc_info" not in warning_kwargs
+
+
+def test_retry_throttled_skips_non_throttling_errors(app):
+    from lemur.plugins.lemur_aws import elb
+
+    for code in ("LoadBalancerNotFound", "CertificateNotFound"):
+        error = botocore.exceptions.ClientError(
+            {"Error": {"Code": code}}, "DescribeListenerCertificates"
+        )
+        assert elb.retry_throttled(error) is False
+
+
+def test_throttle_wait_uses_backoff_and_jitter():
+    from lemur.plugins.lemur_aws.retry import THROTTLE_RETRY_KWARGS
+
+    # Guard against regressing to a flat wait_fixed, which caused retry storms.
+    assert "wait_fixed" not in THROTTLE_RETRY_KWARGS
+    assert THROTTLE_RETRY_KWARGS["wait_exponential_multiplier"] > 0
+    assert (
+        THROTTLE_RETRY_KWARGS["wait_exponential_max"]
+        > THROTTLE_RETRY_KWARGS["wait_exponential_multiplier"]
+    )
+    assert THROTTLE_RETRY_KWARGS["wait_jitter_max"] > 0
+    # Bounded total retry time so backoff can't blow the Celery soft_time_limit.
+    assert 0 < THROTTLE_RETRY_KWARGS["stop_max_delay"] <= 120000
 
 
 def create_load_balancer(client, ec2, vpc_id, endpoint_name):
