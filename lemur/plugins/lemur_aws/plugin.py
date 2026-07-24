@@ -152,6 +152,13 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
         LoadBalancerArn=elb_dict["LoadBalancerArn"],
     )
     for listener in listeners["Listeners"]:
+        # Only HTTPS/TLS listeners can carry certificates. AWS rejects
+        # DescribeListenerCertificates against any other protocol (HTTP, TCP,
+        # UDP, TCP_UDP, GENEVE for GWLB, ...) with a hard ValidationError
+        # rather than an empty result.
+        if listener["Protocol"] not in ("HTTPS", "TLS"):
+            continue
+
         listener_certificates = elb.describe_listener_certificates_v2(
             account_number=account_number,
             region=region,
