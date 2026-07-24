@@ -203,3 +203,31 @@ def test_get_all_elb_and_elbv2s(app, aws_credentials):
     assert elb_map["test-lbv2"]["sni_certificates"][0]["name"] == cert_name1
     assert elb_map["test-lbv2"]["sni_certificates"][0]["registry_type"] == "acm"
     assert elb_map["test-lbv2"]["port"] == 1443
+
+
+def test_get_elb_endpoints_v2_skips_gwlb_listeners():
+    from lemur.plugins.lemur_aws import elb as lemur_elb
+    from lemur.plugins.lemur_aws.plugin import get_elb_endpoints_v2
+
+    with mock.patch.object(
+        lemur_elb,
+        "describe_listeners_v2",
+        return_value={
+            "Listeners": [
+                {
+                    "ListenerArn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/gwy/gwlb/1/2",
+                    "Protocol": "GENEVE",
+                    "Port": None,
+                    "SslPolicy": None,
+                }
+            ]
+        },
+    ), mock.patch.object(lemur_elb, "describe_listener_certificates_v2") as mock_certs:
+        endpoints = get_elb_endpoints_v2(
+            "123456789012",
+            "us-east-1",
+            {"LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/gwy/gwlb/1", "LoadBalancerName": "gwlb", "DNSName": "gwlb.us-east-1.elb.amazonaws.com"},
+        )
+
+    assert not mock_certs.called
+    assert endpoints == []
