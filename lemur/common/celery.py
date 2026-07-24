@@ -14,7 +14,13 @@ import time
 from celery import Celery
 from celery.app.task import Context
 from celery.exceptions import SoftTimeLimitExceeded
-from celery.signals import task_failure, task_received, task_revoked, task_success
+from celery.signals import (
+    after_setup_logger,
+    task_failure,
+    task_received,
+    task_revoked,
+    task_success,
+)
 from datetime import datetime, timezone, timedelta
 from flask import current_app
 from sentry_sdk import capture_exception
@@ -55,6 +61,14 @@ def make_celery(app):
         broker=app.config.get("CELERY_BROKER_URL"),
     )
     celery.conf.update(app.config)
+
+    @after_setup_logger.connect(weak=False)
+    def _drop_app_logger_handlers(**kwargs):
+        # app.logger's handlers still propagate to root, so every
+        # current_app.logger call would otherwise be emitted twice: once
+        # bare/unformatted here, once cleanly through Celery's root handler.
+        app.logger.handlers.clear()
+
     TaskBase = celery.Task
 
     class ContextTask(TaskBase):
