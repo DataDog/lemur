@@ -333,10 +333,30 @@ class AWSSourcePlugin(SourcePlugin):
         else:
             regions = "".join(regions.split()).split(",")
 
+        excluded_regions = current_app.config.get("LEMUR_AWS_EXCLUDED_REGIONS", [])
+        if excluded_regions:
+            regions = [r for r in regions if r not in excluded_regions]
+
         for region in regions:
-            if region == "me-south-1":
-                continue  # AWS Bahrain offline since Apr 2026 missile strike on Batelco
-            elbs = elb.get_all_elbs(account_number=account_number, region=region)
+            try:
+                elbs = elb.get_all_elbs(account_number=account_number, region=region)
+            except Exception:  # noqa
+                current_app.logger.warning(
+                    {
+                        "message": "Failed to describe classic load balancers, skipping region",
+                        "account_number": account_number,
+                        "region": region,
+                    }
+                )
+                capture_exception()
+                metrics.send(
+                    "source_sync_fail",
+                    "counter",
+                    1,
+                    metric_tags={"source": f"{account_number}/{region}/classic"},
+                )
+                continue
+
             current_app.logger.info(
                 {
                     "message": "Describing classic load balancers",
@@ -354,7 +374,25 @@ class AWSSourcePlugin(SourcePlugin):
                     continue
 
             # fetch advanced ELBs
-            elbs_v2 = elb.get_all_elbs_v2(account_number=account_number, region=region)
+            try:
+                elbs_v2 = elb.get_all_elbs_v2(account_number=account_number, region=region)
+            except Exception:  # noqa
+                current_app.logger.warning(
+                    {
+                        "message": "Failed to describe advanced load balancers, skipping region",
+                        "account_number": account_number,
+                        "region": region,
+                    }
+                )
+                capture_exception()
+                metrics.send(
+                    "source_sync_fail",
+                    "counter",
+                    1,
+                    metric_tags={"source": f"{account_number}/{region}/elbv2"},
+                )
+                continue
+
             current_app.logger.info(
                 {
                     "message": "Describing advanced load balancers",
