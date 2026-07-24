@@ -34,9 +34,7 @@ def test_make_celery_registers_a_receiver_that_clears_app_logger_handlers():
 
 def test_make_celery_receiver_applies_json_formatter_when_log_json_enabled():
     fake_app = MagicMock()
-    fake_app.config.get.side_effect = lambda key, default=None: (
-        True if key == "LOG_JSON" else default
-    )
+    fake_app.config.get.return_value = True
 
     with patch("lemur.common.celery.after_setup_logger") as mock_signal, patch(
         "lemur.common.celery.after_setup_task_logger"
@@ -65,6 +63,25 @@ def test_make_celery_receiver_leaves_formatter_when_log_json_disabled():
 
     handler.setFormatter.assert_not_called()
     mock_formatter.assert_not_called()
+
+
+def test_make_celery_wires_same_receiver_to_both_log_signals_with_weak_false():
+    fake_app = MagicMock()
+    fake_app.config.get.return_value = False
+
+    with patch("lemur.common.celery.after_setup_logger") as mock_logger_signal, patch(
+        "lemur.common.celery.after_setup_task_logger"
+    ) as mock_task_signal:
+        _celery_module.make_celery(fake_app)
+
+    mock_logger_signal.connect.assert_called_once()
+    mock_task_signal.connect.assert_called_once()
+    assert (
+        mock_logger_signal.connect.call_args.args[0]
+        is mock_task_signal.connect.call_args.args[0]
+    )
+    assert mock_logger_signal.connect.call_args.kwargs["weak"] is False
+    assert mock_task_signal.connect.call_args.kwargs["weak"] is False
 
 
 def test_issuer_plugin_dcv_default_returns_empty():

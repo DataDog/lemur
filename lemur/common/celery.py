@@ -63,7 +63,7 @@ def make_celery(app):
     )
     celery.conf.update(app.config)
 
-    def _configure_worker_logging(logger=None, **kwargs):
+    def _configure_worker_logging(logger, **kwargs):
         # app.logger's handlers still propagate to root, so every
         # current_app.logger call would otherwise be emitted twice: once
         # bare/unformatted here, once cleanly through Celery's root handler.
