@@ -197,6 +197,14 @@ def configure_database(app):
         FlaskReplicated(app)
 
 
+def json_log_formatter():
+    """
+    Builds the JSON log formatter shared by the Flask app and the Celery
+    worker so both emit identically-shaped structured logs.
+    """
+    return logmatic.JsonFormatter(extra={"hostname": socket.gethostname()})
+
+
 def configure_logging(app):
     """
     Sets up application wide logging.
@@ -221,9 +229,7 @@ def configure_logging(app):
     )
 
     if app.config.get("LOG_JSON", False):
-        handler.setFormatter(
-            logmatic.JsonFormatter(extra={"hostname": socket.gethostname()})
-        )
+        handler.setFormatter(json_log_formatter())
 
     handler.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
     app.logger.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))

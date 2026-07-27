@@ -16,6 +16,7 @@ from celery.app.task import Context
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import (
     after_setup_logger,
+    after_setup_task_logger,
     task_failure,
     task_received,
     task_revoked,
@@ -32,7 +33,7 @@ from lemur.common.redis import RedisHandler
 from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
-from lemur.factory import create_app
+from lemur.factory import create_app, json_log_formatter
 from lemur import fips
 from lemur.notifications import cli as cli_notification
 from lemur.notifications.messaging import (
@@ -62,12 +63,21 @@ def make_celery(app):
     )
     celery.conf.update(app.config)
 
-    @after_setup_logger.connect(weak=False)
-    def _drop_app_logger_handlers(**kwargs):
+    def _configure_worker_logging(logger, **kwargs):
         # app.logger's handlers still propagate to root, so every
         # current_app.logger call would otherwise be emitted twice: once
         # bare/unformatted here, once cleanly through Celery's root handler.
         app.logger.handlers.clear()
+
+        # Give Celery's own handlers the same JSON shape as the Flask app so
+        # worker and web logs are ingested identically.
+        if app.config.get("LOG_JSON", False):
+            formatter = json_log_formatter()
+            for handler in logger.handlers:
+                handler.setFormatter(formatter)
+
+    after_setup_logger.connect(_configure_worker_logging, weak=False)
+    after_setup_task_logger.connect(_configure_worker_logging, weak=False)
 
     TaskBase = celery.Task
 
