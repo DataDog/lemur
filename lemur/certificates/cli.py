@@ -155,6 +155,11 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
                 send_rotation_notification(new_certificate)
 
             status = SUCCESS_METRIC_STATUS
+            current_app.logger.info(
+                "Rotated endpoint {0} from certificate {1} to {2}".format(
+                    endpoint.name, old_certificate.name, new_certificate.name
+                )
+            )
 
         except Exception as e:
             capture_exception(
