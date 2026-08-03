@@ -13,6 +13,7 @@ from retrying import retry
 from sentry_sdk import capture_exception
 
 from lemur.extensions import metrics
+from lemur.plugins.lemur_aws.retry import THROTTLE_RETRY_KWARGS
 from lemur.plugins.lemur_aws.sts import sts_client
 
 
@@ -121,7 +122,7 @@ def create_arn_from_cert(account_number, partition, certificate_name, path=""):
 
 
 @sts_client("iam")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
     """
     Upload a certificate to AWS
@@ -162,7 +163,7 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
 
 
 @sts_client("iam")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def delete_cert(cert_name, **kwargs):
     """
     Delete a certificate from AWS
@@ -189,7 +190,7 @@ def get_certificate(name, **kwargs):
     return _get_certificate(name, **kwargs)
 
 
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def _get_certificate(name, **kwargs):
     metrics.send("get_certificate", "counter", 1, metric_tags={"name": name})
     client = kwargs.pop("client")
@@ -212,7 +213,7 @@ def get_certificates(**kwargs):
     return _get_certificates(**kwargs)
 
 
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def _get_certificates(**kwargs):
     metrics.send("get_certificates", "counter", 1)
     return kwargs.pop("client").list_server_certificates(**kwargs)

@@ -497,6 +497,34 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         role = {"username": "", "password": "", "name": name}
         return current_app.config.get("DIGICERT_ROOT"), "", [role]
 
+    def get_dcv_expiration_data(self):
+        """Queries DigiCert /v2/domain for all active domains and their DCV expiration dates."""
+        if not current_app.config.get("DIGICERT_DCV_CHECK_ENABLED", True):
+            return []
+
+        base_url = current_app.config.get("DIGICERT_URL")
+        if not base_url:
+            raise ValueError("DIGICERT_URL is not configured; cannot perform DCV expiration check")
+        response = self.session.get(f"{base_url}/services/v2/domain")
+        data = handle_response(response)
+        results = []
+        for domain in data.get("domains", []):
+            if not domain.get("is_active", False):
+                continue
+            dcv_exp_map = domain.get("dcv_expiration")
+            if not dcv_exp_map:
+                continue
+            domain_name = domain.get("name", "unknown")
+            org_id = str(domain.get("organization", {}).get("id", "unknown"))
+            for val_type, dcv_exp in dcv_exp_map.items():
+                results.append({
+                    "domain": domain_name,
+                    "dcv_expiration": dcv_exp,
+                    "validation_type": val_type,
+                    "org_id": org_id,
+                })
+        return results
+
 
 class DigiCertCISSourcePlugin(SourcePlugin):
     """Wrap the Digicert CIS Certifcate API."""

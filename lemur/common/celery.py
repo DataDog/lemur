@@ -14,7 +14,14 @@ import time
 from celery import Celery
 from celery.app.task import Context
 from celery.exceptions import SoftTimeLimitExceeded
-from celery.signals import task_failure, task_received, task_revoked, task_success
+from celery.signals import (
+    after_setup_logger,
+    after_setup_task_logger,
+    task_failure,
+    task_received,
+    task_revoked,
+    task_success,
+)
 from datetime import datetime, timezone, timedelta
 from flask import current_app
 from sentry_sdk import capture_exception
@@ -26,7 +33,7 @@ from lemur.common.redis import RedisHandler
 from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
-from lemur.factory import create_app
+from lemur.factory import create_app, json_log_formatter
 from lemur import fips
 from lemur.notifications import cli as cli_notification
 from lemur.notifications.messaging import (
@@ -55,6 +62,23 @@ def make_celery(app):
         broker=app.config.get("CELERY_BROKER_URL"),
     )
     celery.conf.update(app.config)
+
+    def _configure_worker_logging(logger, **kwargs):
+        # app.logger's handlers still propagate to root, so every
+        # current_app.logger call would otherwise be emitted twice: once
+        # bare/unformatted here, once cleanly through Celery's root handler.
+        app.logger.handlers.clear()
+
+        # Give Celery's own handlers the same JSON shape as the Flask app so
+        # worker and web logs are ingested identically.
+        if app.config.get("LOG_JSON", False):
+            formatter = json_log_formatter()
+            for handler in logger.handlers:
+                handler.setFormatter(formatter)
+
+    after_setup_logger.connect(_configure_worker_logging, weak=False)
+    after_setup_task_logger.connect(_configure_worker_logging, weak=False)
+
     TaskBase = celery.Task
 
     class ContextTask(TaskBase):
@@ -200,6 +224,14 @@ def report_successful_task(**kwargs):
         tags = get_celery_request_tags(**kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
+        # Emit failed_task=0 on success so the counter stays dense (0 when healthy)
+        # and the failure monitor can drop default_zero. Low-cardinality tags only.
+        metrics.send(
+            "celery.failed_task",
+            "counter",
+            0,
+            metric_tags={"task_name": tags["task_name"]},
+        )
 
 
 @task_failure.connect
@@ -224,7 +256,7 @@ def report_failed_task(**kwargs):
 
         log_data.update(error_tags)
         current_app.logger.error(log_data)
-        metrics.send("celery.failed_task", "TIMER", 1, metric_tags=error_tags)
+        metrics.send("celery.failed_task", "counter", 1, metric_tags=error_tags)
 
 
 @task_revoked.connect
@@ -1130,5 +1162,105 @@ def certificate_expirations_metrics():
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
         return
 
+    try:
+        certificate_service.send_source_destination_pairing_metrics()
+    except Exception:
+        current_app.logger.exception("Error sending source/destination pairing metrics")
+        capture_exception()
+        metrics.send(
+            "source_destination_pairing_metrics.error", "counter", 1, metric_tags={"function": function}
+        )
+
+    metrics.send(f"{function}.success", "counter", 1)
+    return log_data
+
+
+@celery_app.task(soft_time_limit=3600)
+def check_dcv_expiration():
+    """
+    Iterates all registered issuer plugins that implement get_dcv_expiration_data()
+    and emits dcv.days_until_expiration gauge per domain (RDNA-1000).
+    """
+    function = f"{__name__}.{sys._getframe().f_code.co_name}"
+    task_id = None
+    if celery_app.current_task:
+        task_id = celery_app.current_task.request.id
+
+    log_data = {
+        "function": function,
+        "message": "check_dcv_expiration: starting",
+        "task_id": task_id,
+    }
+
+    if task_id and is_task_active(function, task_id, None):
+        log_data["message"] = "Skipping task: Task is already active"
+        current_app.logger.debug(log_data)
+        return
+
+    current_app.logger.debug(log_data)
+
+    total_domains = 0
+    total_errors = 0
+    now = datetime.now(timezone.utc)
+
+    try:
+        for plugin in plugins.all(plugin_type="issuer"):
+            ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
+            try:
+                dcv_data = plugin.get_dcv_expiration_data()
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception as e:
+                current_app.logger.warning(
+                    f"check_dcv_expiration: {ca_name} raised {e}", exc_info=True
+                )
+                capture_exception()
+                total_errors += 1
+                continue
+
+            for entry in dcv_data:
+                try:
+                    dcv_expiration = entry.get("dcv_expiration")
+                    if not dcv_expiration:
+                        continue
+                    expiry_dt = datetime.fromisoformat(
+                        dcv_expiration.replace("Z", "+00:00")
+                    )
+                    if expiry_dt.tzinfo is None:
+                        expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                    days_remaining = (expiry_dt - now).days
+                    metrics.send(
+                        "dcv.days_until_expiration",
+                        "gauge",
+                        days_remaining,
+                        metric_tags={
+                            "domain": entry.get("domain", "unknown"),
+                            "ca": ca_name,
+                            "validation_type": entry.get("validation_type", "unknown"),
+                            "org_id": entry.get("org_id", "unknown"),
+                        },
+                    )
+                    total_domains += 1
+                except SoftTimeLimitExceeded:
+                    raise
+                except Exception as e:
+                    current_app.logger.warning(
+                        f"check_dcv_expiration: failed on entry for ca={ca_name}: {e}",
+                        exc_info=True,
+                    )
+                    capture_exception()
+                    total_errors += 1
+    except SoftTimeLimitExceeded:
+        log_data["message"] = "Time limit exceeded."
+        current_app.logger.error(log_data)
+        capture_exception()
+        metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
+        return
+
+    metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
+    metrics.send("dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
+    current_app.logger.info(
+        f"check_dcv_expiration: done. domains={total_domains} errors={total_errors}"
+    )
     metrics.send(f"{function}.success", "counter", 1)
     return log_data

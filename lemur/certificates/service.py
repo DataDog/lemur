@@ -6,6 +6,7 @@
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
 
+import json
 import re
 import time
 from collections import defaultdict
@@ -18,6 +19,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from flask import current_app
 from sentry_sdk import capture_exception
 from sqlalchemy import and_, func, or_, not_, cast, Integer
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import text
 from sqlalchemy.sql.expression import false, true
 
@@ -1377,6 +1379,19 @@ def allowed_issuance_for_domain(common_name, extensions):
         is_authorized_for_domain(common_name)
 
 
+def _parse_destination_description(description):
+    if not description:
+        return None
+    try:
+        data = json.loads(description)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    result = {k: data[k] for k in ("datacenter", "type") if data.get(k) is not None}
+    return result or None
+
+
 def send_certificate_expiration_metrics(expiry_window=None):
     """
     Iterate over each certificate and emit a metric for how many days until expiration.
@@ -1392,6 +1407,9 @@ def send_certificate_expiration_metrics(expiry_window=None):
             days_until_expiration = _get_cert_expiry_in_days(certificate.not_after)
             has_active_endpoints = len(certificate.endpoints) > 0
             is_replacement = len(certificate.replaces) > 0
+            has_been_replaced = any(
+                r.id != certificate.id for r in certificate.replaced
+            )
 
             metrics.send(
                 "certificates.days_until_expiration",
@@ -1402,11 +1420,35 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "common_name": certificate.cn.replace("*", "star"),
                     "has_active_endpoints": has_active_endpoints,
                     "is_replacement": is_replacement,
+                    "has_been_replaced": has_been_replaced,
+                    "issuer": certificate.issuer or "unknown",
+                    "signing_algorithm": certificate.signing_algorithm or "unknown",
                 },
             )
+            for destination in certificate.destinations:
+                try:
+                    plugin_title = destination.plugin.get_title()
+                except KeyError:
+                    plugin_title = destination.plugin_name
+                metric_tags = {
+                    "cert_id": certificate.id,
+                    "destination": destination.label,
+                    "has_active_endpoints": has_active_endpoints,
+                    "plugin_name": destination.plugin_name,
+                    "plugin": plugin_title,
+                }
+                destination_data = _parse_destination_description(destination.description)
+                if destination_data:
+                    metric_tags.update(destination_data)
+                metrics.send(
+                    "certificates.by_destination",
+                    "gauge",
+                    1,
+                    metric_tags=metric_tags,
+                )
             success += 1
         except Exception as e:
-            current_app.logger.warn(
+            current_app.logger.warning(
                 f"Error sending expiry metric for certificate: {certificate.name}",
                 exc_info=True,
             )
@@ -1423,9 +1465,10 @@ def get_certificates_for_expiration_metrics(expiry_window):
     """
     query = (
         database.db.session.query(Certificate)
+        .options(selectinload(Certificate.destinations))
+        .options(selectinload(Certificate.replaced))
         .filter(Certificate.expired == false())
         .filter(Certificate.revoked == false())
-        .filter(not_(Certificate.replaced.any()))
     )
 
     # if expiry_window param was passed in then get only certs within that window
@@ -1441,3 +1484,54 @@ def get_certificates_for_expiration_metrics(expiry_window):
 def _get_cert_expiry_in_days(cert_not_after):
     time_until_expiration = arrow.get(cert_not_after) - arrow.utcnow()
     return time_until_expiration.days
+
+
+def _parse_plugin_description(description):
+    if not description:
+        return None
+    try:
+        data = json.loads(description)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    result = {k: data[k] for k in ("datacenter", "type") if data.get(k) is not None}
+    return result or None
+
+
+def send_source_destination_pairing_metrics():
+    """
+    Emit one gauge per source and one per destination, tagged with whether a matching
+    counterpart (by label) exists. Enables dashboard queries for source/destination parity.
+    """
+    from lemur.sources import service as source_service
+    from lemur.destinations import service as destination_service
+
+    all_sources = source_service.get_all()
+    all_destinations = destination_service.get_all()
+
+    source_labels = {s.label for s in all_sources}
+    dest_labels = {d.label for d in all_destinations}
+
+    for source in all_sources:
+        tags = {
+            "source_name": source.label,
+            "plugin_name": source.plugin_name,
+            "active": str(source.active).lower(),
+            "has_destination": str(source.label in dest_labels).lower(),
+        }
+        parsed = _parse_plugin_description(source.description)
+        if parsed:
+            tags.update(parsed)
+        metrics.send("source.paired", "gauge", 1, metric_tags=tags)
+
+    for dest in all_destinations:
+        tags = {
+            "destination_name": dest.label,
+            "plugin_name": dest.plugin_name,
+            "has_source": str(dest.label in source_labels).lower(),
+        }
+        parsed = _parse_plugin_description(dest.description)
+        if parsed:
+            tags.update(parsed)
+        metrics.send("destination.paired", "gauge", 1, metric_tags=tags)
