@@ -103,10 +103,13 @@ cd lemur && lemur db migrate -m "description"
 
 | Tag | Meaning | Source | Example values |
 |-----|---------|--------|----------------|
-| `env` | Lemur deployment tier | k8s pod label (`tags.datadoghq.com/env`) — **never set in Python metric_tags** | `staging`, `prod`, `gov` |
+| `env` | Lemur deployment tier | k8s pod label (`tags.datadoghq.com/env`) — **never set in Python metric_tags** | `development`, `commercial`, `gov` |
 | `datacenter` | Physical location where a cert is deployed | destination/plugin description JSON field `"datacenter"` | `us1`, `us2`, `eu1`, `ap1` |
 | `source` | Lemur source label managing the endpoint | `endpoint.source.label` | `aws-commercial`, `gcp-eu1` |
 
+
+> [!NOTE] some metrics use the stale `staging` and `prod` env tags.
+ 
 Rules for adding metrics:
 - **Do not** put a physical location value in an `env` metric tag — `env` is set globally by the Datadog agent from k8s labels.
 - **Do** add `datacenter` to any metric describing where a cert was deployed. Source it from `destination.description` JSON via `_parse_destination_description()` in `certificates/service.py` (or the analogous `_datacenter_from_description()` in `certificates/models.py`).
