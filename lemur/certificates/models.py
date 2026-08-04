@@ -76,6 +76,10 @@ def get_sequence(name):
     return root, seq
 
 
+def _default_rotation_days():
+    return current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
+
+
 def get_or_increase_name(name, serial):
     certificates = Certificate.query.filter(Certificate.name == name).all()
 
@@ -376,11 +380,10 @@ class Certificate(db.Model):
         """
         Determines if a certificate is available for rotation based
         on the rotation policy associated. Certs without an explicit policy
-        fall back to LEMUR_DEFAULT_ROTATION_POLICY_DAYS (default 60).
+        fall back to LEMUR_DEFAULT_ROTATION_POLICY_DAYS.
         :return:
         """
-        default_days = current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
-        days = self.rotation_policy.days if self.rotation_policy else default_days
+        days = self.rotation_policy.days if self.rotation_policy else _default_rotation_days()
         now = arrow.utcnow()
         end = now + timedelta(days=days)
 
@@ -396,14 +399,13 @@ class Certificate(db.Model):
         default instead of cross-joining against all rotation_policies rows.
         :return:
         """
-        default_days = current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
         policy_days = (
             select([RotationPolicy.days])
             .where(RotationPolicy.id == cls.rotation_policy_id)
             .correlate(cls)
             .scalar_subquery()
         )
-        effective_days = func.coalesce(policy_days, literal(default_days))
+        effective_days = func.coalesce(policy_days, literal(_default_rotation_days()))
         return case(
             [(extract("day", cls.not_after - func.now()) <= effective_days, True)],
             else_=False,
