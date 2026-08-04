@@ -9,6 +9,7 @@
 from datetime import timedelta
 
 import arrow
+import json
 from cryptography import x509
 from flask import current_app
 from idna.core import InvalidCodepoint
@@ -476,6 +477,17 @@ class CertificateAssociation(db.Model):
         self.ports = ports
 
 
+def _datacenter_from_description(description):
+    """Return the datacenter value from a plugin description JSON, or None."""
+    if not description:
+        return None
+    try:
+        data = json.loads(description)
+        return data.get("datacenter") if isinstance(data, dict) else None
+    except (ValueError, TypeError):
+        return None
+
+
 @event.listens_for(Certificate.destinations, "append")
 def update_destinations(target, value, initiator):
     """
@@ -513,16 +525,15 @@ def update_destinations(target, value, initiator):
         capture_exception()
         raise
 
-    metrics.send(
-        "destination_upload",
-        "counter",
-        1,
-        metric_tags={
-            "status": status,
-            "certificate": target.name,
-            "destination": value.label,
-        },
-    )
+    metric_tags = {
+        "status": status,
+        "certificate": target.name,
+        "destination": value.label,
+    }
+    datacenter = _datacenter_from_description(value.description)
+    if datacenter:
+        metric_tags["datacenter"] = datacenter
+    metrics.send("destination_upload", "counter", 1, metric_tags=metric_tags)
 
 
 @event.listens_for(Certificate.replaces, "append")

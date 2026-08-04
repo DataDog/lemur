@@ -187,6 +187,7 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
             "old_certificate_name": str(old_certificate.name),
             "new_certificate_name": str(new_certificate.name),
             "endpoint": str(endpoint.dnsname),
+            **({"source": str(endpoint.source.label)} if endpoint.source else {}),
         },
     )
 
