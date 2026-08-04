@@ -21,6 +21,8 @@ from sqlalchemy import (
     String,
     DefaultClause,
     func,
+    literal,
+    select,
     Column,
     Text,
     Boolean,
@@ -373,11 +375,14 @@ class Certificate(db.Model):
     def in_rotation_window(self):
         """
         Determines if a certificate is available for rotation based
-        on the rotation policy associated.
+        on the rotation policy associated. Certs without an explicit policy
+        fall back to LEMUR_DEFAULT_ROTATION_POLICY_DAYS (default 60).
         :return:
         """
+        default_days = current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
+        days = self.rotation_policy.days if self.rotation_policy else default_days
         now = arrow.utcnow()
-        end = now + timedelta(days=self.rotation_policy.days)
+        end = now + timedelta(days=days)
 
         if self.not_after <= end:
             return True
@@ -386,11 +391,21 @@ class Certificate(db.Model):
     def in_rotation_window(cls):
         """
         Determines if a certificate is available for rotation based
-        on the rotation policy associated.
+        on the rotation policy associated. Uses a correlated subquery +
+        COALESCE so certs with NULL rotation_policy_id use the configured
+        default instead of cross-joining against all rotation_policies rows.
         :return:
         """
+        default_days = current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
+        policy_days = (
+            select([RotationPolicy.days])
+            .where(RotationPolicy.id == cls.rotation_policy_id)
+            .correlate(cls)
+            .scalar_subquery()
+        )
+        effective_days = func.coalesce(policy_days, literal(default_days))
         return case(
-            [(extract("day", cls.not_after - func.now()) <= RotationPolicy.days, True)],
+            [(extract("day", cls.not_after - func.now()) <= effective_days, True)],
             else_=False,
         )
 
