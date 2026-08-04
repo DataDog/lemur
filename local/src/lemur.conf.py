@@ -287,5 +287,5 @@ else:
     LEMUR_DISABLE_DESTINATION_UPLOADS = os.environ.get("LEMUR_DISABLE_DESTINATION_UPLOADS", "False") == "True"
 
 # Number of days before expiry that a cert with no explicit rotation policy enters
-# the rotation window. Industry convention for 1-year certs is 60 days.
-LEMUR_DEFAULT_ROTATION_POLICY_DAYS = int(os.environ.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60))
+# the rotation window. Default is 60 days; override via LEMUR_DEFAULT_ROTATION_POLICY_DAYS env var.
+# LEMUR_DEFAULT_ROTATION_POLICY_DAYS = int(os.environ.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60))
