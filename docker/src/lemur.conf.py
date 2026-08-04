@@ -231,3 +231,7 @@ ACME_DNS_PROVIDER_TYPES = {"items": [
 
 # Authority plugins which support revocation
 SUPPORTED_REVOCATION_AUTHORITY_PLUGINS = ['acme-issuer']
+
+# Number of days before expiry that a cert with no explicit rotation policy enters
+# the rotation window. Industry convention for 1-year certs is 60 days.
+LEMUR_DEFAULT_ROTATION_POLICY_DAYS = int(os.environ.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60))

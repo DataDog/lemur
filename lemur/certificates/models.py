@@ -23,6 +23,8 @@ from sqlalchemy import (
     Text,
     Boolean,
     Index,
+    literal,
+    select,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.associationproxy import association_proxy
@@ -355,11 +357,14 @@ class Certificate(BaseModel):
     def in_rotation_window(self):
         """
         Determines if a certificate is available for rotation based
-        on the rotation policy associated.
+        on the rotation policy associated. Certs without an explicit
+        rotation policy fall back to LEMUR_DEFAULT_ROTATION_POLICY_DAYS (default 60).
         :return:
         """
+        default_days = current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
+        days = self.rotation_policy.days if self.rotation_policy else default_days
         now = arrow.utcnow()
-        end = now + timedelta(days=self.rotation_policy.days)
+        end = now + timedelta(days=days)
 
         if self.not_after <= end:
             return True
@@ -368,11 +373,23 @@ class Certificate(BaseModel):
     def in_rotation_window(cls):
         """
         Determines if a certificate is available for rotation based
-        on the rotation policy associated.
+        on the rotation policy associated. Uses an explicit join on
+        rotation_policy_id; certs with no policy get LEMUR_DEFAULT_ROTATION_POLICY_DAYS
+        via COALESCE (resolved at app startup to avoid cross-joins).
         :return:
         """
+        from flask import current_app
+
+        default_days = current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
+        policy_days = (
+            select([RotationPolicy.days])
+            .where(RotationPolicy.id == cls.rotation_policy_id)
+            .correlate(cls)
+            .scalar_subquery()
+        )
+        effective_days = func.coalesce(policy_days, literal(default_days))
         return case(
-            [(extract("day", cls.not_after - func.now()) <= RotationPolicy.days, True)],
+            [(extract("day", cls.not_after - func.now()) <= effective_days, True)],
             else_=False,
         )
 
