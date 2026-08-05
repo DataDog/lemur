@@ -16,3 +16,7 @@ DEBUG = False
 
 LOG_LEVEL = "DEBUG"
 LOG_FILE = "lemur.log"
+
+# Days before expiry used when seeding the default RotationPolicy row (lemur create_config)
+# and as the fallback window for certs with no rotation_policy_id (see certificates/models.py).
+LEMUR_DEFAULT_ROTATION_INTERVAL = 30

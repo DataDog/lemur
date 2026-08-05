@@ -286,6 +286,4 @@ if os.environ.get('ENV', 'prod') == 'dev':
 else:
     LEMUR_DISABLE_DESTINATION_UPLOADS = os.environ.get("LEMUR_DISABLE_DESTINATION_UPLOADS", "False") == "True"
 
-# LEMUR_DEFAULT_ROTATION_INTERVAL controls both the default RotationPolicy row created at init
-# (see lemur/manage.py) and the fallback window for certs with no rotation_policy_id.
 # LEMUR_DEFAULT_ROTATION_INTERVAL = int(os.environ.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 30))

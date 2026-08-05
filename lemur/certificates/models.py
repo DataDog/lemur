@@ -380,7 +380,7 @@ class Certificate(db.Model):
         """
         Determines if a certificate is available for rotation based
         on the rotation policy associated. Certs without an explicit policy
-        fall back to LEMUR_DEFAULT_ROTATION_POLICY_DAYS.
+        fall back to LEMUR_DEFAULT_ROTATION_INTERVAL.
         :return:
         """
         days = self.rotation_policy.days if self.rotation_policy else _default_rotation_days()
