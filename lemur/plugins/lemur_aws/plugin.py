@@ -42,7 +42,7 @@ from lemur.common.utils import check_validation
 from lemur.extensions import metrics
 from lemur.plugins import lemur_aws as aws, ExpirationNotificationPlugin
 from lemur.plugins.bases import DestinationPlugin, ExportDestinationPlugin, SourcePlugin
-from lemur.plugins.lemur_aws import iam, s3, elb, ec2, sns, cloudfront, acm
+from lemur.plugins.lemur_aws import iam, s3, elb, ec2, sns, cloudfront, acm, apigateway
 
 
 def get_region_from_dns(dns):
@@ -296,6 +296,58 @@ def get_acm_distribution_endpoint(account_number, distrib_dict):
         cert,
         dict(name=acm_arn, path="", registry_type="acm"),
     )
+
+
+def _apigateway_region_from_dnsname(dnsname):
+    """Region of a regional API Gateway custom domain, parsed from its dnsname.
+
+    Regional custom domains resolve to <api-id>.execute-api.<region>.amazonaws.com.
+    """
+    return dnsname.split(".execute-api.")[1].split(".")[0]
+
+
+def _apigateway_endpoint(domain_dict, primary_certificate):
+    """Builds an API Gateway custom-domain endpoint dict for the ACM source plugin."""
+    policy = dict(name="apigateway-none", ciphers=[])
+    security_policy = domain_dict.get("securityPolicy")
+    if security_policy:
+        policy = dict(name=f"apigateway-{security_policy}", ciphers=[security_policy])
+
+    return dict(
+        name=domain_dict["domainName"],
+        dnsname=domain_dict["regionalDomainName"],
+        aliases=[],
+        type="apigateway",
+        port=443,
+        primary_certificate=primary_certificate,
+        policy=policy,
+    )
+
+
+def get_acm_apigateway_endpoint(account_number, domain_dict):
+    """
+    Constructs endpoint data for an ACM-backed API Gateway custom domain, or None if the
+    domain is not a lemur-managed REGIONAL custom domain.
+
+    Only REGIONAL domains are handled: they reference a same-region ACM cert via
+    regionalCertificateArn, so we can reimport in place to rotate. EDGE-optimized domains
+    (cert in us-east-1 behind an API-Gateway-managed CloudFront distribution) are skipped.
+    :param account_number:
+    :param domain_dict:
+    :return: an endpoint dict or None
+    """
+    acm_arn = domain_dict.get("regionalCertificateArn")
+    if not acm_arn:
+        return None
+
+    # Only track domains lemur manages (the lemur.managed guard tag), same as CloudFront.
+    # The sync matches this ARN to the lemur certificate by serial via
+    # get_certificate_by_name, the same path CloudFront uses.
+    region = acm_arn.split(":")[3]
+    if not acm.is_lemur_managed(acm_arn, account_number=account_number, region=region):
+        return None
+
+    return _apigateway_endpoint(domain_dict, dict(name=acm_arn, path="", registry_type="acm"))
 
 
 class AWSSourcePlugin(SourcePlugin):
@@ -726,13 +778,15 @@ class ACMSourcePlugin(SourcePlugin):
     def get_endpoints(self, options, **kwargs):
         endpoints = []
         account_number = self.get_option("accountNumber", options)
+
+        # CloudFront distributions (global).
         try:
             distributions = cloudfront.get_all_distributions(
                 account_number=account_number
             )
         except Exception:  # noqa
             capture_exception()
-            return endpoints
+            distributions = []
 
         for d in distributions:
             try:
@@ -742,23 +796,62 @@ class ACMSourcePlugin(SourcePlugin):
             except Exception:  # noqa
                 capture_exception()
                 continue
+
+        # API Gateway custom domains (regional): enumerate per region.
+        regions = self.get_option("regions", options)
+        if not regions:
+            regions = ec2.get_regions(account_number=account_number)
+        else:
+            regions = "".join(regions.split()).split(",")
+
+        for region in regions:
+            try:
+                domain_names = apigateway.get_all_domain_names(
+                    account_number=account_number, region=region
+                )
+            except Exception:  # noqa
+                capture_exception()
+                continue
+
+            for dn in domain_names:
+                try:
+                    endpoint = get_acm_apigateway_endpoint(account_number, dn)
+                    if endpoint:
+                        endpoints.append(endpoint)
+                except Exception:  # noqa
+                    capture_exception()
+                    continue
+
         return endpoints
 
     def update_endpoint(self, endpoint, certificate):
         options = endpoint.source.options
         account_number = self.get_option("accountNumber", options)
-        if endpoint.type != "cloudfront" or endpoint.registry_type != "acm":
+        if endpoint.registry_type != "acm":
             raise NotImplementedError(
                 f"ACM source cannot rotate {endpoint.registry_type} {endpoint.type} endpoints"
             )
-        # Reimport the rotated cert into the distribution's own ACM ARN. Replacing the
-        # material in place means CloudFront serves the new cert with no
-        # UpdateDistribution call, which is what continuous deployment rejects
-        # (IllegalUpdate).
-        distribution = cloudfront.get_distribution(
-            endpoint.name, account_number=account_number
-        )
-        arn = distribution["ViewerCertificate"]["ACMCertificateArn"]
+
+        # Reimport the rotated cert into the endpoint's own ACM ARN. Replacing the
+        # material in place means the fronting service serves the new cert with no
+        # Update* call: for CloudFront that avoids the IllegalUpdate continuous
+        # deployment rejects, and for API Gateway it avoids an UpdateDomainName.
+        if endpoint.type == "cloudfront":
+            distribution = cloudfront.get_distribution(
+                endpoint.name, account_number=account_number
+            )
+            arn = distribution["ViewerCertificate"]["ACMCertificateArn"]
+        elif endpoint.type == "apigateway":
+            region = _apigateway_region_from_dnsname(endpoint.dnsname)
+            domain = apigateway.get_domain_name(
+                endpoint.name, account_number=account_number, region=region
+            )
+            arn = domain.get("regionalCertificateArn")
+        else:
+            raise NotImplementedError(
+                f"ACM source cannot rotate {endpoint.registry_type} {endpoint.type} endpoints"
+            )
+
         acm.upload_cert(
             certificate.name,
             certificate.body,
@@ -859,9 +952,10 @@ class ACMDestinationPlugin(DestinationPlugin):
     ]
 
     def upload(self, name, body, private_key, cert_chain, options, **kwargs):
-        # Imports the certificate into ACM as a new certificate (ACM assigns the ARN).
-        # In-place reimport for rotating an existing CloudFront distribution is handled
-        # by the ACM source's update_endpoint, where the target ARN is known.
+        # Imports the certificate into ACM. The import is idempotent per Lemur name:
+        # the first push tags the cert (lemur.managed + lemur.name) and lets ACM assign
+        # the ARN; subsequent pushes of the same name reimport into that same ARN in
+        # place rather than creating a duplicate (see acm.upload_cert).
         acm.upload_cert(
             name,
             body,

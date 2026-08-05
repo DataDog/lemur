@@ -69,11 +69,28 @@ def upload_cert(name, body, private_key, cert_chain=None, certificate_arn=None, 
 
     metrics.send("upload_acm_cert", "counter", 1, metric_tags={"name": name})
 
+    # Make the push idempotent, the way the IAM destination is. IAM keys on the cert
+    # name (ServerCertificateName) so re-uploading the same cert is a no-op; ACM has no
+    # name, only ARNs, so we tag each import with the Lemur name and look it up here. If
+    # we already imported a cert for this name, reimport into that same ARN in place
+    # instead of creating a duplicate.
+    if not certificate_arn:
+        certificate_arn = _find_managed_cert_arn(client, name)
+
     params = dict(Certificate=str(body), PrivateKey=str(private_key))
     if cert_chain:
         params["CertificateChain"] = str(cert_chain)
     if certificate_arn:
+        # Reimport in place: preserves the ARN and its AWS service associations. ACM
+        # rejects Tags on reimport (the cert already carries them from its first import).
         params["CertificateArn"] = certificate_arn
+    else:
+        # First import for this name: tag it so Lemur recognizes it as managed
+        # (is_lemur_managed) and can find it for the idempotent reimport above.
+        params["Tags"] = [
+            {"Key": MANAGED_TAG, "Value": "true"},
+            {"Key": NAME_TAG, "Value": name},
+        ]
 
     try:
         return client.import_certificate(**params)
@@ -183,11 +200,33 @@ def get_all_certificates(**kwargs):
 
 
 MANAGED_TAG = "lemur.managed"
+NAME_TAG = "lemur.name"
 
 
 def _has_managed_tag(tags):
     """True if an ACM Tags list contains lemur.managed = true."""
     return any(t["Key"] == MANAGED_TAG and t.get("Value") == "true" for t in tags)
+
+
+def _find_managed_cert_arn(client, name):
+    """Return the ARN of the lemur.managed ACM cert tagged for this Lemur name, or None.
+
+    This is how the ACM destination emulates the IAM destination's name-based
+    idempotency: ACM has no name key, so we tag each import with lemur.name and look it
+    up here to reimport in place instead of creating a duplicate on every push. Note
+    ACM's ListCertificates is eventually consistent, so a brand-new import may not be
+    found by an immediate re-push.
+    """
+    paginator = client.get_paginator("list_certificates")
+    for page in paginator.paginate(CertificateStatuses=["ISSUED"]):
+        for summary in page.get("CertificateSummaryList", []):
+            arn = summary["CertificateArn"]
+            tags = client.list_tags_for_certificate(CertificateArn=arn).get("Tags", [])
+            if _has_managed_tag(tags) and any(
+                t["Key"] == NAME_TAG and t.get("Value") == name for t in tags
+            ):
+                return arn
+    return None
 
 
 @sts_client("acm")
