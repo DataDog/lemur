@@ -206,7 +206,7 @@ def _cloudfront_endpoint(distrib_dict, cert, primary_certificate):
     policy = dict(name="cloudfront-none", ciphers=[])
     minimum_version = cert.get("MinimumProtocolVersion")
     if minimum_version:
-        policy = dict(name=f"cloudfront-%{minimum_version}", ciphers=[minimum_version])
+        policy = dict(name=f"cloudfront-{minimum_version}", ciphers=[minimum_version])
 
     aliases = []
     if "Aliases" in distrib_dict and "Items" in distrib_dict["Aliases"]:
