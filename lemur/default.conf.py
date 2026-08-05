@@ -16,7 +16,3 @@ DEBUG = False
 
 LOG_LEVEL = "DEBUG"
 LOG_FILE = "lemur.log"
-
-# Number of days before expiry that a cert with no explicit rotation policy
-# enters the rotation window.
-LEMUR_DEFAULT_ROTATION_POLICY_DAYS = 60

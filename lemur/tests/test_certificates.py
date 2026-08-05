@@ -2013,26 +2013,30 @@ def test_send_source_destination_pairing_metrics(certificate):
 
 
 def test_default_rotation_days_respects_config_override(app):
-    """_default_rotation_days() uses the configured value, not a hard-coded one."""
+    """_default_rotation_days() uses LEMUR_DEFAULT_ROTATION_INTERVAL when set."""
     from lemur.certificates.models import _default_rotation_days
 
-    app.config["LEMUR_DEFAULT_ROTATION_POLICY_DAYS"] = 45
+    original = app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL")
+    app.config["LEMUR_DEFAULT_ROTATION_INTERVAL"] = 45
     try:
         assert _default_rotation_days() == 45
     finally:
-        app.config["LEMUR_DEFAULT_ROTATION_POLICY_DAYS"] = 60
+        if original is not None:
+            app.config["LEMUR_DEFAULT_ROTATION_INTERVAL"] = original
+        else:
+            app.config.pop("LEMUR_DEFAULT_ROTATION_INTERVAL", None)
 
 
 def test_default_rotation_days_fallback_when_key_absent(app):
-    """_default_rotation_days() returns 60 when key is absent (no KeyError)."""
+    """_default_rotation_days() returns 30 when LEMUR_DEFAULT_ROTATION_INTERVAL is absent (no KeyError)."""
     from lemur.certificates.models import _default_rotation_days
 
-    original = app.config.pop("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", None)
+    original = app.config.pop("LEMUR_DEFAULT_ROTATION_INTERVAL", None)
     try:
-        assert _default_rotation_days() == 60
+        assert _default_rotation_days() == 30
     finally:
         if original is not None:
-            app.config["LEMUR_DEFAULT_ROTATION_POLICY_DAYS"] = original
+            app.config["LEMUR_DEFAULT_ROTATION_INTERVAL"] = original
 
 
 def test_in_rotation_window_instance_null_policy_within_window(app):

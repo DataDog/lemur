@@ -286,6 +286,6 @@ if os.environ.get('ENV', 'prod') == 'dev':
 else:
     LEMUR_DISABLE_DESTINATION_UPLOADS = os.environ.get("LEMUR_DISABLE_DESTINATION_UPLOADS", "False") == "True"
 
-# Number of days before expiry that a cert with no explicit rotation policy enters
-# the rotation window. Default is 60 days; override via LEMUR_DEFAULT_ROTATION_POLICY_DAYS env var.
-# LEMUR_DEFAULT_ROTATION_POLICY_DAYS = int(os.environ.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60))
+# LEMUR_DEFAULT_ROTATION_INTERVAL controls both the default RotationPolicy row created at init
+# (see lemur/manage.py) and the fallback window for certs with no rotation_policy_id.
+# LEMUR_DEFAULT_ROTATION_INTERVAL = int(os.environ.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 30))

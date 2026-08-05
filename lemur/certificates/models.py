@@ -77,7 +77,7 @@ def get_sequence(name):
 
 
 def _default_rotation_days():
-    return current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
+    return current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 30)
 
 
 def get_or_increase_name(name, serial):
