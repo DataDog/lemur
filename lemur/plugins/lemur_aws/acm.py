@@ -151,11 +151,19 @@ def get_certificates(**kwargs):
 @retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
 def _get_certificates(**kwargs):
     metrics.send("get_acm_certificates", "counter", 1)
+    # ACM's ListCertificates only returns RSA_1024 and RSA_2048 certs unless Includes.keyTypes
+    # is set, so without this it silently skips ECC and larger RSA certs during discovery.
     return kwargs.pop("client").list_certificates(
         **kwargs,
         CertificateStatuses=[
             'ISSUED'
-        ]
+        ],
+        Includes={
+            'keyTypes': [
+                'RSA_1024', 'RSA_2048', 'RSA_3072', 'RSA_4096',
+                'EC_prime256v1', 'EC_secp384r1', 'EC_secp521r1',
+            ]
+        },
     )
 
 

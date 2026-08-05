@@ -285,3 +285,19 @@ def test_acm_source_update_endpoint_apigateway_reimports(app):
     _, kwargs = m_upload.call_args
     assert kwargs["certificate_arn"] == ARN
     assert kwargs["region"] == "us-east-1"  # region derived from the ARN
+
+
+def test_get_certificates_includes_ecc_and_large_rsa_key_types(app):
+    """ACM ListCertificates defaults to RSA_1024/2048 only; the source must pass
+    Includes.keyTypes so ECC and larger RSA certs are discovered too."""
+    from lemur.plugins.lemur_aws import acm
+
+    client = mock.Mock()
+    client.list_certificates.return_value = {"CertificateSummaryList": []}
+    acm._get_certificates(client=client)
+
+    _, kwargs = client.list_certificates.call_args
+    key_types = kwargs["Includes"]["keyTypes"]
+    assert "EC_prime256v1" in key_types  # the case that silently returned nothing
+    assert "RSA_4096" in key_types
+    assert "RSA_2048" in key_types
