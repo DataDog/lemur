@@ -57,3 +57,5 @@ lemur/tests/tmp
 
 # VSCode files
 /.vscode
+
+.worktrees/

@@ -77,7 +77,7 @@ def get_sequence(name):
 
 
 def _default_rotation_days():
-    return current_app.config["LEMUR_DEFAULT_ROTATION_POLICY_DAYS"]
+    return current_app.config.get("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", 60)
 
 
 def get_or_increase_name(name, serial):
@@ -403,7 +403,7 @@ class Certificate(db.Model):
             select([RotationPolicy.days])
             .where(RotationPolicy.id == cls.rotation_policy_id)
             .correlate(cls)
-            .scalar_subquery()
+            .as_scalar()
         )
         effective_days = func.coalesce(policy_days, literal(_default_rotation_days()))
         return case(

@@ -1041,14 +1041,13 @@ def reissue_certificate(certificate, notify=None, replace=None, user=None):
 
 
 def is_attached_to_endpoint(certificate_name, endpoint_name):
-    """
-    Find if given certificate is attached to the endpoint. Both, certificate and endpoint, are identified by name.
-    This method talks to elb and finds the real time information.
-    :param certificate_name:
-    :param endpoint_name:
-    :return: True if certificate is attached to the given endpoint, False otherwise
-    """
     endpoint = endpoint_service.get_by_name(endpoint_name)
+    if not hasattr(endpoint.source.plugin, "get_endpoint_certificate_names"):
+        current_app.logger.warning(
+            f"Source plugin {endpoint.source.plugin_name} does not implement "
+            "get_endpoint_certificate_names — assuming certificate is not attached"
+        )
+        return False
     attached_certificates = endpoint.source.plugin.get_endpoint_certificate_names(
         endpoint
     )

@@ -2005,3 +2005,82 @@ def test_send_source_destination_pairing_metrics(certificate):
     assert dst_tags_by_name["shared"]["datacenter"] == "us1.prod"
     assert dst_tags_by_name["orphan-dst"]["has_source"] == "false"
     assert "datacenter" not in dst_tags_by_name["orphan-dst"]
+
+
+# ---------------------------------------------------------------------------
+# in_rotation_window — NULL rotation_policy tests
+# ---------------------------------------------------------------------------
+
+
+def test_default_rotation_days_respects_config_override(app):
+    """_default_rotation_days() uses the configured value, not a hard-coded one."""
+    from lemur.certificates.models import _default_rotation_days
+
+    app.config["LEMUR_DEFAULT_ROTATION_POLICY_DAYS"] = 45
+    try:
+        assert _default_rotation_days() == 45
+    finally:
+        app.config["LEMUR_DEFAULT_ROTATION_POLICY_DAYS"] = 60
+
+
+def test_default_rotation_days_fallback_when_key_absent(app):
+    """_default_rotation_days() returns 60 when key is absent (no KeyError)."""
+    from lemur.certificates.models import _default_rotation_days
+
+    original = app.config.pop("LEMUR_DEFAULT_ROTATION_POLICY_DAYS", None)
+    try:
+        assert _default_rotation_days() == 60
+    finally:
+        if original is not None:
+            app.config["LEMUR_DEFAULT_ROTATION_POLICY_DAYS"] = original
+
+
+def test_in_rotation_window_instance_null_policy_within_window(app):
+    """Instance-level in_rotation_window returns True for NULL-policy cert expiring within default window."""
+    from lemur.certificates.models import Certificate
+    from unittest.mock import patch
+    import arrow
+
+    with patch("lemur.certificates.models.get_or_increase_name", return_value="cert"):
+        cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com")
+    cert.rotation_policy = None
+    cert.not_after = arrow.utcnow().shift(days=30).datetime
+
+    assert cert.in_rotation_window is True
+
+
+def test_in_rotation_window_instance_null_policy_outside_window(app):
+    """Instance-level in_rotation_window returns falsy for NULL-policy cert expiring beyond default window."""
+    from lemur.certificates.models import Certificate
+    from unittest.mock import patch
+    import arrow
+
+    with patch("lemur.certificates.models.get_or_increase_name", return_value="cert"):
+        cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com")
+    cert.rotation_policy = None
+    cert.not_after = arrow.utcnow().shift(days=90).datetime
+
+    assert not cert.in_rotation_window
+
+
+def test_in_rotation_window_class_level_null_policy(session):
+    """SQL expression includes NULL-policy cert inside default window and excludes one outside it."""
+    from lemur.certificates.models import Certificate
+    from lemur.tests.factories import CertificateFactory
+    import arrow
+
+    inside = CertificateFactory()
+    inside.rotation_policy = None
+    inside.not_after = arrow.utcnow().shift(days=30).datetime
+
+    outside = CertificateFactory()
+    outside.rotation_policy = None
+    outside.not_after = arrow.utcnow().shift(days=90).datetime
+
+    session.flush()
+
+    results = Certificate.query.filter(Certificate.in_rotation_window).all()
+    result_ids = {c.id for c in results}
+
+    assert inside.id in result_ids
+    assert outside.id not in result_ids
