@@ -180,6 +180,10 @@ def test_find_managed_cert_arn_matches_by_name():
     # a name we never imported has no managed match
     assert _find_managed_cert_arn(client, "no-such-cert") is None
 
+    # must list all key types, else ECC certs are skipped and re-imported as duplicates
+    _, pag_kwargs = paginator.paginate.call_args
+    assert "EC_prime256v1" in pag_kwargs["Includes"]["keyTypes"]
+
 
 @mock_sts()
 @mock_acm()

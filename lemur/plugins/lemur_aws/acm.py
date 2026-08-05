@@ -14,6 +14,14 @@ from sentry_sdk import capture_exception
 from lemur.extensions import metrics
 from lemur.plugins.lemur_aws.sts import sts_client
 
+# ACM's ListCertificates only returns RSA_1024/RSA_2048 by default; without Includes.keyTypes it
+# silently skips ECC and larger RSA certs. Needed for both discovery (_get_certificates) and the
+# idempotency lookup (_find_managed_cert_arn); missing it in the latter causes duplicate imports.
+ACM_KEY_TYPES = [
+    "RSA_1024", "RSA_2048", "RSA_3072", "RSA_4096",
+    "EC_prime256v1", "EC_secp384r1", "EC_secp521r1",
+]
+
 
 def retry_throttled(exception):
     """
@@ -151,19 +159,12 @@ def get_certificates(**kwargs):
 @retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
 def _get_certificates(**kwargs):
     metrics.send("get_acm_certificates", "counter", 1)
-    # ACM's ListCertificates only returns RSA_1024 and RSA_2048 certs unless Includes.keyTypes
-    # is set, so without this it silently skips ECC and larger RSA certs during discovery.
     return kwargs.pop("client").list_certificates(
         **kwargs,
         CertificateStatuses=[
             'ISSUED'
         ],
-        Includes={
-            'keyTypes': [
-                'RSA_1024', 'RSA_2048', 'RSA_3072', 'RSA_4096',
-                'EC_prime256v1', 'EC_secp384r1', 'EC_secp521r1',
-            ]
-        },
+        Includes={'keyTypes': ACM_KEY_TYPES},  # else ECC / large-RSA certs are skipped
     )
 
 
@@ -226,7 +227,10 @@ def _find_managed_cert_arn(client, name):
     found by an immediate re-push.
     """
     paginator = client.get_paginator("list_certificates")
-    for page in paginator.paginate(CertificateStatuses=["ISSUED"]):
+    for page in paginator.paginate(
+        CertificateStatuses=["ISSUED"],
+        Includes={"keyTypes": ACM_KEY_TYPES},  # else ECC certs are missed and re-imported as dups
+    ):
         for summary in page.get("CertificateSummaryList", []):
             arn = summary["CertificateArn"]
             tags = client.list_tags_for_certificate(CertificateArn=arn).get("Tags", [])
