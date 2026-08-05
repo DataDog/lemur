@@ -122,15 +122,33 @@ def test_acm_destination_upload_imports(app):
     dest = aws_plugin.ACMDestinationPlugin()
     options = [
         {"name": "accountNumber", "value": "123456789012"},
-        {"name": "region", "value": "us-east-1"},
+        {"name": "regions", "value": "us-east-1"},
     ]
     with mock.patch.object(aws_plugin.acm, "upload_cert") as m_upload:
         dest.upload("cert-name", "BODY", "KEY", "CHAIN", options)
 
     m_upload.assert_called_once()
     _, kwargs = m_upload.call_args
+    assert kwargs["region"] == "us-east-1"
     # a fresh import must NOT pin an ARN; reimport-into-existing is the source's job
     assert "certificate_arn" not in kwargs
+
+
+def test_acm_destination_upload_multi_region(app):
+    """A destination with multiple regions imports the cert once per region."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    dest = aws_plugin.ACMDestinationPlugin()
+    options = [
+        {"name": "accountNumber", "value": "123456789012"},
+        {"name": "regions", "value": "us-east-1, us-west-2"},  # whitespace tolerated
+    ]
+    with mock.patch.object(aws_plugin.acm, "upload_cert") as m_upload:
+        dest.upload("cert-name", "BODY", "KEY", "CHAIN", options)
+
+    assert m_upload.call_count == 2
+    regions = sorted(kw["region"] for _, kw in m_upload.call_args_list)
+    assert regions == ["us-east-1", "us-west-2"]
 
 
 def test_find_managed_cert_arn_matches_by_name():

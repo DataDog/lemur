@@ -944,26 +944,32 @@ class ACMDestinationPlugin(DestinationPlugin):
             "helpMessage": "Must be a valid AWS account number!",
         },
         {
-            "name": "region",
+            "name": "regions",
             "type": "str",
             "required": True,
-            "helpMessage": "AWS region to import the certificate into (e.g. us-east-1).",
+            "helpMessage": "Comma separated AWS regions to import the certificate into "
+            "(e.g. us-east-1,us-west-2). ACM certs are regional, so each region gets its own copy.",
         },
     ]
 
     def upload(self, name, body, private_key, cert_chain, options, **kwargs):
-        # Imports the certificate into ACM. The import is idempotent per Lemur name:
-        # the first push tags the cert (lemur.managed + lemur.name) and lets ACM assign
-        # the ARN; subsequent pushes of the same name reimport into that same ARN in
-        # place rather than creating a duplicate (see acm.upload_cert).
-        acm.upload_cert(
-            name,
-            body,
-            private_key,
-            cert_chain=cert_chain,
-            account_number=self.get_option("accountNumber", options),
-            region=self.get_option("region", options),
-        )
+        # Imports the certificate into ACM in each configured region. ACM certs are
+        # regional, so each region gets its own import/ARN. The import is idempotent per
+        # Lemur name within a region: the first push tags the cert (lemur.managed +
+        # lemur.name) and lets ACM assign the ARN; subsequent pushes of the same name
+        # reimport into that same ARN in place rather than creating a duplicate (see
+        # acm.upload_cert).
+        account_number = self.get_option("accountNumber", options)
+        regions = "".join(self.get_option("regions", options).split()).split(",")
+        for region in regions:
+            acm.upload_cert(
+                name,
+                body,
+                private_key,
+                cert_chain=cert_chain,
+                account_number=account_number,
+                region=region,
+            )
 
     def clean(self, certificate, options, **kwargs):
         # ACM certs are keyed by ARN (not name) and ACM refuses to delete a certificate
