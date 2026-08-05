@@ -1041,13 +1041,14 @@ def reissue_certificate(certificate, notify=None, replace=None, user=None):
 
 
 def is_attached_to_endpoint(certificate_name, endpoint_name):
+    """
+    Find if given certificate is attached to the endpoint. Both, certificate and endpoint, are identified by name.
+    This method talks to elb and finds the real time information.
+    :param certificate_name:
+    :param endpoint_name:
+    :return: True if certificate is attached to the given endpoint, False otherwise
+    """
     endpoint = endpoint_service.get_by_name(endpoint_name)
-    if not hasattr(endpoint.source.plugin, "get_endpoint_certificate_names"):
-        current_app.logger.warning(
-            f"Source plugin {endpoint.source.plugin_name} does not implement "
-            "get_endpoint_certificate_names — assuming certificate is not attached"
-        )
-        return False
     attached_certificates = endpoint.source.plugin.get_endpoint_certificate_names(
         endpoint
     )
@@ -1483,54 +1484,3 @@ def get_certificates_for_expiration_metrics(expiry_window):
 def _get_cert_expiry_in_days(cert_not_after):
     time_until_expiration = arrow.get(cert_not_after) - arrow.utcnow()
     return time_until_expiration.days
-
-
-def _parse_plugin_description(description):
-    if not description:
-        return None
-    try:
-        data = json.loads(description)
-    except (ValueError, TypeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    result = {k: data[k] for k in ("datacenter", "type") if data.get(k) is not None}
-    return result or None
-
-
-def send_source_destination_pairing_metrics():
-    """
-    Emit one gauge per source and one per destination, tagged with whether a matching
-    counterpart (by label) exists. Enables dashboard queries for source/destination parity.
-    """
-    from lemur.sources import service as source_service
-    from lemur.destinations import service as destination_service
-
-    all_sources = source_service.get_all()
-    all_destinations = destination_service.get_all()
-
-    source_labels = {s.label for s in all_sources}
-    dest_labels = {d.label for d in all_destinations}
-
-    for source in all_sources:
-        tags = {
-            "source_name": source.label,
-            "plugin_name": source.plugin_name,
-            "active": str(source.active).lower(),
-            "has_destination": str(source.label in dest_labels).lower(),
-        }
-        parsed = _parse_plugin_description(source.description)
-        if parsed:
-            tags.update(parsed)
-        metrics.send("source.paired", "gauge", 1, metric_tags=tags)
-
-    for dest in all_destinations:
-        tags = {
-            "destination_name": dest.label,
-            "plugin_name": dest.plugin_name,
-            "has_source": str(dest.label in source_labels).lower(),
-        }
-        parsed = _parse_plugin_description(dest.description)
-        if parsed:
-            tags.update(parsed)
-        metrics.send("destination.paired", "gauge", 1, metric_tags=tags)
