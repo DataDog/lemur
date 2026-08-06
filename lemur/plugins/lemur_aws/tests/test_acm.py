@@ -451,8 +451,11 @@ def test_acm_source_get_certificates_skips_excluded_region(app):
     assert [c["name"] for c in certs] == [ARN]
 
 
-def test_acm_source_get_certificates_skips_failing_region(app):
-    """A region whose ACM call raises is skipped without aborting the healthy regions."""
+def test_acm_source_get_certificates_aborts_on_failing_region(app):
+    """A region whose ACM read fails aborts the whole cert fetch (raises) rather than
+    returning a partial list. sync_certificates treats the returned list as authoritative and
+    de-associates managed certs absent from it (including their paired ACM destination), so a
+    partial list from a transient region failure would silently unlink certs from uploads."""
     from lemur.plugins.lemur_aws import plugin as aws_plugin
 
     source = aws_plugin.ACMSourcePlugin()
@@ -462,15 +465,13 @@ def test_acm_source_get_certificates_skips_failing_region(app):
     ]
 
     def fake_get_all(**kwargs):
-        if kwargs["region"] == "us-east-1":
+        if kwargs["region"] == "us-west-2":
             raise Exception("AccessDenied")
         return [{"Certificate": "BODY", "CertificateChain": "CHAIN", "name": ARN}]
 
     with mock.patch.object(aws_plugin.acm, "get_all_certificates", side_effect=fake_get_all):
-        certs = source.get_certificates(options)
-
-    # the healthy us-west-2 region still yields its cert despite us-east-1 failing
-    assert [c["name"] for c in certs] == [ARN]
+        with pytest.raises(Exception):
+            source.get_certificates(options)
 
 
 def test_acm_source_get_endpoints_skips_excluded_region_for_apigateway(app):
@@ -604,27 +605,35 @@ def test_acm_destination_opts_into_sync_as_source():
     )
 
 
-def test_retry_throttled_fails_fast_on_permanent_errors(app):
-    """retry_throttled retries throttling/transient errors but not permanent ones, and lets
-    Celery's soft time limit propagate, so an inaccessible region is skipped promptly instead
-    of retrying ~25x."""
+def test_retry_throttled_allowlists_transient_errors(app):
+    """retry_throttled is an allowlist: it retries only throttling and transient 5xx service
+    errors, fails fast on every other client error (permanent) and unknown exceptions, and
+    lets Celery's soft time limit propagate, so a bad region is skipped promptly."""
     from lemur.plugins.lemur_aws.acm import retry_throttled
     from celery.exceptions import SoftTimeLimitExceeded
     from botocore.exceptions import ClientError
 
-    def ce(code):
-        return ClientError({"Error": {"Code": code, "Message": "x"}}, "ImportCertificate")
+    def ce(code, status=400):
+        return ClientError(
+            {"Error": {"Code": code, "Message": "x"},
+             "ResponseMetadata": {"HTTPStatusCode": status}},
+            "ImportCertificate",
+        )
 
-    # transient / throttling -> retry
+    # throttling and transient 5xx -> retry
     assert retry_throttled(ce("ThrottlingException")) is True
-    assert retry_throttled(ce("ServiceUnavailable")) is True
-    # permanent -> fail fast so the ACM source can skip the region
-    assert retry_throttled(ce("AccessDenied")) is False
-    assert retry_throttled(ce("AccessDeniedException")) is False
+    assert retry_throttled(ce("RequestLimitExceeded")) is True
+    assert retry_throttled(ce("ServiceUnavailable", status=503)) is True
+    assert retry_throttled(ce("InternalFailure", status=500)) is True
+    # permanent client errors -> fail fast (allowlist, so unnamed codes fall through too)
+    assert retry_throttled(ce("AccessDeniedException", status=403)) is False
+    assert retry_throttled(ce("InvalidParameterException")) is False
+    assert retry_throttled(ce("InvalidArnException")) is False
+    assert retry_throttled(ce("LimitExceededException")) is False
     assert retry_throttled(ce("ValidationException")) is False
     assert retry_throttled(ce("NoSuchEntity")) is False
-    assert retry_throttled(ce("DeleteConflict")) is False
-    # celery soft timeout must propagate, not be swallowed by the retry loop
+    # unknown non-client exception fails fast; celery soft timeout propagates
+    assert retry_throttled(Exception("boom")) is False
     assert retry_throttled(SoftTimeLimitExceeded()) is False
 
 
