@@ -26,10 +26,12 @@ ACM_KEY_TYPES = [
 
 def retry_throttled(exception):
     """
-    Determines whether a failed ACM operation should be retried. Retries transient and
-    throttling errors, but fails fast on permanent ones so the ACM source can skip an
-    inaccessible region promptly instead of retrying ~25x (~50s), and lets Celery's soft
-    time limit propagate as the IAM/ELB predicates do.
+    Determines whether a failed ACM operation should be retried. Uses an allowlist: retries
+    only throttling and transient (5xx) service errors, and fails fast on everything else
+    (permanent client errors such as AccessDenied, InvalidParameterException, InvalidArnException,
+    ValidationException, LimitExceededException, plus unknown exceptions) so a bad or
+    inaccessible region is skipped promptly instead of retrying ~25x (~50s). Also lets Celery's
+    soft time limit propagate, as the IAM/ELB predicates do.
     :param exception:
     :return:
     """
@@ -39,22 +41,22 @@ def retry_throttled(exception):
 
     if isinstance(exception, botocore.exceptions.ClientError):
         error_code = exception.response["Error"]["Code"]
-        # Permanent errors that will never succeed on retry: fail fast. AccessDenied and
-        # ValidationException let a no-access or misconfigured region be skipped quickly
-        # rather than stalling; NoSuchEntity/DeleteConflict keep the prior fast-fail (a
-        # DeleteConflict means the cert is still attached to an entity and cannot be deleted).
-        if error_code in (
-            "NoSuchEntity",
-            "DeleteConflict",
-            "AccessDenied",
-            "AccessDeniedException",
-            "ValidationException",
-            "UnrecognizedClientException",
-        ):
-            return False
+        status_code = exception.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        throttling_codes = {
+            "Throttling",
+            "ThrottlingException",
+            "ThrottledException",
+            "RequestThrottled",
+            "RequestThrottledException",
+            "RequestLimitExceeded",
+            "TooManyRequestsException",
+            "ProvisionedThroughputExceededException",
+        }
+        if error_code in throttling_codes or (status_code is not None and status_code >= 500):
+            metrics.send("acm_retry", "counter", 1, metric_tags={"exception": str(exception)})
+            return True
 
-    metrics.send("acm_retry", "counter", 1, metric_tags={"exception": str(exception)})
-    return True
+    return False
 
 
 def get_id_from_arn(arn):
