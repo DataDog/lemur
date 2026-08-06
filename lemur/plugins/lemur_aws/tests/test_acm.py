@@ -15,6 +15,10 @@ def imported_summary(arn, status):
     return {"CertificateArn": arn, "Status": status, "Type": "IMPORTED"}
 
 
+class ResourceNotFoundException(Exception):
+    pass
+
+
 def test_get_imported_certificates_paginates_all_statuses_and_key_types():
     from lemur.plugins.lemur_aws import acm
 
@@ -94,10 +98,27 @@ def test_get_imported_certificates_propagates_retrieval_failure():
     client.list_certificates.return_value = {
         "CertificateSummaryList": [imported_summary("arn:broken", "EXPIRED")]
     }
+    client.exceptions.ResourceNotFoundException = ResourceNotFoundException
     client.get_certificate.side_effect = RuntimeError("ACM unavailable")
 
     with pytest.raises(RuntimeError, match="ACM unavailable"):
         acm._get_imported_certificates(client)
+
+
+def test_missing_certificate_policy():
+    from lemur.plugins.lemur_aws import acm
+
+    client = mock.Mock()
+    client.exceptions.ResourceNotFoundException = ResourceNotFoundException
+    client.list_certificates.return_value = {
+        "CertificateSummaryList": [imported_summary("arn:deleted", "ISSUED")]
+    }
+    client.get_certificate.side_effect = ResourceNotFoundException()
+
+    with pytest.raises(ResourceNotFoundException):
+        acm._get_imported_certificates(client)
+
+    assert acm._get_imported_certificates(client, skip_missing=True) == []
 
 
 def test_upload_cert_is_noop_when_fingerprint_exists(app):

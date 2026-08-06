@@ -27,11 +27,11 @@ def certificate_fingerprint(body):
     return parse_certificate(body).fingerprint(hashes.SHA256())
 
 
-def _get_imported_certificates(client):
+def _get_imported_certificates(client, skip_missing=False):
     """Return the complete imported-certificate inventory for an ACM client.
 
-    ACM is authoritative for source synchronization, so errors intentionally
-    propagate instead of returning a partial list.
+    Source discovery can ignore an ARN deleted between List and Get. Destination
+    deduplication keeps the default fail-closed behavior. All other errors propagate.
     """
     certificates = []
     next_token = None
@@ -47,7 +47,12 @@ def _get_imported_certificates(client):
                 continue
 
             arn = summary["CertificateArn"]
-            certificate = client.get_certificate(CertificateArn=arn)
+            try:
+                certificate = client.get_certificate(CertificateArn=arn)
+            except client.exceptions.ResourceNotFoundException:
+                if not skip_missing:
+                    raise
+                continue
             certificates.append(
                 {
                     "arn": arn,
@@ -65,7 +70,7 @@ def _get_imported_certificates(client):
 def get_imported_certificates(**kwargs):
     """Assume the configured account role and return imported ACM certificates."""
     client = kwargs.pop("client")
-    certificates = _get_imported_certificates(client)
+    certificates = _get_imported_certificates(client, skip_missing=True)
     metrics.send(
         "get_all_acm_certificates",
         "gauge",
@@ -76,7 +81,11 @@ def get_imported_certificates(**kwargs):
 
 @sts_client("acm")
 def upload_cert(body, private_key, cert_chain=None, **kwargs):
-    """Import a certificate unless its fingerprint already exists in the region."""
+    """Import a certificate unless its fingerprint already exists in the region.
+
+    ACM list results are eventually consistent, so rapid concurrent or post-timeout
+    retries can import duplicates before the first import becomes visible.
+    """
     assert isinstance(private_key, str)
     client = kwargs.pop("client")
     fingerprint = certificate_fingerprint(body)
