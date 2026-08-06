@@ -350,3 +350,73 @@ def test_get_all_certificates_paginates_by_nexttoken_and_names_by_arn(app, aws_c
 
     assert m_list.call_count == 2  # second page fetched via NextToken, not dropped
     assert sorted(c["name"] for c in certs) == [arn_a, arn_b]  # named by ARN, no collision
+
+
+def test_acm_source_get_certificates_skips_excluded_region(app):
+    """An excluded region is filtered out before ACM is ever queried."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    source = aws_plugin.ACMSourcePlugin()
+    options = [
+        {"name": "accountNumber", "value": "123456789012"},
+        {"name": "regions", "value": "us-east-1, us-west-2"},
+    ]
+
+    called_regions = []
+
+    def fake_get_all(**kwargs):
+        called_regions.append(kwargs["region"])
+        return [{"Certificate": "BODY", "CertificateChain": "CHAIN", "name": ARN}]
+
+    with mock.patch.dict(app.config, {"LEMUR_AWS_EXCLUDED_REGIONS": ["us-west-2"]}), \
+            mock.patch.object(aws_plugin.acm, "get_all_certificates", side_effect=fake_get_all):
+        certs = source.get_certificates(options)
+
+    assert called_regions == ["us-east-1"]  # excluded region never queried
+    assert [c["name"] for c in certs] == [ARN]
+
+
+def test_acm_source_get_certificates_skips_failing_region(app):
+    """A region whose ACM call raises is skipped without aborting the healthy regions."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    source = aws_plugin.ACMSourcePlugin()
+    options = [
+        {"name": "accountNumber", "value": "123456789012"},
+        {"name": "regions", "value": "us-east-1, us-west-2"},
+    ]
+
+    def fake_get_all(**kwargs):
+        if kwargs["region"] == "us-east-1":
+            raise Exception("AccessDenied")
+        return [{"Certificate": "BODY", "CertificateChain": "CHAIN", "name": ARN}]
+
+    with mock.patch.object(aws_plugin.acm, "get_all_certificates", side_effect=fake_get_all):
+        certs = source.get_certificates(options)
+
+    # the healthy us-west-2 region still yields its cert despite us-east-1 failing
+    assert [c["name"] for c in certs] == [ARN]
+
+
+def test_acm_source_get_endpoints_skips_excluded_region_for_apigateway(app):
+    """get_endpoints filters excluded regions before enumerating API Gateway domains."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    source = aws_plugin.ACMSourcePlugin()
+    options = [
+        {"name": "accountNumber", "value": "123456789012"},
+        {"name": "regions", "value": "us-east-1, us-west-2"},
+    ]
+
+    called_regions = []
+
+    def fake_domains(**kwargs):
+        called_regions.append(kwargs["region"])
+        return []
+
+    with mock.patch.dict(app.config, {"LEMUR_AWS_EXCLUDED_REGIONS": ["us-west-2"]}), \
+            mock.patch.object(aws_plugin.cloudfront, "get_all_distributions", return_value=[]), \
+            mock.patch.object(aws_plugin.apigateway, "get_all_domain_names", side_effect=fake_domains):
+        source.get_endpoints(options)
+
+    assert called_regions == ["us-east-1"]  # excluded region never enumerated

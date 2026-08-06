@@ -761,11 +761,34 @@ class ACMSourcePlugin(SourcePlugin):
         else:
             regions = "".join(regions.split()).split(",")
 
+        excluded_regions = current_app.config.get("LEMUR_AWS_EXCLUDED_REGIONS", [])
+        if excluded_regions:
+            regions = [r for r in regions if r not in excluded_regions]
+
         certificates = []
         for region in regions:
-            for c in acm.get_all_certificates(
-                account_number=account_number, region=region
-            ):
+            try:
+                region_certificates = acm.get_all_certificates(
+                    account_number=account_number, region=region
+                )
+            except Exception:  # noqa
+                current_app.logger.warning(
+                    {
+                        "message": "Failed to describe ACM certificates, skipping region",
+                        "account_number": account_number,
+                        "region": region,
+                    }
+                )
+                capture_exception()
+                metrics.send(
+                    "source_sync_fail",
+                    "counter",
+                    1,
+                    metric_tags={"source": f"{account_number}/{region}/acm"},
+                )
+                continue
+
+            for c in region_certificates:
                 certificates.append(
                     dict(
                         body=c["Certificate"],
@@ -803,6 +826,10 @@ class ACMSourcePlugin(SourcePlugin):
             regions = ec2.get_regions(account_number=account_number)
         else:
             regions = "".join(regions.split()).split(",")
+
+        excluded_regions = current_app.config.get("LEMUR_AWS_EXCLUDED_REGIONS", [])
+        if excluded_regions:
+            regions = [r for r in regions if r not in excluded_regions]
 
         for region in regions:
             try:
