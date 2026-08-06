@@ -37,8 +37,9 @@ def test_get_acm_distribution_endpoint_managed(app):
     # ARN is carried as the transient cert name; the sync resolves it to the lemur cert
     assert endpoint["primary_certificate"]["name"] == ARN
     assert endpoint["primary_certificate"]["registry_type"] == "acm"
-    # policy name derives cleanly from MinimumProtocolVersion (no stray chars)
-    assert endpoint["policy"]["name"] == "cloudfront-TLSv1.2_2021"
+    # The literal "%" is upstream behavior (Netflix #3835); kept intentionally to match
+    # upstream and avoid churning existing CloudFront endpoint policy names. Do not "fix".
+    assert endpoint["policy"]["name"] == "cloudfront-%TLSv1.2_2021"
     assert endpoint["policy"]["ciphers"] == ["TLSv1.2_2021"]
 
 
