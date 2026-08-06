@@ -38,11 +38,17 @@ from acme.errors import ClientError
 from flask import current_app
 from sentry_sdk import capture_exception
 
-from lemur.common.utils import check_validation
+from lemur.certificates.service import get_by_serial
+from lemur.common.defaults import serial
+from lemur.common.utils import (
+    check_validation,
+    find_matching_certificates_by_hash,
+    parse_certificate,
+)
 from lemur.extensions import metrics
 from lemur.plugins import lemur_aws as aws, ExpirationNotificationPlugin
 from lemur.plugins.bases import DestinationPlugin, ExportDestinationPlugin, SourcePlugin
-from lemur.plugins.lemur_aws import iam, s3, elb, ec2, sns, cloudfront
+from lemur.plugins.lemur_aws import iam, s3, elb, ec2, sns, cloudfront, acm, apigateway
 
 
 def get_region_from_dns(dns):
@@ -201,38 +207,8 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
     return endpoints
 
 
-def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict):
-    """
-    Constructs endpoint data from a distribution response, or None if it does
-    not represent a distribution Lemur cares about.
-    :param account_number:
-    :param cert_id_to_arn: map of IAM certificate IDs to ARNs
-    :param distrib_dict:
-    :return: a list of endpoint dictionaries
-    """
-
-    cert = distrib_dict["ViewerCertificate"]
-    if not cert:
-        return None
-    # Ignore distributions using the default cert for the cloudfront.net domain
-    if cert.get("CloudFrontDefaultCertificate"):
-        return None
-    # Ignore ACM certificates, since these are auto-rotated
-    if cert.get("ACMCertificateArn"):
-        return None
-
-    iam_cert_id = cert.get("IAMCertificateId")
-    if not iam_cert_id:
-        return None
-
-    cert_arn = cert_id_to_arn.get(iam_cert_id)
-    cert_name = iam.get_name_from_arn(cert_arn)
-    if not cert_name:
-        current_app.logger.warning(
-            f"get_distribution_endpoints: no IAM certificate with id {iam_cert_id}"
-        )
-        return None
-
+def _cloudfront_endpoint(distrib_dict, cert, primary_certificate):
+    """Builds a CloudFront endpoint dict shared by the IAM and ACM source plugins."""
     policy = dict(name="cloudfront-none", ciphers=[])
     minimum_version = cert.get("MinimumProtocolVersion")
     if minimum_version:
@@ -248,13 +224,136 @@ def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict):
         aliases=aliases,
         type="cloudfront",
         port=443,
-        primary_certificate=dict(
+        primary_certificate=primary_certificate,
+        policy=policy,
+    )
+
+
+def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict):
+    """
+    Constructs endpoint data for an IAM-backed CloudFront distribution, or None if it
+    does not represent a distribution the IAM source cares about. ACM-backed
+    distributions are discovered by the dedicated ACM source plugin.
+    :param account_number:
+    :param cert_id_to_arn: map of IAM certificate IDs to ARNs
+    :param distrib_dict:
+    :return: an endpoint dict or None
+    """
+    cert = distrib_dict["ViewerCertificate"]
+    if not cert:
+        return None
+    # Ignore distributions using the default cert for the cloudfront.net domain
+    if cert.get("CloudFrontDefaultCertificate"):
+        return None
+    # ACM-backed distributions are handled by the ACM source plugin.
+    if cert.get("ACMCertificateArn"):
+        return None
+
+    iam_cert_id = cert.get("IAMCertificateId")
+    if not iam_cert_id:
+        return None
+
+    cert_arn = cert_id_to_arn.get(iam_cert_id)
+    cert_name = iam.get_name_from_arn(cert_arn)
+    if not cert_name:
+        current_app.logger.warning(
+            f"get_distribution_endpoints: no IAM certificate with id {iam_cert_id}"
+        )
+        return None
+
+    return _cloudfront_endpoint(
+        distrib_dict,
+        cert,
+        dict(
             name=cert_name,
             path=iam.get_path_from_arn(cert_arn),
             registry_type=iam.get_registry_type_from_arn(cert_arn),
         ),
+    )
+
+
+def get_acm_distribution_endpoint(account_number, distrib_dict):
+    """
+    Constructs endpoint data for an ACM-backed CloudFront distribution, or None if the
+    distribution is not ACM-backed or is not lemur-managed.
+    :param account_number:
+    :param distrib_dict:
+    :return: an endpoint dict or None
+    """
+    cert = distrib_dict["ViewerCertificate"]
+    if not cert:
+        return None
+    if cert.get("CloudFrontDefaultCertificate"):
+        return None
+
+    acm_arn = cert.get("ACMCertificateArn")
+    if not acm_arn:
+        return None
+
+    # Only track ACM distributions lemur manages (the lemur.managed guard tag) so a sync
+    # doesn't reimport into other teams' ACM certs. The sync matches this ARN to the
+    # lemur certificate by serial via get_certificate_by_name, the same path IAM uses.
+    region = acm_arn.split(":")[3]
+    if not acm.is_lemur_managed(acm_arn, account_number=account_number, region=region):
+        return None
+
+    return _cloudfront_endpoint(
+        distrib_dict,
+        cert,
+        dict(name=acm_arn, path="", registry_type="acm"),
+    )
+
+
+def _apigateway_region_from_dnsname(dnsname):
+    """Region of a regional API Gateway custom domain, parsed from its dnsname.
+
+    Regional custom domains resolve to <api-id>.execute-api.<region>.amazonaws.com.
+    """
+    return dnsname.split(".execute-api.")[1].split(".")[0]
+
+
+def _apigateway_endpoint(domain_dict, primary_certificate):
+    """Builds an API Gateway custom-domain endpoint dict for the ACM source plugin."""
+    policy = dict(name="apigateway-none", ciphers=[])
+    security_policy = domain_dict.get("securityPolicy")
+    if security_policy:
+        policy = dict(name=f"apigateway-{security_policy}", ciphers=[security_policy])
+
+    return dict(
+        name=domain_dict["domainName"],
+        dnsname=domain_dict["regionalDomainName"],
+        aliases=[],
+        type="apigateway",
+        port=443,
+        primary_certificate=primary_certificate,
         policy=policy,
     )
+
+
+def get_acm_apigateway_endpoint(account_number, domain_dict):
+    """
+    Constructs endpoint data for an ACM-backed API Gateway custom domain, or None if the
+    domain is not a lemur-managed REGIONAL custom domain.
+
+    Only REGIONAL domains are handled: they reference a same-region ACM cert via
+    regionalCertificateArn, so we can reimport in place to rotate. EDGE-optimized domains
+    (cert in us-east-1 behind an API-Gateway-managed CloudFront distribution) are skipped.
+    :param account_number:
+    :param domain_dict:
+    :return: an endpoint dict or None
+    """
+    acm_arn = domain_dict.get("regionalCertificateArn")
+    if not acm_arn:
+        return None
+
+    # Only track domains lemur manages (the lemur.managed guard tag), same as CloudFront.
+    # The sync matches this ARN to the lemur certificate by serial via
+    # get_certificate_by_name, the same path CloudFront uses.
+    region = acm_arn.split(":")[3]
+    if not acm.is_lemur_managed(acm_arn, account_number=account_number, region=region):
+        return None
+
+    return _apigateway_endpoint(domain_dict, dict(name=acm_arn, path="", registry_type="acm"))
 
 
 class AWSSourcePlugin(SourcePlugin):
@@ -552,6 +651,7 @@ class AWSSourcePlugin(SourcePlugin):
 
     def get_certificate_by_name(self, certificate_name, options):
         account_number = self.get_option("accountNumber", options)
+
         # certificate name may contain path, in which case we remove it
         if "/" in certificate_name:
             certificate_name = certificate_name.split("/")[-1]
@@ -635,6 +735,253 @@ class AWSSourcePlugin(SourcePlugin):
         return certificate_names
 
 
+class ACMSourcePlugin(SourcePlugin):
+    title = "AWS-ACM"
+    slug = "aws-acm-source"
+    description = "Discovers ACM certificates and ACM-backed CloudFront distributions in an AWS account"
+    version = aws.VERSION
+
+    author = "Datadog"
+    author_url = "https://github.com/DataDog/lemur"
+
+    options = [
+        {
+            "name": "accountNumber",
+            "type": "str",
+            "required": True,
+            "validation": check_validation("^[0-9]{12,12}$"),
+            "helpMessage": "Must be a valid AWS account number!",
+        },
+        {
+            "name": "regions",
+            "type": "str",
+            "helpMessage": "Comma separated list of regions to search in, if no region is specified we look in all regions.",
+        },
+    ]
+
+    def get_certificates(self, options, **kwargs):
+        account_number = self.get_option("accountNumber", options)
+        regions = self.get_option("regions", options)
+        if not regions:
+            regions = ec2.get_regions(account_number=account_number)
+        else:
+            regions = "".join(regions.split()).split(",")
+
+        excluded_regions = current_app.config.get("LEMUR_AWS_EXCLUDED_REGIONS", [])
+        if excluded_regions:
+            regions = [r for r in regions if r not in excluded_regions]
+
+        certificates = []
+        for region in regions:
+            try:
+                region_certificates = acm.get_all_certificates(
+                    account_number=account_number, region=region
+                )
+            except Exception:  # noqa
+                # Abort the whole cert fetch rather than returning a partial list. sync_certificates
+                # treats the returned list as authoritative and removes the source (and its paired
+                # ACM destination) from any managed certificate absent from it, so a partial list
+                # from a transient region failure would silently unlink certs from future uploads.
+                # Aborting just delays the refresh to the next successful sync and keeps associations.
+                # (Endpoints differ: they expire on a TTL, so get_endpoints can skip a failed region.)
+                current_app.logger.error(
+                    {
+                        "message": "Failed to describe ACM certificates, aborting cert sync",
+                        "account_number": account_number,
+                        "region": region,
+                    }
+                )
+                capture_exception()
+                metrics.send(
+                    "source_sync_fail",
+                    "counter",
+                    1,
+                    metric_tags={"source": f"{account_number}/{region}/acm"},
+                )
+                raise
+
+            for c in region_certificates:
+                certificates.append(
+                    dict(
+                        body=c["Certificate"],
+                        chain=c.get("CertificateChain"),
+                        name=c["name"],
+                    )
+                )
+        return certificates
+
+    def get_endpoints(self, options, **kwargs):
+        endpoints = []
+        account_number = self.get_option("accountNumber", options)
+
+        # CloudFront distributions (global).
+        try:
+            distributions = cloudfront.get_all_distributions(
+                account_number=account_number
+            )
+        except Exception:  # noqa
+            capture_exception()
+            distributions = []
+
+        for d in distributions:
+            try:
+                endpoint = get_acm_distribution_endpoint(account_number, d)
+                if endpoint:
+                    endpoints.append(endpoint)
+            except Exception:  # noqa
+                capture_exception()
+                continue
+
+        # API Gateway custom domains (regional): enumerate per region.
+        regions = self.get_option("regions", options)
+        if not regions:
+            regions = ec2.get_regions(account_number=account_number)
+        else:
+            regions = "".join(regions.split()).split(",")
+
+        excluded_regions = current_app.config.get("LEMUR_AWS_EXCLUDED_REGIONS", [])
+        if excluded_regions:
+            regions = [r for r in regions if r not in excluded_regions]
+
+        for region in regions:
+            try:
+                domain_names = apigateway.get_all_domain_names(
+                    account_number=account_number, region=region
+                )
+            except Exception:  # noqa
+                capture_exception()
+                continue
+
+            for dn in domain_names:
+                try:
+                    endpoint = get_acm_apigateway_endpoint(account_number, dn)
+                    if endpoint:
+                        endpoints.append(endpoint)
+                except Exception:  # noqa
+                    capture_exception()
+                    continue
+
+        current_app.logger.info(
+            {
+                "message": "ACM source discovered endpoints",
+                "account_number": account_number,
+                "count": len(endpoints),
+                "types": sorted({e["type"] for e in endpoints}),
+            }
+        )
+        return endpoints
+
+    def update_endpoint(self, endpoint, certificate):
+        options = endpoint.source.options
+        account_number = self.get_option("accountNumber", options)
+        if endpoint.registry_type != "acm":
+            raise NotImplementedError(
+                f"ACM source cannot rotate {endpoint.registry_type} {endpoint.type} endpoints"
+            )
+
+        # Reimport the rotated cert into the endpoint's own ACM ARN. Replacing the
+        # material in place means the fronting service serves the new cert with no
+        # Update* call: for CloudFront that avoids the IllegalUpdate continuous
+        # deployment rejects, and for API Gateway it avoids an UpdateDomainName.
+        if endpoint.type == "cloudfront":
+            distribution = cloudfront.get_distribution(
+                endpoint.name, account_number=account_number
+            )
+            arn = distribution["ViewerCertificate"]["ACMCertificateArn"]
+        elif endpoint.type == "apigateway":
+            region = _apigateway_region_from_dnsname(endpoint.dnsname)
+            domain = apigateway.get_domain_name(
+                endpoint.name, account_number=account_number, region=region
+            )
+            arn = domain.get("regionalCertificateArn")
+        else:
+            raise NotImplementedError(
+                f"ACM source cannot rotate {endpoint.registry_type} {endpoint.type} endpoints"
+            )
+
+        current_app.logger.info(
+            {
+                "message": "Rotating ACM endpoint by reimporting cert in place",
+                "endpoint": endpoint.name,
+                "endpoint_type": endpoint.type,
+                "certificate_arn": arn,
+                "certificate_name": certificate.name,
+                "account_number": account_number,
+            }
+        )
+        acm.upload_cert(
+            certificate.name,
+            certificate.body,
+            certificate.private_key,
+            cert_chain=certificate.chain,
+            certificate_arn=arn,
+            account_number=account_number,
+            region=arn.split(":")[3],
+        )
+        current_app.logger.info(
+            {
+                "message": "Rotated ACM endpoint",
+                "endpoint": endpoint.name,
+                "certificate_arn": arn,
+                "certificate_name": certificate.name,
+            }
+        )
+
+    def get_certificate_by_name(self, certificate_name, options):
+        # ACM certificates are keyed by ARN. Fetch the body so the sync's find_cert can
+        # match it to the lemur certificate by serial. The region is in the ARN.
+        if not (certificate_name.startswith("arn:") and ":acm:" in certificate_name):
+            return None
+        account_number = self.get_option("accountNumber", options)
+        region = certificate_name.split(":")[3]
+        cert = acm.get_certificate(
+            certificate_name, account_number=account_number, region=region
+        )
+        if cert:
+            return dict(body=cert["Certificate"], chain=cert.get("CertificateChain"))
+        return None
+
+    def get_endpoint_certificate_names(self, endpoint):
+        # Used by the revoke flow (is_attached_to_endpoint) to check whether a certificate
+        # being revoked is still deployed on this endpoint. Returns lemur certificate names.
+        options = endpoint.source.options
+        account_number = self.get_option("accountNumber", options)
+
+        # Resolve the ACM ARN currently on the endpoint, the same way update_endpoint does.
+        if endpoint.type == "cloudfront":
+            distribution = cloudfront.get_distribution(
+                endpoint.name, account_number=account_number
+            )
+            arn = distribution["ViewerCertificate"].get("ACMCertificateArn")
+        elif endpoint.type == "apigateway":
+            region = _apigateway_region_from_dnsname(endpoint.dnsname)
+            domain = apigateway.get_domain_name(
+                endpoint.name, account_number=account_number, region=region
+            )
+            arn = domain.get("regionalCertificateArn")
+        else:
+            raise NotImplementedError()
+
+        if not arn:
+            return []
+
+        # Match the ACM cert to the lemur certificate by serial, the same binding the sync
+        # uses. We cannot use the lemur.name tag: acm.upload_cert does not re-tag on
+        # reimport, so after a rotation the tag still holds the stale first-import name.
+        cert = acm.get_certificate(
+            arn, account_number=account_number, region=arn.split(":")[3]
+        )
+        if not cert:
+            return []
+
+        # Match by serial, then filter by fingerprint, the same two steps find_cert uses:
+        # serials are only unique per issuer, so certs from different CAs can share one and
+        # a serial-only match could return a cert whose body is not actually deployed.
+        parsed = parse_certificate(cert["Certificate"])
+        matching = find_matching_certificates_by_hash(parsed, get_by_serial(serial(parsed)))
+        return [c.name for c in matching]
+
+
 class AWSDestinationPlugin(DestinationPlugin):
     title = "AWS"
     slug = "aws-destination"
@@ -682,6 +1029,79 @@ class AWSDestinationPlugin(DestinationPlugin):
     def clean(self, certificate, options, **kwargs):
         account_number = self.get_option("accountNumber", options)
         iam.delete_cert(certificate.name, account_number=account_number)
+
+
+class ACMDestinationPlugin(DestinationPlugin):
+    title = "AWS-ACM"
+    slug = "aws-acm-destination"
+    description = "Allow the uploading of certificates to AWS Certificate Manager (ACM)"
+    version = aws.VERSION
+    sync_as_source = True
+    sync_as_source_name = ACMSourcePlugin.slug
+
+    author = "Datadog"
+    author_url = "https://github.com/DataDog/lemur"
+
+    options = [
+        {
+            "name": "accountNumber",
+            "type": "str",
+            "required": True,
+            "validation": check_validation("^[0-9]{12,12}$"),
+            "helpMessage": "Must be a valid AWS account number!",
+        },
+        {
+            "name": "regions",
+            "type": "str",
+            "required": True,
+            "helpMessage": "Comma separated AWS regions to import the certificate into "
+            "(e.g. us-east-1,us-west-2). ACM certs are regional, so each region gets its own copy.",
+        },
+    ]
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        # Imports the certificate into ACM in each configured region. ACM certs are
+        # regional, so each region gets its own import/ARN. The import is idempotent per
+        # Lemur name within a region: the first push tags the cert (lemur.managed +
+        # lemur.name) and lets ACM assign the ARN; subsequent pushes of the same name
+        # reimport into that same ARN in place rather than creating a duplicate (see
+        # acm.upload_cert).
+        account_number = self.get_option("accountNumber", options)
+        regions = "".join(self.get_option("regions", options).split()).split(",")
+        current_app.logger.info(
+            {
+                "message": "Uploading certificate to ACM destination",
+                "certificate_name": name,
+                "account_number": account_number,
+                "regions": regions,
+            }
+        )
+        for region in regions:
+            acm.upload_cert(
+                name,
+                body,
+                private_key,
+                cert_chain=cert_chain,
+                account_number=account_number,
+                region=region,
+            )
+        current_app.logger.info(
+            {
+                "message": "Uploaded certificate to ACM destination in all regions",
+                "certificate_name": name,
+                "account_number": account_number,
+                "regions": regions,
+            }
+        )
+
+    def clean(self, certificate, options, **kwargs):
+        # ACM certs are keyed by ARN (not name) and ACM refuses to delete a certificate
+        # still associated with an AWS resource, so name-based cleanup isn't safe.
+        # Cleanup is handled out of band (follow-up).
+        current_app.logger.info(
+            f"aws-acm-destination clean is a no-op for {certificate.name}; "
+            "remove the ACM certificate out of band"
+        )
 
 
 class S3DestinationPlugin(ExportDestinationPlugin):
