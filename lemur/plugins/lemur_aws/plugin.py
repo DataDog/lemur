@@ -778,9 +778,15 @@ class ACMSourcePlugin(SourcePlugin):
                     account_number=account_number, region=region
                 )
             except Exception:  # noqa
-                current_app.logger.warning(
+                # Abort the whole cert fetch rather than returning a partial list. sync_certificates
+                # treats the returned list as authoritative and removes the source (and its paired
+                # ACM destination) from any managed certificate absent from it, so a partial list
+                # from a transient region failure would silently unlink certs from future uploads.
+                # Aborting just delays the refresh to the next successful sync and keeps associations.
+                # (Endpoints differ: they expire on a TTL, so get_endpoints can skip a failed region.)
+                current_app.logger.error(
                     {
-                        "message": "Failed to describe ACM certificates, skipping region",
+                        "message": "Failed to describe ACM certificates, aborting cert sync",
                         "account_number": account_number,
                         "region": region,
                     }
@@ -792,7 +798,7 @@ class ACMSourcePlugin(SourcePlugin):
                     1,
                     metric_tags={"source": f"{account_number}/{region}/acm"},
                 )
-                continue
+                raise
 
             for c in region_certificates:
                 certificates.append(
