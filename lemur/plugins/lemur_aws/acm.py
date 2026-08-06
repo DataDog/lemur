@@ -26,18 +26,31 @@ ACM_KEY_TYPES = [
 
 def retry_throttled(exception):
     """
-    Determines if this exception is due to throttling
+    Determines whether a failed ACM operation should be retried. Retries transient and
+    throttling errors, but fails fast on permanent ones so the ACM source can skip an
+    inaccessible region promptly instead of retrying ~25x (~50s), and lets Celery's soft
+    time limit propagate as the IAM/ELB predicates do.
     :param exception:
     :return:
     """
-    if isinstance(exception, botocore.exceptions.ClientError):
-        if exception.response["Error"]["Code"] == "NoSuchEntity":
-            return False
+    from celery.exceptions import SoftTimeLimitExceeded
+    if isinstance(exception, SoftTimeLimitExceeded):
+        return False
 
-        # No need to retry deletion requests if there is a DeleteConflict error.
-        # This error indicates that the certificate is still attached to an entity
-        # and cannot be deleted.
-        if exception.response["Error"]["Code"] == "DeleteConflict":
+    if isinstance(exception, botocore.exceptions.ClientError):
+        error_code = exception.response["Error"]["Code"]
+        # Permanent errors that will never succeed on retry: fail fast. AccessDenied and
+        # ValidationException let a no-access or misconfigured region be skipped quickly
+        # rather than stalling; NoSuchEntity/DeleteConflict keep the prior fast-fail (a
+        # DeleteConflict means the cert is still attached to an entity and cannot be deleted).
+        if error_code in (
+            "NoSuchEntity",
+            "DeleteConflict",
+            "AccessDenied",
+            "AccessDeniedException",
+            "ValidationException",
+            "UnrecognizedClientException",
+        ):
             return False
 
     metrics.send("acm_retry", "counter", 1, metric_tags={"exception": str(exception)})
