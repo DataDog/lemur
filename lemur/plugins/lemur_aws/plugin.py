@@ -40,7 +40,11 @@ from sentry_sdk import capture_exception
 
 from lemur.certificates.service import get_by_serial
 from lemur.common.defaults import serial
-from lemur.common.utils import check_validation, parse_certificate
+from lemur.common.utils import (
+    check_validation,
+    find_matching_certificates_by_hash,
+    parse_certificate,
+)
 from lemur.extensions import metrics
 from lemur.plugins import lemur_aws as aws, ExpirationNotificationPlugin
 from lemur.plugins.bases import DestinationPlugin, ExportDestinationPlugin, SourcePlugin
@@ -964,8 +968,12 @@ class ACMSourcePlugin(SourcePlugin):
         if not cert:
             return []
 
+        # Match by serial, then filter by fingerprint, the same two steps find_cert uses:
+        # serials are only unique per issuer, so certs from different CAs can share one and
+        # a serial-only match could return a cert whose body is not actually deployed.
         parsed = parse_certificate(cert["Certificate"])
-        return [c.name for c in get_by_serial(serial(parsed))]
+        matching = find_matching_certificates_by_hash(parsed, get_by_serial(serial(parsed)))
+        return [c.name for c in matching]
 
 
 class AWSDestinationPlugin(DestinationPlugin):
