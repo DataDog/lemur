@@ -38,7 +38,9 @@ from acme.errors import ClientError
 from flask import current_app
 from sentry_sdk import capture_exception
 
-from lemur.common.utils import check_validation
+from lemur.certificates.service import get_by_serial
+from lemur.common.defaults import serial
+from lemur.common.utils import check_validation, parse_certificate
 from lemur.extensions import metrics
 from lemur.plugins import lemur_aws as aws, ExpirationNotificationPlugin
 from lemur.plugins.bases import DestinationPlugin, ExportDestinationPlugin, SourcePlugin
@@ -928,6 +930,42 @@ class ACMSourcePlugin(SourcePlugin):
         if cert:
             return dict(body=cert["Certificate"], chain=cert.get("CertificateChain"))
         return None
+
+    def get_endpoint_certificate_names(self, endpoint):
+        # Used by the revoke flow (is_attached_to_endpoint) to check whether a certificate
+        # being revoked is still deployed on this endpoint. Returns lemur certificate names.
+        options = endpoint.source.options
+        account_number = self.get_option("accountNumber", options)
+
+        # Resolve the ACM ARN currently on the endpoint, the same way update_endpoint does.
+        if endpoint.type == "cloudfront":
+            distribution = cloudfront.get_distribution(
+                endpoint.name, account_number=account_number
+            )
+            arn = distribution["ViewerCertificate"].get("ACMCertificateArn")
+        elif endpoint.type == "apigateway":
+            region = _apigateway_region_from_dnsname(endpoint.dnsname)
+            domain = apigateway.get_domain_name(
+                endpoint.name, account_number=account_number, region=region
+            )
+            arn = domain.get("regionalCertificateArn")
+        else:
+            raise NotImplementedError()
+
+        if not arn:
+            return []
+
+        # Match the ACM cert to the lemur certificate by serial, the same binding the sync
+        # uses. We cannot use the lemur.name tag: acm.upload_cert does not re-tag on
+        # reimport, so after a rotation the tag still holds the stale first-import name.
+        cert = acm.get_certificate(
+            arn, account_number=account_number, region=arn.split(":")[3]
+        )
+        if not cert:
+            return []
+
+        parsed = parse_certificate(cert["Certificate"])
+        return [c.name for c in get_by_serial(serial(parsed))]
 
 
 class AWSDestinationPlugin(DestinationPlugin):

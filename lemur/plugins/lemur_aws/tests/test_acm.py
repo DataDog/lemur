@@ -1,4 +1,5 @@
 import boto3
+import pytest
 from moto import mock_acm, mock_sts
 from unittest import mock
 
@@ -420,3 +421,96 @@ def test_acm_source_get_endpoints_skips_excluded_region_for_apigateway(app):
         source.get_endpoints(options)
 
     assert called_regions == ["us-east-1"]  # excluded region never enumerated
+
+
+def test_acm_source_get_endpoint_certificate_names_unknown_type_raises(app):
+    """A non ACM endpoint type is not something this source can inspect."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    source = aws_plugin.ACMSourcePlugin()
+    endpoint = mock.Mock()
+    endpoint.type = "elb"
+    endpoint.source.options = [{"name": "accountNumber", "value": "123456789012"}]
+
+    with pytest.raises(NotImplementedError):
+        source.get_endpoint_certificate_names(endpoint)
+
+
+def test_acm_source_get_endpoint_certificate_names_no_arn_returns_empty(app):
+    """A cloudfront endpoint no longer ACM-backed short-circuits to [] (no ACM fetch)."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    source = aws_plugin.ACMSourcePlugin()
+    endpoint = mock.Mock()
+    endpoint.type = "cloudfront"
+    endpoint.name = "E1234567890"
+    endpoint.source.options = [{"name": "accountNumber", "value": "123456789012"}]
+
+    with mock.patch.object(
+        aws_plugin.cloudfront,
+        "get_distribution",
+        return_value={"ViewerCertificate": {"CloudFrontDefaultCertificate": True}},
+    ), mock.patch.object(aws_plugin.acm, "get_certificate") as m_get:
+        names = source.get_endpoint_certificate_names(endpoint)
+
+    assert names == []
+    assert not m_get.called  # short-circuits before fetching the cert body
+
+
+def test_acm_source_get_endpoint_certificate_names_cloudfront_by_serial(session):
+    """A cloudfront ACM endpoint resolves to the lemur cert name matched by serial, not
+    by the (stale-after-reimport) lemur.name tag."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+    from lemur.tests.factories import CertificateFactory
+    from lemur.tests.vectors import SAN_CERT_STR
+
+    cert = CertificateFactory()  # body defaults to SAN_CERT_STR, serial derived from it
+    session.commit()
+
+    source = aws_plugin.ACMSourcePlugin()
+    endpoint = mock.Mock()
+    endpoint.type = "cloudfront"
+    endpoint.name = "E1234567890"
+    endpoint.source.options = [{"name": "accountNumber", "value": "123456789012"}]
+
+    with mock.patch.object(
+        aws_plugin.cloudfront,
+        "get_distribution",
+        return_value={"ViewerCertificate": {"ACMCertificateArn": ARN}},
+    ), mock.patch.object(
+        aws_plugin.acm, "get_certificate", return_value={"Certificate": SAN_CERT_STR}
+    ):
+        names = source.get_endpoint_certificate_names(endpoint)
+
+    assert names == [cert.name]
+
+
+def test_acm_source_get_endpoint_certificate_names_apigateway_by_serial(session):
+    """An apigateway ACM endpoint resolves to the lemur cert name matched by serial, with
+    the region derived from the endpoint dnsname."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+    from lemur.tests.factories import CertificateFactory
+    from lemur.tests.vectors import SAN_CERT_STR
+
+    cert = CertificateFactory()
+    session.commit()
+
+    source = aws_plugin.ACMSourcePlugin()
+    endpoint = mock.Mock()
+    endpoint.type = "apigateway"
+    endpoint.name = "api.example.com"
+    endpoint.dnsname = "d-abc123.execute-api.us-east-1.amazonaws.com"
+    endpoint.source.options = [{"name": "accountNumber", "value": "123456789012"}]
+
+    with mock.patch.object(
+        aws_plugin.apigateway,
+        "get_domain_name",
+        return_value={"regionalCertificateArn": ARN},
+    ) as m_domain, mock.patch.object(
+        aws_plugin.acm, "get_certificate", return_value={"Certificate": SAN_CERT_STR}
+    ):
+        names = source.get_endpoint_certificate_names(endpoint)
+
+    _, d_kwargs = m_domain.call_args
+    assert d_kwargs["region"] == "us-east-1"  # region derived from the dnsname
+    assert names == [cert.name]
