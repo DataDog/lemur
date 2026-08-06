@@ -327,3 +327,26 @@ def test_get_certificates_includes_ecc_and_large_rsa_key_types(app):
     assert "EC_prime256v1" in key_types  # the case that silently returned nothing
     assert "RSA_4096" in key_types
     assert "RSA_2048" in key_types
+
+
+@mock_sts()
+def test_get_all_certificates_paginates_by_nexttoken_and_names_by_arn(app, aws_credentials):
+    """get_all_certificates follows NextToken (ACM's token, not Marker) and names each
+    cert by its ARN, so certs sharing a DomainName (renewals) don't collide in find_cert."""
+    from lemur.plugins.lemur_aws import acm
+
+    arn_a = "arn:aws:acm:us-east-1:123456789012:certificate/aaaa"
+    arn_b = "arn:aws:acm:us-east-1:123456789012:certificate/bbbb"
+    # two certs sharing a DomainName, split across two pages via NextToken
+    page1 = {
+        "CertificateSummaryList": [{"CertificateArn": arn_a, "DomainName": "dup.example.com"}],
+        "NextToken": "tok",
+    }
+    page2 = {"CertificateSummaryList": [{"CertificateArn": arn_b, "DomainName": "dup.example.com"}]}
+
+    with mock.patch.object(acm, "_get_certificates", side_effect=[page1, page2]) as m_list, \
+            mock.patch.object(acm, "_get_certificate", side_effect=lambda arn, **kw: {"Certificate": "BODY"}):
+        certs = acm.get_all_certificates(account_number="123456789012", region="us-east-1")
+
+    assert m_list.call_count == 2  # second page fetched via NextToken, not dropped
+    assert sorted(c["name"] for c in certs) == [arn_a, arn_b]  # named by ARN, no collision

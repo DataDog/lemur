@@ -8,6 +8,7 @@
 """
 import botocore
 
+from flask import current_app
 from retrying import retry
 from sentry_sdk import capture_exception
 
@@ -100,11 +101,45 @@ def upload_cert(name, body, private_key, cert_chain=None, certificate_arn=None, 
             {"Key": NAME_TAG, "Value": name},
         ]
 
+    current_app.logger.info(
+        {
+            "message": "Reimporting certificate into existing ACM ARN"
+            if certificate_arn
+            else "Importing new certificate into ACM",
+            "certificate_name": name,
+            "certificate_arn": certificate_arn,
+        }
+    )
     try:
-        return client.import_certificate(**params)
+        response = client.import_certificate(**params)
+        current_app.logger.info(
+            {
+                "message": "ACM certificate import succeeded",
+                "certificate_name": name,
+                "certificate_arn": (response or {}).get("CertificateArn"),
+                "reimport": bool(certificate_arn),
+            }
+        )
+        return response
     except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] != "EntityAlreadyExists":
+        error_code = e.response["Error"]["Code"]
+        if error_code != "EntityAlreadyExists":
+            current_app.logger.error(
+                {
+                    "message": "ACM certificate import failed",
+                    "certificate_name": name,
+                    "certificate_arn": certificate_arn,
+                    "error_code": error_code,
+                }
+            )
             raise e
+        current_app.logger.warning(
+            {
+                "message": "ACM import skipped: certificate already exists",
+                "certificate_name": name,
+                "error_code": error_code,
+            }
+        )
 
 
 @sts_client("acm")
@@ -118,11 +153,28 @@ def delete_cert(cert_arn, **kwargs):
     """
     client = kwargs.pop("client")
     metrics.send("delete_acm_cert", "counter", 1, metric_tags={"cert_arn": cert_arn})
+    current_app.logger.info(
+        {"message": "Deleting ACM certificate", "certificate_arn": cert_arn}
+    )
     try:
         client.delete_certificate(CertificateArn=cert_arn)
+        current_app.logger.info(
+            {"message": "ACM certificate deleted", "certificate_arn": cert_arn}
+        )
     except botocore.exceptions.ClientError as e:
-        if e.response["Error"]["Code"] != "NoSuchEntity":
+        error_code = e.response["Error"]["Code"]
+        if error_code != "NoSuchEntity":
+            current_app.logger.error(
+                {
+                    "message": "ACM certificate delete failed",
+                    "certificate_arn": cert_arn,
+                    "error_code": error_code,
+                }
+            )
             raise e
+        current_app.logger.warning(
+            {"message": "ACM delete skipped: certificate not found", "certificate_arn": cert_arn}
+        )
 
 
 @sts_client("acm")
@@ -197,15 +249,23 @@ def get_all_certificates(**kwargs):
                 continue
 
             certificate.update(
-                name=m["DomainName"],
+                # Use the ARN (unique per cert) as the source name, not DomainName: ACM
+                # lets many certs share a DomainName (renewals, different SANs), and
+                # find_cert matches by name before serial, so a shared name collapses them
+                # onto the first cert. The ARN is also what endpoint discovery uses.
+                name=m["CertificateArn"],
                 external_id=m["CertificateArn"]
             )
             certificates.append(certificate)
 
-        if not response.get("Marker"):
+        # ACM's ListCertificates paginates with NextToken (Marker is IAM's token).
+        if not response.get("NextToken"):
+            current_app.logger.debug(
+                {"message": "Fetched ACM certificates", "count": len(certificates)}
+            )
             return certificates
         else:
-            kwargs.update(dict(Marker=response["Marker"]))
+            kwargs.update(dict(NextToken=response["NextToken"]))
 
 
 MANAGED_TAG = "lemur.managed"

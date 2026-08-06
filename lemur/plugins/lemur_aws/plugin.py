@@ -822,6 +822,14 @@ class ACMSourcePlugin(SourcePlugin):
                     capture_exception()
                     continue
 
+        current_app.logger.info(
+            {
+                "message": "ACM source discovered endpoints",
+                "account_number": account_number,
+                "count": len(endpoints),
+                "types": sorted({e["type"] for e in endpoints}),
+            }
+        )
         return endpoints
 
     def update_endpoint(self, endpoint, certificate):
@@ -852,6 +860,16 @@ class ACMSourcePlugin(SourcePlugin):
                 f"ACM source cannot rotate {endpoint.registry_type} {endpoint.type} endpoints"
             )
 
+        current_app.logger.info(
+            {
+                "message": "Rotating ACM endpoint by reimporting cert in place",
+                "endpoint": endpoint.name,
+                "endpoint_type": endpoint.type,
+                "certificate_arn": arn,
+                "certificate_name": certificate.name,
+                "account_number": account_number,
+            }
+        )
         acm.upload_cert(
             certificate.name,
             certificate.body,
@@ -860,6 +878,14 @@ class ACMSourcePlugin(SourcePlugin):
             certificate_arn=arn,
             account_number=account_number,
             region=arn.split(":")[3],
+        )
+        current_app.logger.info(
+            {
+                "message": "Rotated ACM endpoint",
+                "endpoint": endpoint.name,
+                "certificate_arn": arn,
+                "certificate_name": certificate.name,
+            }
         )
 
     def get_certificate_by_name(self, certificate_name, options):
@@ -961,6 +987,14 @@ class ACMDestinationPlugin(DestinationPlugin):
         # acm.upload_cert).
         account_number = self.get_option("accountNumber", options)
         regions = "".join(self.get_option("regions", options).split()).split(",")
+        current_app.logger.info(
+            {
+                "message": "Uploading certificate to ACM destination",
+                "certificate_name": name,
+                "account_number": account_number,
+                "regions": regions,
+            }
+        )
         for region in regions:
             acm.upload_cert(
                 name,
@@ -970,6 +1004,14 @@ class ACMDestinationPlugin(DestinationPlugin):
                 account_number=account_number,
                 region=region,
             )
+        current_app.logger.info(
+            {
+                "message": "Uploaded certificate to ACM destination in all regions",
+                "certificate_name": name,
+                "account_number": account_number,
+                "regions": regions,
+            }
+        )
 
     def clean(self, certificate, options, **kwargs):
         # ACM certs are keyed by ARN (not name) and ACM refuses to delete a certificate

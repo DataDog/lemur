@@ -5,6 +5,7 @@
 .. moduleauthor:: <lemur@datadoghq.com>
 """
 
+from flask import current_app
 from sentry_sdk import capture_exception
 
 from lemur.extensions import metrics
@@ -27,8 +28,12 @@ def get_all_domain_names(**kwargs):
         paginator = client.get_paginator("get_domain_names")
         for page in paginator.paginate():
             domains += page.get("items", [])
+        current_app.logger.debug(
+            {"message": "Fetched API Gateway custom domain names", "count": len(domains)}
+        )
         return domains
     except Exception:  # noqa
+        current_app.logger.error({"message": "Failed listing API Gateway domain names"})
         metrics.send("list_all_apigateway_domain_names_error", "counter", 1)
         capture_exception()
         raise
@@ -49,6 +54,9 @@ def get_domain_name(domain_name, **kwargs):
     try:
         return client.get_domain_name(domainName=domain_name)
     except Exception:  # noqa
+        current_app.logger.error(
+            {"message": "Failed fetching API Gateway domain", "domain_name": domain_name}
+        )
         metrics.send("get_apigateway_domain_name_error", "counter", 1)
         capture_exception()
         raise
