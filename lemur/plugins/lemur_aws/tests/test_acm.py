@@ -514,3 +514,17 @@ def test_acm_source_get_endpoint_certificate_names_apigateway_by_serial(session)
     _, d_kwargs = m_domain.call_args
     assert d_kwargs["region"] == "us-east-1"  # region derived from the dnsname
     assert names == [cert.name]
+
+
+def test_acm_destination_opts_into_sync_as_source():
+    """Adding the ACM destination auto-creates an ACM source (add_destination_to_sources
+    keys off these attributes), pointed at the ACM source plugin."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    assert aws_plugin.ACMDestinationPlugin.sync_as_source is True
+    assert aws_plugin.ACMDestinationPlugin.sync_as_source_name == "aws-acm-source"
+    # the target name must be the ACM source slug, not a stale literal
+    assert (
+        aws_plugin.ACMDestinationPlugin.sync_as_source_name
+        == aws_plugin.ACMSourcePlugin.slug
+    )

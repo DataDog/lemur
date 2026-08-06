@@ -1022,6 +1022,8 @@ class ACMDestinationPlugin(DestinationPlugin):
     slug = "aws-acm-destination"
     description = "Allow the uploading of certificates to AWS Certificate Manager (ACM)"
     version = aws.VERSION
+    sync_as_source = True
+    sync_as_source_name = ACMSourcePlugin.slug
 
     author = "Datadog"
     author_url = "https://github.com/DataDog/lemur"
