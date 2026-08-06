@@ -71,6 +71,80 @@ def test_iam_get_distribution_endpoint_skips_acm(app):
     assert aws_plugin.get_distribution_endpoint("123456789012", {}, distribution) is None
 
 
+def test_iam_get_distribution_endpoint_dict_is_unchanged(app):
+    """Characterization: pin the exact endpoint dict the IAM-backed CloudFront path emits
+    through the shared _cloudfront_endpoint helper (PR #333 refactor). This is the path the
+    existing AWS source uses in commercial prod, so any drift (policy name, aliases,
+    primary_certificate shape) is a regression. The '%' in the policy name is upstream
+    behavior (Netflix #3835) and must be preserved."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    distribution = {
+        "Id": "E2",
+        "DomainName": "d2.cloudfront.net",
+        "Aliases": {"Quantity": 1, "Items": ["cf.example.net"]},
+        "ViewerCertificate": {
+            "IAMCertificateId": "ASCAEXAMPLE123",
+            "MinimumProtocolVersion": "TLSv1.2_2021",
+        },
+    }
+    cert_id_to_arn = {
+        "ASCAEXAMPLE123": (
+            "arn:aws:iam::123456789012:server-certificate/cloudfront/"
+            "tttt2.example.net-DigiCert-20250101-20260101"
+        )
+    }
+
+    endpoint = aws_plugin.get_distribution_endpoint(
+        "123456789012", cert_id_to_arn, distribution
+    )
+
+    assert endpoint == {
+        "name": "E2",
+        "dnsname": "d2.cloudfront.net",
+        "aliases": ["cf.example.net"],
+        "type": "cloudfront",
+        "port": 443,
+        "primary_certificate": {
+            "name": "tttt2.example.net-DigiCert-20250101-20260101",
+            "path": "cloudfront",
+            "registry_type": "iam",
+        },
+        "policy": {"name": "cloudfront-%TLSv1.2_2021", "ciphers": ["TLSv1.2_2021"]},
+    }
+
+
+def test_get_acm_distribution_endpoint_dict_is_unchanged(app):
+    """Characterization: pin the exact endpoint dict the ACM-backed CloudFront path emits
+    through the shared _cloudfront_endpoint helper. Complements
+    test_get_acm_distribution_endpoint_managed with a full-dict assertion so drift in
+    dnsname, aliases, port, or any added/removed field is caught. The ACM path carries the
+    ARN as the transient certificate name; the sync resolves it to the lemur cert by serial."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    distribution = {
+        "Id": "E1234567890",
+        "DomainName": "d123.cloudfront.net",
+        "Aliases": {"Quantity": 1, "Items": ["registry.example.com"]},
+        "ViewerCertificate": {
+            "ACMCertificateArn": ARN,
+            "MinimumProtocolVersion": "TLSv1.2_2021",
+        },
+    }
+    with mock.patch.object(aws_plugin.acm, "is_lemur_managed", return_value=True):
+        endpoint = aws_plugin.get_acm_distribution_endpoint("123456789012", distribution)
+
+    assert endpoint == {
+        "name": "E1234567890",
+        "dnsname": "d123.cloudfront.net",
+        "aliases": ["registry.example.com"],
+        "type": "cloudfront",
+        "port": 443,
+        "primary_certificate": {"name": ARN, "path": "", "registry_type": "acm"},
+        "policy": {"name": "cloudfront-%TLSv1.2_2021", "ciphers": ["TLSv1.2_2021"]},
+    }
+
+
 def test_acm_source_get_certificate_by_name_returns_body(app):
     """An ACM ARN resolves to the cert body so the sync's find_cert can match by serial."""
     from lemur.plugins.lemur_aws import plugin as aws_plugin
@@ -528,3 +602,58 @@ def test_acm_destination_opts_into_sync_as_source():
         aws_plugin.ACMDestinationPlugin.sync_as_source_name
         == aws_plugin.ACMSourcePlugin.slug
     )
+
+
+def test_retry_throttled_fails_fast_on_permanent_errors(app):
+    """retry_throttled retries throttling/transient errors but not permanent ones, and lets
+    Celery's soft time limit propagate, so an inaccessible region is skipped promptly instead
+    of retrying ~25x."""
+    from lemur.plugins.lemur_aws.acm import retry_throttled
+    from celery.exceptions import SoftTimeLimitExceeded
+    from botocore.exceptions import ClientError
+
+    def ce(code):
+        return ClientError({"Error": {"Code": code, "Message": "x"}}, "ImportCertificate")
+
+    # transient / throttling -> retry
+    assert retry_throttled(ce("ThrottlingException")) is True
+    assert retry_throttled(ce("ServiceUnavailable")) is True
+    # permanent -> fail fast so the ACM source can skip the region
+    assert retry_throttled(ce("AccessDenied")) is False
+    assert retry_throttled(ce("AccessDeniedException")) is False
+    assert retry_throttled(ce("ValidationException")) is False
+    assert retry_throttled(ce("NoSuchEntity")) is False
+    assert retry_throttled(ce("DeleteConflict")) is False
+    # celery soft timeout must propagate, not be swallowed by the retry loop
+    assert retry_throttled(SoftTimeLimitExceeded()) is False
+
+
+def test_acm_source_get_endpoint_certificate_names_filters_by_fingerprint(session):
+    """Two lemur certs can share a serial (serials are unique only per issuer); only the one
+    whose body actually matches the deployed ACM cert is returned, via the fingerprint filter
+    find_cert also applies."""
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+    from lemur.tests.factories import CertificateFactory
+    from lemur.tests.vectors import SAN_CERT_STR, WILDCARD_CERT_STR
+
+    deployed = CertificateFactory(body=SAN_CERT_STR)    # body actually on the ACM ARN
+    other = CertificateFactory(body=WILDCARD_CERT_STR)  # collides on serial, different CA
+    session.commit()
+
+    source = aws_plugin.ACMSourcePlugin()
+    endpoint = mock.Mock()
+    endpoint.type = "cloudfront"
+    endpoint.name = "E1234567890"
+    endpoint.source.options = [{"name": "accountNumber", "value": "145023129460"}]
+
+    with mock.patch.object(
+        aws_plugin.cloudfront, "get_distribution",
+        return_value={"ViewerCertificate": {"ACMCertificateArn": ARN}},
+    ), mock.patch.object(
+        aws_plugin.acm, "get_certificate", return_value={"Certificate": SAN_CERT_STR}
+    ), mock.patch.object(
+        aws_plugin, "get_by_serial", return_value=[deployed, other]
+    ):
+        names = source.get_endpoint_certificate_names(endpoint)
+
+    assert names == [deployed.name]  # 'other' excluded by the fingerprint filter
