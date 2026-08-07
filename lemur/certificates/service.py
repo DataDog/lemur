@@ -1423,6 +1423,8 @@ def send_certificate_expiration_metrics(expiry_window=None):
                     "has_been_replaced": has_been_replaced,
                     "issuer": certificate.issuer or "unknown",
                     "signing_algorithm": certificate.signing_algorithm or "unknown",
+                    "rotation": bool(certificate.rotation),
+                    "authority": certificate.authority.name if certificate.authority else None,
                 },
             )
             for destination in certificate.destinations:
