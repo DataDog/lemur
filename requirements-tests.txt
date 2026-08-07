@@ -122,8 +122,8 @@ botocore==1.42.73
     #   s3transfer
 celery[redis]==5.6.2
     # via
-    #   -r requirements.txt
     #   -r requirements-tests.in
+    #   -r requirements.txt
 cert-manager==3.0.0
     # via -r requirements.txt
 certbot==5.4.0
@@ -184,8 +184,8 @@ coverage==7.13.5
     # via -r requirements-tests.in
 cryptography==43.0.1
     # via
-    #   -r requirements.txt
     #   -r requirements-tests.in
+    #   -r requirements.txt
     #   acme
     #   azure-identity
     #   azure-keyvault-keys
@@ -261,7 +261,7 @@ flask-limiter==4.1.1
     # via -r requirements.txt
 flask-mail==0.10.0
     # via -r requirements.txt
-flask-migrate==2.7.0
+flask-migrate==4.1.0
     # via -r requirements.txt
 flask-principal==0.4.0
     # via -r requirements.txt
@@ -706,8 +706,8 @@ sentry-sdk==2.55.0
     # via -r requirements.txt
 simplejson==3.20.2
     # via
-    #   -r requirements.txt
     #   -r requirements-tests.in
+    #   -r requirements.txt
 six==1.17.0
     # via
     #   -r requirements.txt

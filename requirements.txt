@@ -173,7 +173,7 @@ flask-limiter==4.1.1
     # via -r requirements-base.in
 flask-mail==0.10.0
     # via -r requirements-base.in
-flask-migrate==2.7.0
+flask-migrate==4.1.0
     # via
     #   -r requirements-base.in
     #   -r requirements-datadog.in
