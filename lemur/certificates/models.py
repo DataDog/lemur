@@ -77,7 +77,7 @@ def get_sequence(name):
 
 
 def _default_rotation_days():
-    val = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 30)
+    val = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
     try:
         days = int(val)
         if days > 0:
@@ -85,9 +85,9 @@ def _default_rotation_days():
     except (TypeError, ValueError):
         pass
     current_app.logger.warning(
-        "LEMUR_DEFAULT_ROTATION_INTERVAL is invalid (%r); falling back to 30 days", val
+        "LEMUR_DEFAULT_ROTATION_INTERVAL is invalid (%r); falling back to 60 days", val
     )
-    return 30
+    return 60
 
 
 def get_or_increase_name(name, serial):
