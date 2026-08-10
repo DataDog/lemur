@@ -2028,12 +2028,12 @@ def test_default_rotation_days_respects_config_override(app):
 
 
 def test_default_rotation_days_fallback_when_key_absent(app):
-    """_default_rotation_days() returns 30 when LEMUR_DEFAULT_ROTATION_INTERVAL is absent (no KeyError)."""
+    """_default_rotation_days() returns 60 when LEMUR_DEFAULT_ROTATION_INTERVAL is absent (no KeyError)."""
     from lemur.certificates.models import _default_rotation_days
 
     original = app.config.pop("LEMUR_DEFAULT_ROTATION_INTERVAL", None)
     try:
-        assert _default_rotation_days() == 30
+        assert _default_rotation_days() == 60
     finally:
         if original is not None:
             app.config["LEMUR_DEFAULT_ROTATION_INTERVAL"] = original
@@ -2068,23 +2068,110 @@ def test_in_rotation_window_instance_null_policy_outside_window(app):
 
 
 def test_in_rotation_window_class_level_null_policy(session):
-    """SQL expression includes NULL-policy cert inside default window and excludes one outside it."""
+    """SQL expression correctly handles NULL and explicit policies without cross-join.
+
+    A wide policy (90 days) is seeded alongside the 60-day default so that the
+    old cartesian-join bug would cause any cert to match the 90-day row.  The
+    explicit-short-policy assertion below would spuriously pass with that bug.
+    """
     from lemur.certificates.models import Certificate
+    from lemur.policies.models import RotationPolicy
     from lemur.tests.factories import CertificateFactory
     import arrow
 
-    inside = CertificateFactory()
-    inside.rotation_policy = None
-    inside.not_after = arrow.utcnow().shift(days=30).datetime
+    # Seed a wide policy so the cartesian-join bug has a row to latch onto.
+    wide_policy = RotationPolicy(name="wide-test-90", days=90)
+    session.add(wide_policy)
 
-    outside = CertificateFactory()
-    outside.rotation_policy = None
-    outside.not_after = arrow.utcnow().shift(days=90).datetime
+    # NULL-policy cert expiring within the 60-day default window → must match.
+    null_inside = CertificateFactory()
+    null_inside.rotation_policy = None
+    null_inside.not_after = arrow.utcnow().shift(days=30).datetime
+
+    # NULL-policy cert expiring beyond the 60-day default window → must not match.
+    null_outside = CertificateFactory()
+    null_outside.rotation_policy = None
+    null_outside.not_after = arrow.utcnow().shift(days=90).datetime
+
+    # Explicit short policy (30 days). Cert expires in 60 days — outside its own
+    # 30-day window but inside the wide 90-day window. The old cross-join would
+    # incorrectly include this cert; the correlated subquery must exclude it.
+    short_policy = RotationPolicy(name="short-test-30", days=30)
+    session.add(short_policy)
+    session.flush()
+
+    explicit_short = CertificateFactory()
+    explicit_short.rotation_policy = short_policy
+    explicit_short.not_after = arrow.utcnow().shift(days=60).datetime
 
     session.flush()
 
     results = Certificate.query.filter(Certificate.in_rotation_window).all()
     result_ids = {c.id for c in results}
 
-    assert inside.id in result_ids
-    assert outside.id not in result_ids
+    assert null_inside.id in result_ids
+    assert null_outside.id not in result_ids
+    # Cross-join bug would include this via the 90-day wide_policy row.
+    assert explicit_short.id not in result_ids
+
+
+# ---------------------------------------------------------------------------
+# is_attached_to_endpoint — hasattr guard tests
+# ---------------------------------------------------------------------------
+
+
+def test_is_attached_to_endpoint_plugin_missing_method(app):
+    """Plugin without get_endpoint_certificate_names returns False (no AttributeError)."""
+    from unittest.mock import MagicMock, patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    plugin = MagicMock(spec=[])  # spec=[] → hasattr returns False for everything
+    plugin.plugin_name = "test-no-method-source"
+    source = MagicMock()
+    source.plugin = plugin
+    endpoint = MagicMock()
+    endpoint.source = source
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = endpoint
+        result = is_attached_to_endpoint("my-cert", "my-endpoint")
+
+    assert result is False
+
+
+def test_is_attached_to_endpoint_plugin_has_method_cert_present():
+    """Plugin with get_endpoint_certificate_names returns True when cert is in list."""
+    from unittest.mock import MagicMock, patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    plugin = MagicMock()
+    plugin.get_endpoint_certificate_names.return_value = ["my-cert", "other-cert"]
+    source = MagicMock()
+    source.plugin = plugin
+    endpoint = MagicMock()
+    endpoint.source = source
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = endpoint
+        result = is_attached_to_endpoint("my-cert", "my-endpoint")
+
+    assert result is True
+
+
+def test_is_attached_to_endpoint_plugin_has_method_cert_absent():
+    """Plugin with get_endpoint_certificate_names returns False when cert not in list."""
+    from unittest.mock import MagicMock, patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    plugin = MagicMock()
+    plugin.get_endpoint_certificate_names.return_value = ["other-cert"]
+    source = MagicMock()
+    source.plugin = plugin
+    endpoint = MagicMock()
+    endpoint.source = source
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = endpoint
+        result = is_attached_to_endpoint("my-cert", "my-endpoint")
+
+    assert result is False
