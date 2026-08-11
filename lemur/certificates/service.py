@@ -1509,11 +1509,12 @@ LETS_ENCRYPT_ISSUER_NAMES = {
     "E8",
     "E9",
 }
-# (issuer_bucket, cert_type) -> annual USD. Let's Encrypt is always 0.
+# (issuer_bucket, cert_type) -> annual USD (estimates for cost-basis governance).
+# Let's Encrypt is always 0.
 CERT_ANNUAL_PRICE = {
     ("DigiCert", "fqdn"): 150.0,
     ("DigiCert", "wildcard_san"): 550.0,
-    ("Sectigo", "wildcard_san"): 400.0,  # ASSUMED: mid of $300-499 WC OV range
+    ("Sectigo", "wildcard_san"): 400.0,  # confirmed estimate (mid of $300-499 WC OV range)
 }
 
 
