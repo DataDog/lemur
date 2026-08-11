@@ -1181,6 +1181,13 @@ def check_dcv_expiration():
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
     and emits dcv.days_until_expiration gauge per domain (RDNA-1000).
     """
+    # TODO(backlog, P2/yellow): Monitoring gap: the metric emitted here
+    # (lemur.dcv.days_until_expiration) has NO Datadog monitor attached to it
+    # (confirmed via get_datadog_metric_context — it is only surfaced on the
+    # Lemur Certificate Orchestration dashboard, not wired to any alert).
+    # A real DCV-expiry page would NOT fire even if a domain is about to expire.
+    # CLOUDR-2116 wants alerting at the validation stage (not renewal stage);
+    # wire up a monitor on lemur.dcv.days_until_expiration as part of that work.
     function = f"{__name__}.{sys._getframe().f_code.co_name}"
     task_id = None
     if celery_app.current_task:
