@@ -2072,7 +2072,8 @@ def test_in_rotation_window_class_level_null_policy(session):
 
     A wide policy (90 days) is seeded alongside the 60-day default so that the
     old cartesian-join bug would cause any cert to match the 90-day row.  The
-    explicit-short-policy assertion below would spuriously pass with that bug.
+    explicit-short-policy assertion below would spuriously FAIL with that bug
+    (the cert would be wrongly pulled in by the wide row); it must be excluded.
     """
     from lemur.certificates.models import Certificate
     from lemur.policies.models import RotationPolicy
@@ -2121,7 +2122,7 @@ def test_in_rotation_window_class_level_null_policy(session):
 
 
 def test_is_attached_to_endpoint_plugin_missing_method(app):
-    """Plugin without get_endpoint_certificate_names returns False (no AttributeError)."""
+    """Plugin without get_endpoint_certificate_names returns True (fail-closed, no AttributeError)."""
     from unittest.mock import MagicMock, patch
     from lemur.certificates.service import is_attached_to_endpoint
 
@@ -2136,7 +2137,7 @@ def test_is_attached_to_endpoint_plugin_missing_method(app):
         mock_ep_svc.get_by_name.return_value = endpoint
         result = is_attached_to_endpoint("my-cert", "my-endpoint")
 
-    assert result is False
+    assert result is True
 
 
 def test_is_attached_to_endpoint_plugin_has_method_cert_present():
