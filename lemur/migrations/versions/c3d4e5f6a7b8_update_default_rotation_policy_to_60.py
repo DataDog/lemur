@@ -8,13 +8,13 @@ fallback can diverge (e.g. sandbox 'default' policy was 35d). This migration
 brings the 'default' policy in line with the 60-day fallback.
 
 Revision ID: c3d4e5f6a7b8
-Revises: a1b2c3d4e5f6
+Revises: 44d67c1988a2
 Create Date: 2026-08-11
 """
 
 # revision identifiers, used by Alembic.
 revision = "c3d4e5f6a7b8"
-down_revision = "a1b2c3d4e5f6"
+down_revision = "44d67c1988a2"
 branch_labels = None
 depends_on = None
 
