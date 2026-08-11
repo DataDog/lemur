@@ -1486,6 +1486,152 @@ def _get_cert_expiry_in_days(cert_not_after):
     return time_until_expiration.days
 
 
+# --- Certificate annual cost basis (USD) -------------------------------------
+# Business pricing rules. Keep in sync with the Datadog reference table
+# `lemur_certificate_pricing` and the "Lemur Certificate Cost Basis" dashboard.
+DIGICERT_ISSUER_KEYWORDS = ("digicert",)
+LETS_ENCRYPT_ISSUER_NAMES = {
+    "YE1",
+    "YE2",
+    "YR1",
+    "YR2",
+    "R3",
+    "R4",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "E1",
+    "E2",
+    "E5",
+    "E6",
+    "E7",
+    "E8",
+    "E9",
+}
+# (issuer_bucket, cert_type) -> annual USD. Let's Encrypt is always 0.
+CERT_ANNUAL_PRICE = {
+    ("DigiCert", "fqdn"): 150.0,
+    ("DigiCert", "wildcard_san"): 550.0,
+    ("Sectigo", "wildcard_san"): 400.0,  # ASSUMED: mid of $300-499 WC OV range
+}
+
+
+def _normalize_issuer_bucket(issuer):
+    """Map a raw issuer CN (e.g. DigiCertGlobalG2TLSRSASHA2562020CA1, YE1) to a bucket."""
+    if not issuer:
+        return "unknown"
+    issuer = issuer.strip()
+    low = issuer.lower()
+    if any(k in low for k in DIGICERT_ISSUER_KEYWORDS):
+        return "DigiCert"
+    if issuer in LETS_ENCRYPT_ISSUER_NAMES or low.startswith("isrg"):
+        return "letsencrypt"
+    if "sectigo" in low or "usertrust" in low or "comodo" in low:
+        return "Sectigo"
+    if issuer == "<selfsigned>":
+        return "selfsigned"
+    return "unknown"
+
+
+def _certificate_is_wildcard(certificate):
+    names = [certificate.cn or ""]
+    names += [d.name for d in certificate.domains if getattr(d, "name", None)]
+    return any(str(n).startswith("*.") for n in names)
+
+
+def _certificate_annual_cost(certificate):
+    """Return (annual_cost_usd, priced). Let's Encrypt is priced at 0.0."""
+    bucket = _normalize_issuer_bucket(certificate.issuer)
+    if bucket == "letsencrypt":
+        return 0.0, True
+    ctype = "wildcard_san" if _certificate_is_wildcard(certificate) else "fqdn"
+    price = CERT_ANNUAL_PRICE.get((bucket, ctype))
+    if price is None:
+        return None, False
+    return price, True
+
+
+def _certificate_cost_status(certificate):
+    """active | replaced | expired | revoked | ca — drives ongoing vs gross on the dashboard."""
+    if certificate.status == "revoked":
+        return "revoked"
+    if certificate.not_after and arrow.get(certificate.not_after) < arrow.utcnow():
+        return "expired"
+    if any(r.id != certificate.id for r in certificate.replaced):
+        return "replaced"
+    if _normalize_issuer_bucket(certificate.issuer) in ("selfsigned", "unknown"):
+        return "ca"
+    return "active"
+
+
+def get_certificates_for_cost_metrics():
+    """All non-deleted certs (including expired/replaced) for cost basis."""
+    return (
+        database.db.session.query(Certificate)
+        .options(
+            selectinload(Certificate.certificate_associations).selectinload(
+                CertificateAssociation.domain
+            )
+        )
+        .options(selectinload(Certificate.replaced))
+        .filter(Certificate.deleted == false())
+        .all()
+    )
+
+
+def send_certificate_cost_metrics():
+    """
+    Emit annual cost basis per certificate. One point per cert:
+      - certificates.annual_cost (gauge, USD) -> sum = fleet cost
+      - certificates.count (gauge, 1)         -> count of certs
+    plus certificates.total_annual_cost (gauge, USD) for the fleet.
+    Tags: issuer, cert_type, cert_name, owner, expiration, status.
+    """
+    success = failure = 0
+    total_annual_cost = 0.0
+    for certificate in get_certificates_for_cost_metrics():
+        try:
+            cost, priced = _certificate_annual_cost(certificate)
+            status = _certificate_cost_status(certificate)
+            common_tags = {
+                "cert_id": certificate.id,
+                "issuer": _normalize_issuer_bucket(certificate.issuer),
+                "cert_type": (
+                    "wildcard_san" if _certificate_is_wildcard(certificate) else "fqdn"
+                ),
+                "cert_name": (certificate.cn or certificate.name).replace("*", "star"),
+                "owner": certificate.owner or "unknown",
+                "expiration": (
+                    arrow.get(certificate.not_after).format("YYYY-MM-DD")
+                    if certificate.not_after
+                    else "unknown"
+                ),
+                "status": status,
+            }
+            if priced:
+                total_annual_cost += cost
+                metrics.send(
+                    "certificates.annual_cost", "gauge", cost, metric_tags=common_tags
+                )
+            metrics.send("certificates.count", "gauge", 1, metric_tags=common_tags)
+            success += 1
+        except Exception:
+            current_app.logger.warning(
+                f"Error sending cost metric for certificate: {certificate.name}",
+                exc_info=True,
+            )
+            failure += 1
+
+    metrics.send(
+        "certificates.total_annual_cost",
+        "gauge",
+        total_annual_cost,
+        metric_tags={"scope": "all_priced"},
+    )
+    return success, failure
+
+
 def _parse_plugin_description(description):
     if not description:
         return None
