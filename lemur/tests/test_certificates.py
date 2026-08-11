@@ -2039,6 +2039,63 @@ def test_default_rotation_days_fallback_when_key_absent(app):
             app.config["LEMUR_DEFAULT_ROTATION_INTERVAL"] = original
 
 
+def test_sync_default_rotation_policy_creates_when_missing(session):
+    """sync_default_rotation_policy() creates the 'default' policy at the configured default when absent."""
+    from lemur.policies import service as policy_service
+    from lemur.policies.models import RotationPolicy
+
+    # Ensure no 'default' policy exists
+    for p in RotationPolicy.query.filter(RotationPolicy.name == "default").all():
+        session.delete(p)
+    session.flush()
+
+    policy = policy_service.sync_default_rotation_policy()
+
+    assert policy.name == "default"
+    assert policy.days == 60
+
+
+def test_sync_default_rotation_policy_updates_existing(session, app):
+    """sync_default_rotation_policy() updates an existing 'default' policy (e.g. 30/35) to the configured default (60)."""
+    from lemur.policies import service as policy_service
+    from lemur.policies.models import RotationPolicy
+
+    # Ensure a clean slate, then seed a stale 'default' policy at 30 days (as the historical migration did)
+    for p in RotationPolicy.query.filter(RotationPolicy.name == "default").all():
+        session.delete(p)
+    session.flush()
+    stale = RotationPolicy(name="default", days=30)
+    session.add(stale)
+    session.flush()
+
+    policy = policy_service.sync_default_rotation_policy()
+
+    assert policy.id == stale.id
+    assert policy.days == 60
+    # Exactly one 'default' row remains
+    assert RotationPolicy.query.filter(RotationPolicy.name == "default").count() == 1
+
+
+def test_sync_default_rotation_policy_noop_when_matching(session):
+    """sync_default_rotation_policy() leaves an existing 'default' policy untouched when it already matches."""
+    from lemur.policies import service as policy_service
+    from lemur.policies.models import RotationPolicy
+
+    # Ensure a clean slate, then seed a matching 'default' policy
+    for p in RotationPolicy.query.filter(RotationPolicy.name == "default").all():
+        session.delete(p)
+    session.flush()
+    existing = RotationPolicy(name="default", days=60)
+    session.add(existing)
+    session.flush()
+
+    policy = policy_service.sync_default_rotation_policy()
+
+    assert policy.id == existing.id
+    assert policy.days == 60
+    assert RotationPolicy.query.filter(RotationPolicy.name == "default").count() == 1
+
+
 def test_in_rotation_window_instance_null_policy_within_window(app):
     """Instance-level in_rotation_window returns True for NULL-policy cert expiring within default window."""
     from lemur.certificates.models import Certificate

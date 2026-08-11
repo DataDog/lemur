@@ -57,6 +57,30 @@ def create(**kwargs):
     return policy
 
 
+def sync_default_rotation_policy():
+    """
+    Ensure the named ``"default"`` RotationPolicy exists and matches
+    ``LEMUR_DEFAULT_ROTATION_INTERVAL`` (via ``_default_rotation_days``).
+
+    Used by ``lemur init`` (InitializeApp) so the seeded default policy and the
+    runtime NULL-policy fallback can never diverge. Creates the policy if missing,
+    otherwise updates ``days`` in place if it differs from the configured default.
+
+    :return: the ``"default"`` RotationPolicy
+    """
+    from lemur.certificates.models import _default_rotation_days
+
+    days = _default_rotation_days()
+    existing = get_by_name("default")
+    if existing:
+        policy = existing[0]
+        if policy.days != days:
+            policy.days = days
+            database.commit()
+        return policy
+    return create(days=days, name="default")
+
+
 def update(policy_id, **kwargs):
     """
     Updates a policy.

@@ -42,7 +42,6 @@ from lemur.users.models import User  # noqa
 from lemur.roles.models import Role  # noqa
 from lemur.authorities.models import Authority  # noqa
 from lemur.certificates.models import Certificate  # noqa
-from lemur.certificates.models import _default_rotation_days
 from lemur.destinations.models import Destination  # noqa
 from lemur.domains.models import Domain  # noqa
 from lemur.notifications.models import Notification  # noqa
@@ -283,26 +282,10 @@ class InitializeApp(Command):
             "DEFAULT_SECURITY", recipients=recipients
         )
 
-        _DEFAULT_ROTATION_INTERVAL = "default"
-        default_rotation_interval = policy_service.get_by_name(
-            _DEFAULT_ROTATION_INTERVAL
-        )
-
-        if default_rotation_interval:
-            sys.stdout.write(
-                "[-] Default rotation interval policy already created, skipping...!\n"
-            )
-        else:
-            # Also used as the fallback window for certs with no rotation_policy_id (see certificates/models.py).
-            # Use _default_rotation_days() so the seeded policy and the runtime NULL-policy
-            # fallback can never diverge (both read LEMUR_DEFAULT_ROTATION_INTERVAL, default 60).
-            days = _default_rotation_days()
-            sys.stdout.write(
-                "[+] Creating default certificate rotation policy of {days} days before issuance.\n".format(
-                    days=days
-                )
-            )
-            policy_service.create(days=days, name=_DEFAULT_ROTATION_INTERVAL)
+        # Creates the "default" policy if missing, or syncs an existing one to
+        # LEMUR_DEFAULT_ROTATION_INTERVAL (default 60) so the seeded policy and the
+        # runtime NULL-policy fallback can never diverge (see policies/service.py).
+        policy_service.sync_default_rotation_policy()
 
         sys.stdout.write("[/] Done!\n")
 
