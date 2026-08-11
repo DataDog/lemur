@@ -1942,6 +1942,84 @@ def test_send_certificate_expiration_metrics_has_been_replaced_tag(
     assert dest_tags["datacenter"] == "us1.release.staging.dog"
 
 
+def test_send_certificate_cost_metrics(session):
+    from lemur.certificates.service import send_certificate_cost_metrics
+    from lemur.domains.models import Domain
+
+    # DigiCert wildcard SAN -> $550
+    wc = create_cert_that_expires_in_days(100)
+    wc.issuer = "DigiCertGlobalG2TLSRSASHA2562020CA1"
+    wc.cn = "*.example.com"
+    wc.status = "valid"
+    wc.domains = [Domain(name="*.example.com"), Domain(name="example.com")]
+    # DigiCert FQDN -> $150
+    fqdn = create_cert_that_expires_in_days(100)
+    fqdn.issuer = "DigiCertGlobalG2TLSRSASHA2562020CA1"
+    fqdn.cn = "api.example.com"
+    fqdn.status = "valid"
+    fqdn.domains = [Domain(name="api.example.com")]
+    # Let's Encrypt -> free
+    le = create_cert_that_expires_in_days(100)
+    le.issuer = "YE1"
+    le.cn = "le.example.com"
+    le.status = "valid"
+    le.domains = [Domain(name="le.example.com")]
+    # Sectigo wildcard -> $400 (assumed)
+    sectigo = create_cert_that_expires_in_days(100)
+    sectigo.issuer = "SectigoPublicServerAuthenticationCADVR36"
+    sectigo.cn = "*.sectigo.example.com"
+    sectigo.status = "valid"
+    sectigo.domains = [Domain(name="*.sectigo.example.com")]
+    # Unpriced issuer -> no annual_cost point, still counted
+    unknown = create_cert_that_expires_in_days(100)
+    unknown.issuer = "SomeUnknownCA"
+    unknown.cn = "unknown.example.com"
+    unknown.status = "valid"
+    unknown.domains = [Domain(name="unknown.example.com")]
+    session.flush()
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        success, failure = send_certificate_cost_metrics()
+
+    assert failure == 0
+
+    cost_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.annual_cost"
+    ]
+    count_calls = [
+        c for c in mock_metrics.send.call_args_list if c.args[0] == "certificates.count"
+    ]
+    total_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.total_annual_cost"
+    ]
+
+    cost_by_id = {c.kwargs["metric_tags"]["cert_id"]: c.args[2] for c in cost_calls}
+    assert cost_by_id[wc.id] == 550.0
+    assert cost_by_id[fqdn.id] == 150.0
+    assert cost_by_id[le.id] == 0.0
+    assert cost_by_id[sectigo.id] == 400.0
+    assert unknown.id not in cost_by_id  # unpriced -> no annual_cost point
+
+    count_tags_by_id = {
+        c.kwargs["metric_tags"]["cert_id"]: c.kwargs["metric_tags"] for c in count_calls
+    }
+    assert wc.id in count_tags_by_id
+    assert unknown.id in count_tags_by_id  # unpriced certs are still counted
+    assert count_tags_by_id[wc.id]["status"] == "active"
+    assert count_tags_by_id[wc.id]["issuer"] == "DigiCert"
+    assert count_tags_by_id[wc.id]["cert_type"] == "wildcard_san"
+    assert count_tags_by_id[fqdn.id]["cert_type"] == "fqdn"
+    assert count_tags_by_id[le.id]["issuer"] == "letsencrypt"
+    assert count_tags_by_id[unknown.id]["status"] == "ca"
+
+    assert len(total_calls) == 1
+    assert total_calls[0].args[2] == 550.0 + 150.0 + 0.0 + 400.0
+
+
 @pytest.mark.parametrize(
     "cert_expiry, expiry_window, expected_result",
     [

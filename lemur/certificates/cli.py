@@ -36,6 +36,7 @@ from lemur.certificates.service import (
     get_certificates_with_same_prefix_with_rotate_on,
     identify_and_persist_expiring_deployed_certificates,
     send_certificate_expiration_metrics,
+    send_certificate_cost_metrics,
 )
 from lemur.certificates.verify import verify_string
 from lemur.constants import SUCCESS_METRIC_STATUS, FAILURE_METRIC_STATUS, CRLReason
@@ -1165,3 +1166,23 @@ def expiration_metrics(expiry_window):
         current_app.logger.exception("Error sending expiration metrics", exc_info=True)
 
     metrics.send("expiration_metrics_job", "counter", 1, metric_tags={"status": status})
+
+
+@manager.command
+def cost_metrics():
+    """
+    Emits annual cost basis per certificate (lemur.certificates.annual_cost / .count)
+    plus a fleet total (lemur.certificates.total_annual_cost). Used by the
+    "Lemur Certificate Cost Basis" dashboard.
+    """
+    try:
+        print("Starting to publish certificate cost basis metrics")
+        success, failure = send_certificate_cost_metrics()
+        print(f"Finished publishing cost basis metrics! Sent: {success}")
+        status = SUCCESS_METRIC_STATUS
+    except Exception as e:
+        status = FAILURE_METRIC_STATUS
+        capture_exception()
+        current_app.logger.exception("Error sending cost metrics", exc_info=True)
+
+    metrics.send("cost_metrics_job", "counter", 1, metric_tags={"status": status})

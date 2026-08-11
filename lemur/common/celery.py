@@ -1163,6 +1163,15 @@ def certificate_expirations_metrics():
         return
 
     try:
+        cli_certificate.cost_metrics()
+    except SoftTimeLimitExceeded:
+        log_data["message"] = "Time limit exceeded (cost metrics)."
+        current_app.logger.error(log_data)
+        capture_exception()
+        metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
+        return
+
+    try:
         certificate_service.send_source_destination_pairing_metrics()
     except Exception:
         current_app.logger.exception("Error sending source/destination pairing metrics")
