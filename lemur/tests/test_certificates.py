@@ -1942,6 +1942,38 @@ def test_send_certificate_expiration_metrics_has_been_replaced_tag(
     assert dest_tags["datacenter"] == "us1.release.staging.dog"
 
 
+def test_send_certificate_expiration_metrics_rotation_authority_tags(session):
+    from lemur.certificates.service import send_certificate_expiration_metrics
+    from lemur.tests.factories import AuthorityFactory
+
+    authority = AuthorityFactory()
+
+    rotating_cert = create_cert_that_expires_in_days(10)
+    rotating_cert.rotation = True
+    rotating_cert.authority = authority
+
+    # Mirrors an imported/discovered cert: no owning authority, rotation off.
+    imported_cert = create_cert_that_expires_in_days(10)
+    imported_cert.rotation = False
+    imported_cert.authority = None
+    session.flush()
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        send_certificate_expiration_metrics()
+
+    tags_by_cert_id = {
+        c.kwargs["metric_tags"]["cert_id"]: c.kwargs["metric_tags"]
+        for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.days_until_expiration"
+    }
+
+    assert tags_by_cert_id[rotating_cert.id]["rotation"] is True
+    assert tags_by_cert_id[rotating_cert.id]["authority"] == authority.name
+
+    assert tags_by_cert_id[imported_cert.id]["rotation"] is False
+    assert tags_by_cert_id[imported_cert.id]["authority"] is None
+
+
 @pytest.mark.parametrize(
     "cert_expiry, expiry_window, expected_result",
     [
