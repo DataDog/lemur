@@ -65,9 +65,9 @@ blinker==1.9.0
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.43.51
+boto3==1.43.53
     # via -r requirements-base.in
-botocore==1.43.51
+botocore==1.43.53
     # via
     #   -r requirements-base.in
     #   boto3
@@ -78,7 +78,7 @@ cert-manager==4.0.0
     # via -r requirements-datadog.in
 certbot==5.7.0
     # via -r requirements-base.in
-certifi==2026.6.17
+certifi==2026.7.22
     # via
     #   -r requirements-base.in
     #   httpcore
@@ -183,7 +183,7 @@ google-api-core==2.32.0
     # via
     #   google-cloud-compute
     #   google-cloud-private-ca
-google-auth==2.56.0
+google-auth==2.56.2
     # via
     #   google-api-core
     #   google-cloud-compute
@@ -199,7 +199,7 @@ googleapis-common-protos==1.75.0
     #   grpcio-status
 grpc-google-iam-v1==0.14.4
     # via google-cloud-private-ca
-grpcio==1.82.1
+grpcio==1.82.1.post125712670+dd.repackaging.125712670
     # via
     #   google-api-core
     #   google-cloud-compute
@@ -405,7 +405,7 @@ retrying==1.4.2
     # via -r requirements-base.in
 s3transfer==0.19.1
     # via boto3
-sentry-sdk==2.66.0
+sentry-sdk==2.66.1
     # via -r requirements-base.in
 simplejson==4.1.1
     # via -r requirements-datadog.in
