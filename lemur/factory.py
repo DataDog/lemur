@@ -86,15 +86,15 @@ def configure_default_rotation_policy(app):
     matching the configured value.
     """
     from lemur.policies import service as policy_service
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import OperationalError, ProgrammingError
 
     with app.app_context():
         try:
             policy_service.update_default_rotation_policy()
-        except OperationalError:
+        except (OperationalError, ProgrammingError):
             # rotation_policies table doesn't exist yet (fresh DB / migrations
-            # not yet run). Safe to skip — the policy will be synced on the
-            # next boot after migrations complete.
+            # not yet run, or test DB before create_all). Safe to skip — the
+            # policy will be synced on the next boot after migrations complete.
             app.logger.debug(
                 "Skipping default rotation policy sync: table not ready"
             )
