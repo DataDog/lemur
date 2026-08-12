@@ -12,7 +12,6 @@ THREADS_PER_PAGE = 8
 CORS = False
 DEBUG = False
 
-
 # Logging
 
 LOG_LEVEL = "DEBUG"
