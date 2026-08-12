@@ -86,9 +86,13 @@ def configure_default_rotation_policy(app):
     matching the configured value.
     """
     from lemur.policies import service as policy_service
+    from sqlalchemy import inspect
 
     with app.app_context():
-        policy_service.update_default_rotation_policy()
+        # Skip if the table doesn't exist yet (e.g. during tests before
+        # migrations have run, or during `lemur db upgrade` on a fresh DB).
+        if inspect(db.engine).has_table("rotation_policies"):
+            policy_service.update_default_rotation_policy()
 
 
 def from_file(file_path, silent=False):
