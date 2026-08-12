@@ -145,6 +145,8 @@ setup(
             "acme_http_issuer = lemur.plugins.lemur_acme.plugin:ACMEHttpIssuerPlugin",
             "aws_destination = lemur.plugins.lemur_aws.plugin:AWSDestinationPlugin",
             "aws_source = lemur.plugins.lemur_aws.plugin:AWSSourcePlugin",
+            "aws_acm_destination = lemur.plugins.lemur_aws.plugin:ACMDestinationPlugin",
+            "aws_acm_source = lemur.plugins.lemur_aws.plugin:ACMSourcePlugin",
             "aws_s3 = lemur.plugins.lemur_aws.plugin:S3DestinationPlugin",
             "aws_sns = lemur.plugins.lemur_aws.plugin:SNSNotificationPlugin",
             "coa_destination = cert_orchestration_adapter.plugin:AdapterDestinationPlugin",
