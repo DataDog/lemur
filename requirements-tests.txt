@@ -182,7 +182,7 @@ configobj==5.0.9
     #   certbot
 coverage==7.13.5
     # via -r requirements-tests.in
-cryptography==43.0.1
+cryptography==49.0.0
     # via
     #   -r requirements.txt
     #   -r requirements-tests.in
@@ -586,7 +586,7 @@ pynacl==1.6.2
     # via
     #   -r requirements.txt
     #   paramiko
-pyopenssl==25.1.0
+pyopenssl==26.3.0
     # via
     #   -r requirements.txt
     #   acme
@@ -780,7 +780,7 @@ types-six==1.17.0.20251009
     # via -r requirements-tests.in
 types-tabulate==0.10.0.20260308
     # via -r requirements-tests.in
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   -r requirements.txt
     #   alembic
