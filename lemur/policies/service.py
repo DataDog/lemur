@@ -16,8 +16,9 @@ def get_rotation_policy_from_config():
     """
     Return the named "default" RotationPolicy, keeping it in sync with
     LEMUR_DEFAULT_ROTATION_INTERVAL: creates it if missing, updates its days
-    if the config has changed. Single source of truth used both as the
-    NULL-policy fallback in Certificate.__init__ and as the pre-query sync
+    if the config has changed. This policy is the NULL-policy fallback in
+    Certificate.__init__.
+    The default rotation policy is refreshed as a part of the pre-query sync
     in get_all_pending_reissue.
     """
     days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
