@@ -18,7 +18,7 @@ aniso8601==10.0.1
     # via
     #   -r requirements.txt
     #   flask-restful
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via
     #   -r requirements.txt
     #   pydantic
@@ -29,7 +29,7 @@ anyio==4.5.0
     #   httpx
 arrow==1.4.0
     # via -r requirements.txt
-ast-serialize==0.6.0
+ast-serialize==0.8.0
     # via mypy
 asyncpool==1.0
     # via -r requirements.txt
@@ -38,8 +38,6 @@ attrs==26.1.0
     #   jsonschema
     #   jsonschema-path
     #   referencing
-aws-sam-translator==1.111.0
-    # via cfn-lint
 aws-xray-sdk==2.15.0
     # via moto
 azure-common==1.1.28
@@ -102,12 +100,11 @@ blinker==1.9.0
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.43.53
+boto3==1.43.62
     # via
     #   -r requirements.txt
-    #   aws-sam-translator
     #   moto
-botocore==1.43.53
+botocore==1.43.62
     # via
     #   -r requirements.txt
     #   aws-xray-sdk
@@ -137,7 +134,7 @@ cffi==2.1.0
     #   -r requirements.txt
     #   cryptography
     #   pynacl
-cfn-lint==1.53.3
+cfn-lint==1.54.0
     # via moto
 charset-normalizer==3.4.9
     # via
@@ -164,7 +161,7 @@ click-repl==0.3.0
     # via
     #   -r requirements.txt
     #   celery
-cloudflare==5.5.0
+cloudflare==5.6.0
     # via -r requirements.txt
 configargparse==1.7.5
     # via
@@ -174,7 +171,7 @@ configobj==5.0.9
     # via
     #   -r requirements.txt
     #   certbot
-coverage==7.15.3
+coverage==7.15.4
     # via -r requirements-tests.in
 cryptography==43.0.1
     # via
@@ -267,7 +264,7 @@ freezegun==1.5.5
     # via -r requirements-tests.in
 future==1.0.0
     # via -r requirements.txt
-google-api-core==2.32.0
+google-api-core==2.33.0
     # via
     #   -r requirements.txt
     #   google-cloud-compute
@@ -294,7 +291,7 @@ grpc-google-iam-v1==0.14.4
     # via
     #   -r requirements.txt
     #   google-cloud-private-ca
-grpcio==1.82.1.post125712670+dd.repackaging.125712670
+grpcio==1.83.0
     # via
     #   -r requirements.txt
     #   google-api-core
@@ -303,7 +300,7 @@ grpcio==1.82.1.post125712670+dd.repackaging.125712670
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.82.1
+grpcio-status==1.83.0
     # via
     #   -r requirements.txt
     #   google-api-core
@@ -379,7 +376,6 @@ jsonpointer==3.1.1
     # via jsonpatch
 jsonschema==4.26.0
     # via
-    #   aws-sam-translator
     #   openapi-schema-validator
     #   openapi-spec-validator
 jsonschema-path==0.5.0
@@ -394,7 +390,7 @@ kombu==5.6.2
     #   celery
 lazy-object-proxy==1.12.0
     # via openapi-spec-validator
-librt==0.13.0
+librt==0.15.0
     # via mypy
 limits==5.8.0
     # via
@@ -491,15 +487,15 @@ pathspec==1.1.1
     #   mypy
 pem==23.1.0
     # via -r requirements.txt
-platformdirs==4.11.0
+platformdirs==4.11.1
     # via black
 pluggy==1.6.0
     # via pytest
-prompt-toolkit==3.0.52
+prompt-toolkit==3.0.53
     # via
     #   -r requirements.txt
     #   click-repl
-proto-plus==1.28.1
+proto-plus==1.28.2
     # via
     #   -r requirements.txt
     #   google-api-core
@@ -545,7 +541,6 @@ pycryptodomex==3.23.0
 pydantic==2.13.4
     # via
     #   -r requirements.txt
-    #   aws-sam-translator
     #   cloudflare
     #   openapi-schema-validator
     #   openapi-spec-validator
@@ -554,7 +549,7 @@ pydantic-core==2.46.4
     # via
     #   -r requirements.txt
     #   pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via
     #   openapi-schema-validator
     #   openapi-spec-validator
@@ -619,7 +614,7 @@ python-ldap==3.4.7
     # via -r requirements.txt
 pytokens==0.4.1
     # via black
-pytz==2026.2
+pytz==2026.3.post1
     # via
     #   -r requirements.txt
     #   flask-restful
@@ -684,13 +679,13 @@ rpds-py==2026.6.3
     #   referencing
 rsa==4.9.1
     # via python-jose
-s3transfer==0.19.1
+s3transfer==0.19.2
     # via
     #   -r requirements.txt
     #   boto3
 sentry-sdk==2.66.1
     # via -r requirements.txt
-setuptools==83.0.0
+setuptools==84.0.0
     # via moto
 simplejson==4.1.1
     # via
@@ -755,7 +750,7 @@ types-redis==4.6.0.20241004
     # via -r requirements-tests.in
 types-requests==2.33.0.20260712
     # via -r requirements-tests.in
-types-setuptools==83.0.0.20260724
+types-setuptools==83.0.0.20260807
     # via
     #   -r requirements-tests.in
     #   types-cffi
@@ -767,7 +762,6 @@ typing-extensions==4.16.0
     # via
     #   -r requirements.txt
     #   alembic
-    #   aws-sam-translator
     #   azure-core
     #   azure-identity
     #   azure-keyvault-certificates
@@ -828,7 +822,7 @@ werkzeug==3.1.8
     #   flask-cors
     #   moto
     #   pytest-flask
-wrapt==2.2.2
+wrapt==2.3.0
     # via
     #   -r requirements.txt
     #   aws-xray-sdk

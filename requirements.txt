@@ -65,9 +65,9 @@ blinker==1.9.0
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.43.62
+boto3==1.43.67
     # via -r requirements-base.in
-botocore==1.43.62
+botocore==1.43.67
     # via
     #   -r requirements-base.in
     #   boto3
@@ -88,7 +88,7 @@ certifi==2026.7.22
     #   sentry-sdk
 certsrv==2.1.1
     # via -r requirements-base.in
-cffi==2.1.0
+cffi==2.1.1
     # via
     #   cryptography
     #   pynacl
@@ -179,11 +179,11 @@ flask-sqlalchemy==2.5.1
     #   flask-migrate
 future==1.0.0
     # via -r requirements-base.in
-google-api-core==2.33.0
+google-api-core==2.34.0
     # via
     #   google-cloud-compute
     #   google-cloud-private-ca
-google-auth==2.56.2
+google-auth==2.56.3
     # via
     #   google-api-core
     #   google-cloud-compute
@@ -192,12 +192,12 @@ google-cloud-compute==1.50.0
     # via -r requirements-datadog.in
 google-cloud-private-ca==1.19.0
     # via -r requirements-base.in
-googleapis-common-protos==1.75.0
+googleapis-common-protos==1.75.1
     # via
     #   google-api-core
     #   grpc-google-iam-v1
     #   grpcio-status
-grpc-google-iam-v1==0.14.4
+grpc-google-iam-v1==0.14.5
     # via google-cloud-private-ca
 grpcio==1.83.0
     # via
@@ -267,7 +267,7 @@ lockfile==0.12.2
     # via -r requirements-base.in
 logmatic-python==0.1.7
     # via -r requirements-datadog.in
-mako==1.3.12
+mako==1.4.1
     # via alembic
 markupsafe==2.1.5
     # via
@@ -295,7 +295,7 @@ oauthlib==3.3.1
     # via requests-oauthlib
 ordered-set==4.1.0
     # via flask-limiter
-packaging==26.2
+packaging==26.3
     # via
     #   gunicorn
     #   kombu
@@ -308,7 +308,7 @@ pem==23.1.0
     # via -r requirements-base.in
 prompt-toolkit==3.0.53
     # via click-repl
-proto-plus==1.28.2
+proto-plus==1.28.3
     # via
     #   google-api-core
     #   google-cloud-compute
@@ -405,7 +405,7 @@ retrying==1.4.2
     # via -r requirements-base.in
 s3transfer==0.19.2
     # via boto3
-sentry-sdk==2.66.1
+sentry-sdk==2.67.1
     # via -r requirements-base.in
 simplejson==4.1.1
     # via -r requirements-datadog.in
@@ -453,7 +453,7 @@ typing-extensions==4.16.0
     #   pydantic-core
     #   pyopenssl
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.3
     # via pydantic
 tzdata==2026.3
     # via
