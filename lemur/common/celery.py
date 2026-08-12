@@ -1202,6 +1202,7 @@ def check_dcv_expiration():
     total_domains = 0
     total_errors = 0
     now = datetime.now(timezone.utc)
+    seen_domains = set()
 
     try:
         for plugin in plugins.all(plugin_type="issuer"):
@@ -1229,17 +1230,41 @@ def check_dcv_expiration():
                     if expiry_dt.tzinfo is None:
                         expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
                     days_remaining = (expiry_dt - now).days
+                    domain = entry.get("domain", "unknown")
+                    dcv_method = entry.get("dcv_method", "unknown")
                     metrics.send(
                         "dcv.days_until_expiration",
                         "gauge",
                         days_remaining,
                         metric_tags={
-                            "domain": entry.get("domain", "unknown"),
+                            "domain": domain,
                             "ca": ca_name,
                             "validation_type": entry.get("validation_type", "unknown"),
                             "org_id": entry.get("org_id", "unknown"),
+                            "dcv_method": dcv_method,
                         },
                     )
+                    # Emit dcv.validation_status once per domain so monitors can
+                    # page on dcv_status == failed (scoped by dcv_method).
+                    if domain not in seen_domains:
+                        seen_domains.add(domain)
+                        dcv_status = entry.get("dcv_status", "unknown")
+                        status = entry.get("status", "unknown")
+                        # 1 = complete/active, 0 = pending/failed. The monitor
+                        # filters on the dcv_status tag so pending does not page.
+                        val = 1 if dcv_status == "complete" else 0
+                        metrics.send(
+                            "dcv.validation_status",
+                            "gauge",
+                            val,
+                            metric_tags={
+                                "domain": domain,
+                                "ca": ca_name,
+                                "dcv_method": dcv_method,
+                                "status": status,
+                                "dcv_status": dcv_status,
+                            },
+                        )
                     total_domains += 1
                 except SoftTimeLimitExceeded:
                     raise

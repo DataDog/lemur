@@ -498,7 +498,13 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         return current_app.config.get("DIGICERT_ROOT"), "", [role]
 
     def get_dcv_expiration_data(self):
-        """Queries DigiCert /v2/domain for all active domains and their DCV expiration dates."""
+        """Queries DigiCert /v2/domain for all active domains and their DCV expiration dates.
+
+        Returns one entry per (domain, validation_type) pair, augmented with the
+        domain's DCV method and validation status so monitors can scope by
+        ``dcv_method`` (persistent-txt vs dns-cname-token) and alert on
+        ``dcv_status == failed``.
+        """
         if not current_app.config.get("DIGICERT_DCV_CHECK_ENABLED", True):
             return []
 
@@ -515,15 +521,51 @@ class DigiCertIssuerPlugin(IssuerPlugin):
             if not dcv_exp_map:
                 continue
             domain_name = domain.get("name", "unknown")
+            domain_id = domain.get("id")
             org_id = str(domain.get("organization", {}).get("id", "unknown"))
+            dcv_method = domain.get("dcv_method", "unknown")
+            status = domain.get("status", "unknown")
+            dcv_status = self._get_dcv_status(base_url, domain_id)
             for val_type, dcv_exp in dcv_exp_map.items():
                 results.append({
                     "domain": domain_name,
                     "dcv_expiration": dcv_exp,
                     "validation_type": val_type,
                     "org_id": org_id,
+                    "dcv_method": dcv_method,
+                    "status": status,
+                    "dcv_status": dcv_status,
                 })
         return results
+
+    def _get_dcv_status(self, base_url, domain_id):
+        """Return the domain's DCV validation status (complete/pending/failed).
+
+        The /v2/domain list endpoint does not return the per-domain validation
+        status, so we query /v2/domain/{id}/validation. A single status is
+        derived across the domain's validations: failed wins, then pending,
+        then complete. Unknown on any error so a transient failure does not
+        break the whole task.
+        """
+        if not domain_id:
+            return "unknown"
+        try:
+            val_resp = self.session.get(
+                f"{base_url}/services/v2/domain/{domain_id}/validation"
+            )
+            val_data = handle_response(val_resp)
+            statuses = {
+                v.get("dcv_status") for v in val_data.get("validations", [])
+            }
+            if "failed" in statuses:
+                return "failed"
+            if "pending" in statuses:
+                return "pending"
+            if "complete" in statuses:
+                return "complete"
+            return "unknown"
+        except Exception:
+            return "unknown"
 
 
 class DigiCertCISSourcePlugin(SourcePlugin):

@@ -108,6 +108,9 @@ def test_check_dcv_expiration_emits_metric_for_active_domain(
             "dcv_expiration": "2099-01-01T00:00:00+00:00",
             "validation_type": "ov",
             "org_id": "42",
+            "dcv_method": "persistent-txt",
+            "status": "active",
+            "dcv_status": "complete",
         }
     ]
     mock_plugins.all.return_value = [fake_plugin]
@@ -124,7 +127,18 @@ def test_check_dcv_expiration_emits_metric_for_active_domain(
     assert tags["ca"] == "digicert-issuer"
     assert tags["validation_type"] == "ov"
     assert tags["org_id"] == "42"
+    assert tags["dcv_method"] == "persistent-txt"
     assert dcv_calls[0].args[2] > 0
+
+    # dcv.validation_status emitted once per domain, value 1 for complete.
+    status_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    assert len(status_calls) == 1
+    assert status_calls[0].args[2] == 1
+    stags = status_calls[0].kwargs["metric_tags"]
+    assert stags["domain"] == "example.com"
+    assert stags["dcv_method"] == "persistent-txt"
+    assert stags["status"] == "active"
+    assert stags["dcv_status"] == "complete"
 
 
 @patch("lemur.common.celery.plugins")
@@ -197,3 +211,121 @@ def test_check_dcv_expiration_empty_data_no_metric(
         if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
     ]
     assert len(dcv_calls) == 0
+
+
+@patch("lemur.common.celery.plugins")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+@patch("lemur.common.celery.celery_app")
+def test_check_dcv_expiration_emits_validation_status_once_per_domain(
+    mock_celery_app, mock_current_app, mock_metrics, mock_plugins
+):
+    mock_celery_app.current_task = None
+
+    fake_plugin = MagicMock()
+    fake_plugin.slug = "digicert-issuer"
+    # Two validation types for the same domain -> dcv.validation_status once.
+    fake_plugin.get_dcv_expiration_data.return_value = [
+        {
+            "domain": "example.com",
+            "dcv_expiration": "2099-01-01T00:00:00+00:00",
+            "validation_type": "ov",
+            "org_id": "42",
+            "dcv_method": "persistent-txt",
+            "status": "active",
+            "dcv_status": "failed",
+        },
+        {
+            "domain": "example.com",
+            "dcv_expiration": "2099-01-01T00:00:00+00:00",
+            "validation_type": "ev",
+            "org_id": "42",
+            "dcv_method": "persistent-txt",
+            "status": "active",
+            "dcv_status": "failed",
+        },
+    ]
+    mock_plugins.all.return_value = [fake_plugin]
+
+    from lemur.common.celery import check_dcv_expiration
+
+    check_dcv_expiration.run()
+
+    gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
+    status_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    assert len(status_calls) == 1  # once per domain, not per validation_type
+    assert status_calls[0].args[2] == 0  # failed -> 0
+    assert status_calls[0].kwargs["metric_tags"]["dcv_status"] == "failed"
+    assert status_calls[0].kwargs["metric_tags"]["dcv_method"] == "persistent-txt"
+
+
+def test_digicert_get_dcv_expiration_data_includes_method_and_status():
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    plugin = DigiCertIssuerPlugin.__new__(DigiCertIssuerPlugin)
+    plugin.session = MagicMock()
+
+    list_resp = MagicMock()
+    list_resp.status_code = 200
+    list_resp.json.return_value = {
+        "domains": [
+            {
+                "id": 123,
+                "name": "example.com",
+                "is_active": True,
+                "dcv_method": "persistent-txt",
+                "status": "active",
+                "organization": {"id": 42},
+                "dcv_expiration": {"ov": "2099-01-01T00:00:00+00:00"},
+            }
+        ]
+    }
+    val_resp = MagicMock()
+    val_resp.status_code = 200
+    val_resp.json.return_value = {"validations": [{"dcv_status": "complete"}]}
+    plugin.session.get.side_effect = [list_resp, val_resp]
+
+    mock_app = MagicMock()
+    mock_app.config.get.side_effect = lambda key, default=None: {
+        "DIGICERT_DCV_CHECK_ENABLED": True,
+        "DIGICERT_URL": "https://digicert.example",
+    }.get(key, default)
+
+    with patch("lemur.plugins.lemur_digicert.plugin.current_app", mock_app):
+        result = plugin.get_dcv_expiration_data()
+
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["domain"] == "example.com"
+    assert entry["dcv_method"] == "persistent-txt"
+    assert entry["status"] == "active"
+    assert entry["dcv_status"] == "complete"
+
+
+def test_digicert_get_dcv_status_failed_wins_over_pending():
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    plugin = DigiCertIssuerPlugin.__new__(DigiCertIssuerPlugin)
+    plugin.session = MagicMock()
+
+    val_resp = MagicMock()
+    val_resp.status_code = 200
+    val_resp.json.return_value = {
+        "validations": [
+            {"dcv_status": "complete"},
+            {"dcv_status": "failed"},
+        ]
+    }
+    plugin.session.get.return_value = val_resp
+
+    assert plugin._get_dcv_status("https://digicert.example", 123) == "failed"
+
+
+def test_digicert_get_dcv_status_unknown_on_error():
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    plugin = DigiCertIssuerPlugin.__new__(DigiCertIssuerPlugin)
+    plugin.session = MagicMock()
+    plugin.session.get.side_effect = Exception("network error")
+
+    assert plugin._get_dcv_status("https://digicert.example", 123) == "unknown"
