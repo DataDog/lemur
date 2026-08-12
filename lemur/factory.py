@@ -300,3 +300,6 @@ def install_plugins(app):
                     "Domain authorization warmup failed, this is a best effort call:\n%s\n"
                     % (traceback.format_exc())
                 )
+
+        from lemur.policies import service as policy_service
+        policy_service.update_default_rotation_policy()
