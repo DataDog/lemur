@@ -277,8 +277,7 @@ def get_all_pending_reissue():
 
     :return:
     """
-    # Keep the "default" rotation policy in sync with config before we use it.
-    policy_service.sync_default_rotation_policy()
+    policy_service.get_rotation_policy_from_config()
     return (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))

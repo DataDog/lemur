@@ -74,23 +74,6 @@ def get_sequence(name):
     return root, seq
 
 
-def _get_default_rotation_policy():
-    """
-    Returns the named "default" RotationPolicy, creating it (with days from
-    LEMUR_DEFAULT_ROTATION_INTERVAL) if it does not exist yet.
-
-    Pure getter — it does NOT sync days to the config. Use
-    ``policy_service.sync_default_rotation_policy()`` (called before the
-    rotation-candidate query) for that.
-    """
-    policy = RotationPolicy.query.filter_by(name="default").first()
-    if policy is None:
-        days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
-        policy = RotationPolicy(name="default", days=days)
-        db.session.add(policy)
-    return policy
-
-
 def get_or_increase_name(name, serial):
     certificates = Certificate.query.filter(Certificate.name == name).all()
 
@@ -246,7 +229,7 @@ class Certificate(db.Model):
         self.roles = list(set(kwargs.get("roles", [])))
         self.replaces = kwargs.get("replaces", [])
         self.rotation = kwargs.get("rotation")
-        self.rotation_policy = kwargs.get("rotation_policy") or _get_default_rotation_policy()
+        self.rotation_policy = kwargs.get("rotation_policy") or RotationPolicy.query.filter_by(name="default").first()
         self.key_type = kwargs.get("key_type")
         self.signing_algorithm = defaults.signing_algorithm(cert)
         self.bits = defaults.bitstrength(cert)
