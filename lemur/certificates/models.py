@@ -76,21 +76,18 @@ def get_sequence(name):
 
 def _get_default_rotation_policy():
     """
-    Returns the named "default" RotationPolicy, keeping it in sync with the
-    LEMUR_DEFAULT_ROTATION_INTERVAL config: creates it if missing, or updates
-    its days to the configured value if it differs.
+    Returns the named "default" RotationPolicy, creating it (with days from
+    LEMUR_DEFAULT_ROTATION_INTERVAL) if it does not exist yet.
 
-    Used as the fallback for certs created without an explicit rotation policy,
-    so every newly created cert gets the default policy instead of a NULL one —
-    and changing the config takes effect on the next cert creation.
+    Pure getter — it does NOT sync days to the config. Use
+    ``policy_service.sync_default_rotation_policy()`` (called before the
+    rotation-candidate query) for that.
     """
-    days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
     policy = RotationPolicy.query.filter_by(name="default").first()
     if policy is None:
+        days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
         policy = RotationPolicy(name="default", days=days)
         db.session.add(policy)
-    elif policy.days != days:
-        policy.days = days
     return policy
 
 

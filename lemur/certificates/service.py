@@ -44,6 +44,7 @@ from lemur.extensions import metrics, signals
 from lemur.notifications.messaging import send_revocation_notification
 from lemur.notifications.models import Notification
 from lemur.pending_certificates.models import PendingCertificate
+from lemur.policies import service as policy_service
 from lemur.plugins.base import plugins
 from lemur.plugins.utils import get_plugin_option
 from lemur.roles import service as role_service
@@ -276,6 +277,8 @@ def get_all_pending_reissue():
 
     :return:
     """
+    # Keep the "default" rotation policy in sync with config before we use it.
+    policy_service.sync_default_rotation_policy()
     return (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
