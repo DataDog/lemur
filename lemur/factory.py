@@ -68,6 +68,7 @@ def create_app(app_name=None, blueprints=None, config=None):
     configure_logging(app)
     configure_database(app)
     install_plugins(app)
+    configure_default_rotation_policy(app)
 
     @app.teardown_appcontext
     def teardown(exception=None):
@@ -75,6 +76,19 @@ def create_app(app_name=None, blueprints=None, config=None):
             db.session.remove()
 
     return app
+
+
+def configure_default_rotation_policy(app):
+    """
+    Ensures the named "default" RotationPolicy exists and its days are in sync
+    with LEMUR_DEFAULT_ROTATION_INTERVAL. Called once at boot via create_app()
+    so every process (web, celery worker, celery beat) starts with the policy
+    matching the configured value.
+    """
+    from lemur.policies import service as policy_service
+
+    with app.app_context():
+        policy_service.update_default_rotation_policy()
 
 
 def from_file(file_path, silent=False):
@@ -301,5 +315,4 @@ def install_plugins(app):
                     % (traceback.format_exc())
                 )
 
-        from lemur.policies import service as policy_service
-        policy_service.update_default_rotation_policy()
+
