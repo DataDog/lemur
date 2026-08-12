@@ -12,7 +12,7 @@ amqp==5.3.1
     # via kombu
 aniso8601==10.0.1
     # via flask-restful
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via pydantic
 anyio==4.5.0
     # via
@@ -65,9 +65,9 @@ blinker==1.9.0
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.43.53
+boto3==1.43.62
     # via -r requirements-base.in
-botocore==1.43.53
+botocore==1.43.62
     # via
     #   -r requirements-base.in
     #   boto3
@@ -107,7 +107,7 @@ click-plugins==1.1.1.2
     # via celery
 click-repl==0.3.0
     # via celery
-cloudflare==5.5.0
+cloudflare==5.6.0
     # via -r requirements-base.in
 configargparse==1.7.5
     # via certbot
@@ -179,7 +179,7 @@ flask-sqlalchemy==2.5.1
     #   flask-migrate
 future==1.0.0
     # via -r requirements-base.in
-google-api-core==2.32.0
+google-api-core==2.33.0
     # via
     #   google-cloud-compute
     #   google-cloud-private-ca
@@ -199,7 +199,7 @@ googleapis-common-protos==1.75.0
     #   grpcio-status
 grpc-google-iam-v1==0.14.4
     # via google-cloud-private-ca
-grpcio==1.82.1.post125712670+dd.repackaging.125712670
+grpcio==1.83.0
     # via
     #   google-api-core
     #   google-cloud-compute
@@ -207,7 +207,7 @@ grpcio==1.82.1.post125712670+dd.repackaging.125712670
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.82.1
+grpcio-status==1.83.0
     # via google-api-core
 gunicorn==26.0.0
     # via -r requirements-base.in
@@ -306,9 +306,9 @@ parsedatetime==2.6
     # via certbot
 pem==23.1.0
     # via -r requirements-base.in
-prompt-toolkit==3.0.52
+prompt-toolkit==3.0.53
     # via click-repl
-proto-plus==1.28.1
+proto-plus==1.28.2
     # via
     #   google-api-core
     #   google-cloud-compute
@@ -376,7 +376,7 @@ python-ldap==3.4.7
     # via
     #   -r requirements-base.in
     #   -r requirements-datadog.in
-pytz==2026.2
+pytz==2026.3.post1
     # via flask-restful
 pyyaml==6.0.3
     # via -r requirements-base.in
@@ -403,7 +403,7 @@ requests-oauthlib==2.0.0
     # via msrest
 retrying==1.4.2
     # via -r requirements-base.in
-s3transfer==0.19.1
+s3transfer==0.19.2
     # via boto3
 sentry-sdk==2.66.1
     # via -r requirements-base.in
@@ -481,7 +481,7 @@ werkzeug==3.1.8
     #   -r requirements-base.in
     #   flask
     #   flask-cors
-wrapt==2.2.2
+wrapt==2.3.0
     # via deprecated
 xmltodict==1.0.4
     # via -r requirements-base.in
