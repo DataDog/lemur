@@ -1046,31 +1046,9 @@ def is_attached_to_endpoint(certificate_name, endpoint_name):
     This method talks to elb and finds the real time information.
     :param certificate_name:
     :param endpoint_name:
-    :return: True if certificate is attached to the given endpoint, False otherwise.
-        Returns False when the endpoint no longer exists (nothing to be attached to).
-        When the source plugin cannot verify attachment (does not implement
-        get_endpoint_certificate_names()), returns True (fail-closed) so a possibly
-        still-deployed certificate is never silently revoked.
+    :return: True if certificate is attached to the given endpoint, False otherwise
     """
     endpoint = endpoint_service.get_by_name(endpoint_name)
-    if endpoint is None:
-        current_app.logger.error(
-            "Endpoint %s not found; assuming certificate %s is not attached",
-            endpoint_name,
-            certificate_name,
-        )
-        capture_exception()
-        return False
-    if not hasattr(endpoint.source.plugin, "get_endpoint_certificate_names"):
-        current_app.logger.error(
-            "Source plugin %s does not implement 'get_endpoint_certificate_names()'; "
-            "assuming certificate %s is attached to endpoint %s (fail-closed)",
-            endpoint.source.plugin_name,
-            certificate_name,
-            endpoint_name,
-        )
-        capture_exception()
-        return True
     attached_certificates = endpoint.source.plugin.get_endpoint_certificate_names(
         endpoint
     )
