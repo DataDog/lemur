@@ -12,7 +12,7 @@ from lemur import database
 from lemur.policies.models import RotationPolicy
 
 
-def get_rotation_policy_from_config():
+def update_default_rotation_policy():
     """
     Return the named "default" RotationPolicy, keeping it in sync with
     LEMUR_DEFAULT_ROTATION_INTERVAL: creates it if missing, updates its days
