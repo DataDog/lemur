@@ -2197,6 +2197,18 @@ def test_is_attached_to_endpoint_plugin_missing_method(app):
     assert result is True
 
 
+def test_is_attached_to_endpoint_endpoint_not_found(app):
+    """Endpoint lookup returning None returns False (no AttributeError) — nothing to be attached to."""
+    from unittest.mock import patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = None
+        result = is_attached_to_endpoint("my-cert", "missing-endpoint")
+
+    assert result is False
+
+
 def test_is_attached_to_endpoint_plugin_has_method_cert_present():
     """Plugin with get_endpoint_certificate_names returns True when cert is in list."""
     from unittest.mock import MagicMock, patch
