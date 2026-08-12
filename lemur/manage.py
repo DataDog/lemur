@@ -292,7 +292,7 @@ class InitializeApp(Command):
                 "[-] Default rotation interval policy already created, skipping...!\n"
             )
         else:
-            days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 30)
+            days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
             sys.stdout.write(
                 "[+] Creating default certificate rotation policy of {days} days before issuance.\n".format(
                     days=days
