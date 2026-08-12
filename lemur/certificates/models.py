@@ -74,6 +74,26 @@ def get_sequence(name):
     return root, seq
 
 
+def _get_default_rotation_policy():
+    """
+    Returns the named "default" RotationPolicy, keeping it in sync with the
+    LEMUR_DEFAULT_ROTATION_INTERVAL config: creates it if missing, or updates
+    its days to the configured value if it differs.
+
+    Used as the fallback for certs created without an explicit rotation policy,
+    so every newly created cert gets the default policy instead of a NULL one —
+    and changing the config takes effect on the next cert creation.
+    """
+    days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
+    policy = RotationPolicy.query.filter_by(name="default").first()
+    if policy is None:
+        policy = RotationPolicy(name="default", days=days)
+        db.session.add(policy)
+    elif policy.days != days:
+        policy.days = days
+    return policy
+
+
 def get_or_increase_name(name, serial):
     certificates = Certificate.query.filter(Certificate.name == name).all()
 
@@ -229,7 +249,7 @@ class Certificate(db.Model):
         self.roles = list(set(kwargs.get("roles", [])))
         self.replaces = kwargs.get("replaces", [])
         self.rotation = kwargs.get("rotation")
-        self.rotation_policy = kwargs.get("rotation_policy")
+        self.rotation_policy = kwargs.get("rotation_policy") or _get_default_rotation_policy()
         self.key_type = kwargs.get("key_type")
         self.signing_algorithm = defaults.signing_algorithm(cert)
         self.bits = defaults.bitstrength(cert)
