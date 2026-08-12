@@ -24,9 +24,15 @@ def update_default_rotation_policy():
     days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
     policies = get_by_name("default")
     if not policies:
+        current_app.logger.info(
+            "[+] Creating default rotation policy: days=%d", days
+        )
         return create(days=days, name="default")
     policy = policies[0]
     if policy.days != days:
+        current_app.logger.info(
+            "[~] Updating default rotation policy: days %d -> %d", policy.days, days
+        )
         update(policy.id, days=days)
     return policy
 
