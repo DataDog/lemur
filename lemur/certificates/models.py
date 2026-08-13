@@ -229,10 +229,7 @@ class Certificate(db.Model):
         self.roles = list(set(kwargs.get("roles", [])))
         self.replaces = kwargs.get("replaces", [])
         self.rotation = kwargs.get("rotation")
-        try:
-            self.rotation_policy = kwargs.get("rotation_policy") or RotationPolicy.query.filter_by(name="default").first()
-        except Exception:
-            self.rotation_policy = kwargs.get("rotation_policy")
+        self.rotation_policy = kwargs.get("rotation_policy") or RotationPolicy.query.filter_by(name="default").first()
         self.key_type = kwargs.get("key_type")
         self.signing_algorithm = defaults.signing_algorithm(cert)
         self.bits = defaults.bitstrength(cert)
