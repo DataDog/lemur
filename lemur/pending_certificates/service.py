@@ -17,6 +17,7 @@ from lemur.common.utils import truthiness, parse_cert_chain, parse_certificate
 from lemur.common import validators
 from lemur.destinations.models import Destination
 from lemur.domains.models import Domain
+from lemur.exceptions import InvalidConfiguration
 from lemur.extensions import metrics
 from lemur.notifications.models import Notification
 from lemur.pending_certificates.models import PendingCertificate
@@ -178,6 +179,35 @@ def increment_attempt(pending_certificate):
         "Incremented attempts for the pending certificate",
     )
     return pending_certificate.number_attempts
+
+
+# Failures that retrying can never resolve: configuration, DNS-delegation, or
+# credential problems (e.g. no DNS provider configured for a domain, broken ACME
+# CNAME delegation, or invalid ACME account credentials). Re-queueing these only
+# re-runs the ACME order/challenge and burns the CA's rate limit (Let's Encrypt:
+# 5 duplicate certificates / failed validations per week per domain), so they must
+# fail fast and mark the pending certificate resolved instead of retrying.
+_TERMINAL_FAILURE_MARKERS = (
+    "No DNS providers found for domain",
+    "Unable to determine DNS challenges",
+    "unauthorized",
+    "authentication",
+    "invalid account",
+    "credentials",
+    "401",
+    "403",
+)
+
+
+def is_terminal_failure(error):
+    """
+    Return True if a pending-certificate failure is terminal (a configuration,
+    DNS-delegation, or credential problem that retrying will never resolve).
+    """
+    if isinstance(error, InvalidConfiguration):
+        return True
+    message = str(error)
+    return any(marker in message for marker in _TERMINAL_FAILURE_MARKERS)
 
 
 def update(pending_cert_id, **kwargs):

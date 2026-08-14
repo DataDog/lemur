@@ -143,3 +143,43 @@ def test_invalid_pending_upload_with_chain(pending_certificate_from_partial_chai
     assert str(err.value).startswith(
         "Incorrect chain certificate(s) provided: '*.wild.example.org' is not signed by 'LemurTrust Unittests Root CA 2018"
     )
+
+
+def test_is_terminal_failure_invalid_configuration():
+    from lemur.exceptions import InvalidConfiguration
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    assert is_terminal_failure(InvalidConfiguration("bad config"))
+
+
+def test_is_terminal_failure_no_dns_provider():
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    assert is_terminal_failure(
+        Exception("No DNS providers found for domain: us3.ddbuild.io")
+    )
+
+
+def test_is_terminal_failure_no_dns_challenges():
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    assert is_terminal_failure(
+        Exception("Unable to determine DNS challenges from authorizations")
+    )
+
+
+def test_is_terminal_failure_auth():
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    assert is_terminal_failure(Exception("unauthorized"))
+    assert is_terminal_failure(Exception("authentication failed"))
+    assert is_terminal_failure(Exception("HTTP 403"))
+
+
+def test_is_terminal_failure_transient_is_false():
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    # DNS verification / order-not-ready failures can resolve on retry.
+    assert not is_terminal_failure(ValueError("Failed verification"))
+    assert not is_terminal_failure(Exception("order is not ready"))
+    assert not is_terminal_failure(Exception("some unrelated transient error"))

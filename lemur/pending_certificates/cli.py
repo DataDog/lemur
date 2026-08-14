@@ -109,7 +109,16 @@ def fetch_all_acme():
             error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
 
-            if pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
+            if pending_certificate_service.is_terminal_failure(cert.get("last_error")):
+                error_log["message"] = (
+                    "Terminal failure, marking pending certificate as resolved"
+                )
+                send_pending_failure_notification(
+                    pending_cert, notify_owner=pending_cert.notify
+                )
+                # Mark "resolved" as True
+                pending_certificate_service.update(cert.id, resolved=True)
+            elif pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
                 error_log["message"] = "Marking pending certificate as resolved"
                 send_pending_failure_notification(
                     pending_cert, notify_owner=pending_cert.notify
