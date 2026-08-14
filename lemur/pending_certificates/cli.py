@@ -117,14 +117,14 @@ def fetch_all_acme():
                     pending_cert, notify_owner=pending_cert.notify
                 )
                 # Mark "resolved" as True
-                pending_certificate_service.update(cert.id, resolved=True)
+                pending_certificate_service.update(pending_cert.id, resolved=True)
             elif pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
                 error_log["message"] = "Marking pending certificate as resolved"
                 send_pending_failure_notification(
                     pending_cert, notify_owner=pending_cert.notify
                 )
                 # Mark "resolved" as True
-                pending_certificate_service.update(cert.id, resolved=True)
+                pending_certificate_service.update(pending_cert.id, resolved=True)
             else:
                 pending_certificate_service.increment_attempt(pending_cert)
                 pending_certificate_service.update(

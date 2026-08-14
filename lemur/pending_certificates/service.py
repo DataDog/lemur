@@ -188,8 +188,8 @@ def increment_attempt(pending_certificate):
 # 5 duplicate certificates / failed validations per week per domain), so they must
 # fail fast and mark the pending certificate resolved instead of retrying.
 _TERMINAL_FAILURE_MARKERS = (
-    "No DNS providers found for domain",
-    "Unable to determine DNS challenges",
+    "no dns providers found for domain",
+    "unable to determine dns challenges",
     "unauthorized",
     "authentication",
     "invalid account",
@@ -203,10 +203,11 @@ def is_terminal_failure(error):
     """
     Return True if a pending-certificate failure is terminal (a configuration,
     DNS-delegation, or credential problem that retrying will never resolve).
+    Matching is case-insensitive.
     """
     if isinstance(error, InvalidConfiguration):
         return True
-    message = str(error)
+    message = str(error).lower()
     return any(marker in message for marker in _TERMINAL_FAILURE_MARKERS)
 
 

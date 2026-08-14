@@ -183,3 +183,20 @@ def test_is_terminal_failure_transient_is_false():
     assert not is_terminal_failure(ValueError("Failed verification"))
     assert not is_terminal_failure(Exception("order is not ready"))
     assert not is_terminal_failure(Exception("some unrelated transient error"))
+
+
+def test_is_terminal_failure_case_insensitive():
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    assert is_terminal_failure(Exception("UNAUTHORIZED"))
+    assert is_terminal_failure(Exception("No DNS PROVIDERS found for domain: x"))
+    assert is_terminal_failure(Exception("Authentication failed"))
+    assert is_terminal_failure(Exception("HTTP 401 Unauthorized"))
+
+
+def test_is_terminal_failure_none_is_false():
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    # A None / empty error should never be treated as terminal.
+    assert not is_terminal_failure(None)
+    assert not is_terminal_failure("")
