@@ -226,7 +226,13 @@ def report_number_pending_tasks(**kwargs):
         )
 
 
-def _emit_task_duration(metric_status, **kwargs):
+def _emit_task_duration(status, **kwargs):
+    """
+    Emit a task duration metric if we previously recorded a start time for the task.
+
+    Returns the tags for the task (from get_celery_request_tags) so callers can continue
+    to use them for further metrics/logging.
+    """
     tags = get_celery_request_tags(**kwargs)
     started_at = _task_started_at.pop(tags["task_id"], None)
     if started_at is None:
@@ -236,9 +242,17 @@ def _emit_task_duration(metric_status, **kwargs):
         "celery.task_duration",
         "TIMER",
         duration_ms,
-        metric_tags={"task_name": tags["task_name"], "status": metric_status},
+        metric_tags={"task_name": tags["task_name"], "status": status},
     )
     return tags
+
+
+def _task_status_from_failure(**kwargs):
+    einfo = kwargs.get("einfo")
+    if einfo and getattr(getattr(einfo, "exception", None), "__class__", None):
+        if einfo.exception.__class__.__name__ == "SoftTimeLimitExceeded":
+            return "timeout"
+    return "failure"
 
 
 @task_success.connect
@@ -274,7 +288,7 @@ def report_failed_task(**kwargs):
             "function": f"{__name__}.{sys._getframe().f_code.co_name}",
             "Message": "Celery Task Failure",
         }
-        _emit_task_duration("failure", **kwargs)
+        _emit_task_duration(_task_status_from_failure(**kwargs), **kwargs)
 
         # Add traceback if exception info is in the kwargs
         einfo = kwargs.get("einfo")
