@@ -18,6 +18,7 @@ from celery.signals import (
     after_setup_logger,
     after_setup_task_logger,
     task_failure,
+    task_prerun,
     task_received,
     task_revoked,
     task_success,
@@ -53,6 +54,7 @@ else:
     flask_app = create_app()
 
 red = RedisHandler().redis()
+_task_started_at = {}
 
 
 def make_celery(app):
@@ -197,6 +199,17 @@ def report_celery_last_success_metrics():
     metrics.send(f"{function}.success", "counter", 1)
 
 
+@task_prerun.connect
+def report_task_started(**kwargs):
+    """
+    Record task start time so we can emit duration on completion/failure.
+    """
+    with flask_app.app_context():
+        task_id = kwargs.get("task_id")
+        if task_id:
+            _task_started_at[task_id] = time.monotonic()
+
+
 @task_received.connect
 def report_number_pending_tasks(**kwargs):
     """
@@ -213,6 +226,21 @@ def report_number_pending_tasks(**kwargs):
         )
 
 
+def _emit_task_duration(metric_status, **kwargs):
+    tags = get_celery_request_tags(**kwargs)
+    started_at = _task_started_at.pop(tags["task_id"], None)
+    if started_at is None:
+        return tags
+    duration_ms = int((time.monotonic() - started_at) * 1000)
+    metrics.send(
+        "celery.task_duration",
+        "TIMER",
+        duration_ms,
+        metric_tags={"task_name": tags["task_name"], "status": metric_status},
+    )
+    return tags
+
+
 @task_success.connect
 def report_successful_task(**kwargs):
     """
@@ -221,7 +249,7 @@ def report_successful_task(**kwargs):
     https://docs.celeryproject.org/en/latest/userguide/signals.html#task-success
     """
     with flask_app.app_context():
-        tags = get_celery_request_tags(**kwargs)
+        tags = _emit_task_duration("success", **kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
         # Emit failed_task=0 on success so the counter stays dense (0 when healthy)
@@ -246,6 +274,7 @@ def report_failed_task(**kwargs):
             "function": f"{__name__}.{sys._getframe().f_code.co_name}",
             "Message": "Celery Task Failure",
         }
+        _emit_task_duration("failure", **kwargs)
 
         # Add traceback if exception info is in the kwargs
         einfo = kwargs.get("einfo")
@@ -272,7 +301,7 @@ def report_revoked_task(**kwargs):
             "Message": "Celery Task Revoked",
         }
 
-        error_tags = get_celery_request_tags(**kwargs)
+        error_tags = _emit_task_duration("revoked", **kwargs)
 
         log_data.update(error_tags)
         current_app.logger.error(log_data)
