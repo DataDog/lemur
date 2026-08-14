@@ -204,10 +204,9 @@ def report_task_started(**kwargs):
     """
     Record task start time so we can emit duration on completion/failure.
     """
-    with flask_app.app_context():
-        task_id = kwargs.get("task_id")
-        if task_id:
-            _task_started_at[task_id] = time.monotonic()
+    task_id = kwargs.get("task_id")
+    if task_id:
+        _task_started_at[task_id] = time.monotonic()
 
 
 @task_received.connect
@@ -249,9 +248,9 @@ def _emit_task_duration(status, **kwargs):
 
 def _task_status_from_failure(**kwargs):
     einfo = kwargs.get("einfo")
-    if einfo and getattr(getattr(einfo, "exception", None), "__class__", None):
-        if einfo.exception.__class__.__name__ == "SoftTimeLimitExceeded":
-            return "timeout"
+    exception = getattr(einfo, "exception", None)
+    if isinstance(exception, SoftTimeLimitExceeded):
+        return "timeout"
     return "failure"
 
 
@@ -288,14 +287,12 @@ def report_failed_task(**kwargs):
             "function": f"{__name__}.{sys._getframe().f_code.co_name}",
             "Message": "Celery Task Failure",
         }
-        _emit_task_duration(_task_status_from_failure(**kwargs), **kwargs)
+        error_tags = _emit_task_duration(_task_status_from_failure(**kwargs), **kwargs)
 
         # Add traceback if exception info is in the kwargs
         einfo = kwargs.get("einfo")
         if einfo:
             log_data["traceback"] = einfo.traceback
-
-        error_tags = get_celery_request_tags(**kwargs)
 
         log_data.update(error_tags)
         current_app.logger.error(log_data)
