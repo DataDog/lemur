@@ -8,7 +8,6 @@ if "lemur.common.celery" not in sys.modules:
         import lemur.common.celery  # noqa: F401
 
 import lemur.common.celery as _celery_module  # noqa: E402
-_celery_module.current_app = MagicMock()
 
 
 class FakeEinfo:
@@ -36,9 +35,9 @@ def test_task_duration_emitted_on_success_and_clears_start_time(mock_metrics):
     _celery_module._task_started_at.clear()
     _celery_module._task_started_at["task-1"] = 100.0
 
-    with patch("lemur.common.celery.time.monotonic", return_value=101.234), patch(
-        "lemur.common.celery.time.time", return_value=2000
-    ):
+    with patch.object(_celery_module, "current_app", MagicMock()), patch(
+        "lemur.common.celery.time.monotonic", return_value=101.234
+    ), patch("lemur.common.celery.time.time", return_value=2000):
         fake_task = FakeTask()
         _celery_module.report_successful_task(sender=fake_task, request=fake_task.request)
 
@@ -54,9 +53,9 @@ def test_task_duration_emitted_on_failure_with_timeout_status(mock_metrics):
     _celery_module._task_started_at.clear()
     _celery_module._task_started_at["task-2"] = 50.0
 
-    with patch("lemur.common.celery.time.monotonic", return_value=51.5), patch(
-        "lemur.common.celery.time.time", return_value=2000
-    ):
+    with patch.object(_celery_module, "current_app", MagicMock()), patch(
+        "lemur.common.celery.time.monotonic", return_value=51.5
+    ), patch("lemur.common.celery.time.time", return_value=2000):
         fake_task = FakeTask(task_id="task-2")
         _celery_module.report_failed_task(
             sender=fake_task,
@@ -75,7 +74,8 @@ def test_task_duration_emitted_on_failure_with_timeout_status(mock_metrics):
 def test_task_duration_not_emitted_when_no_start_time(mock_metrics):
     _celery_module._task_started_at.clear()
 
-    fake_task = FakeTask(task_id="task-3")
-    _celery_module.report_successful_task(sender=fake_task, request=fake_task.request)
+    with patch.object(_celery_module, "current_app", MagicMock()):
+        fake_task = FakeTask(task_id="task-3")
+        _celery_module.report_successful_task(sender=fake_task, request=fake_task.request)
 
     assert not [c for c in mock_metrics.send.call_args_list if c.args[0] == "celery.task_duration"]
