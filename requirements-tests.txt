@@ -137,7 +137,7 @@ cffi==2.0.0
     #   -r requirements.txt
     #   cryptography
     #   pynacl
-cfn-lint==1.54.0
+cfn-lint==1.55.1
     # via moto
 charset-normalizer==3.4.6
     # via
@@ -444,7 +444,7 @@ msrest==0.7.1
     #   azure-mgmt-subscription
 multipart==2.0.0
     # via moto
-mypy==2.3.0
+mypy==2.3.1
     # via -r requirements-tests.in
 mypy-extensions==1.1.0
     # via
@@ -492,7 +492,7 @@ pathspec==1.1.1
     #   mypy
 pem==23.1.0
     # via -r requirements.txt
-platformdirs==4.11.1
+platformdirs==4.11.3
     # via black
 pluggy==1.6.0
     # via pytest
@@ -757,7 +757,7 @@ types-redis==4.6.0.20241004
     # via -r requirements-tests.in
 types-requests==2.33.0.20260712
     # via -r requirements-tests.in
-types-setuptools==83.0.0.20260807
+types-setuptools==84.0.0.20260812
     # via
     #   -r requirements-tests.in
     #   types-cffi
