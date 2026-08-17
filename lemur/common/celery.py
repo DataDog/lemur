@@ -1238,6 +1238,7 @@ def _emit_dcv_expiration_metrics():
                         "ca": ca_name,
                         "validation_type": entry.get("validation_type", "unknown"),
                         "org_id": entry.get("org_id", "unknown"),
+                        "dcv_method": entry.get("dcv_method", "unknown"),
                     },
                 )
                 total_domains += 1

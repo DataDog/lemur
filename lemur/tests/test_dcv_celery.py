@@ -105,6 +105,7 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
             "dcv_expiration": "2099-01-01T00:00:00+00:00",
             "validation_type": "ov",
             "org_id": "42",
+            "dcv_method": "persistent-txt",
         }
     ]
     mock_plugins.all.return_value = [fake_plugin]
@@ -121,6 +122,7 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
     assert tags["ca"] == "digicert-issuer"
     assert tags["validation_type"] == "ov"
     assert tags["org_id"] == "42"
+    assert tags["dcv_method"] == "persistent-txt"
     assert dcv_calls[0].args[2] > 0
 
 
