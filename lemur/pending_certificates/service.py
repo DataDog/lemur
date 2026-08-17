@@ -187,16 +187,6 @@ def increment_attempt(pending_certificate):
 # re-runs the ACME order/challenge and burns the CA's rate limit (Let's Encrypt:
 # 5 duplicate certificates / failed validations per week per domain), so they must
 # fail fast and mark the pending certificate resolved instead of retrying.
-_TERMINAL_FAILURE_MARKERS = (
-    "no dns providers found for domain",
-    "unable to determine dns challenges",
-    "unauthorized",
-    "authentication",
-    "invalid account",
-    "credentials",
-    "401",
-    "403",
-)
 
 
 def is_terminal_failure(error):
@@ -204,16 +194,11 @@ def is_terminal_failure(error):
     Return True if a pending-certificate failure is terminal (a configuration,
     DNS-delegation, or credential problem that retrying will never resolve).
 
-    The live retry path classifies failures by explicit exception type
-    (``PendingCertificateTerminalError`` and subclasses) rather than by matching
-    on mutable exception text. The string-marker fallback below is retained only
-    for pending certificates whose ``status`` was stored as free text before this
-    change and for any error that escaped classification.
+    Classification is by explicit exception type (``PendingCertificateTerminalError``
+    and subclasses) raised at the ACME/DNS boundaries, never by matching on
+    mutable exception text.
     """
-    if isinstance(error, PendingCertificateTerminalError):
-        return True
-    message = str(error).lower()
-    return any(marker in message for marker in _TERMINAL_FAILURE_MARKERS)
+    return isinstance(error, PendingCertificateTerminalError)
 
 
 def update(pending_cert_id, **kwargs):

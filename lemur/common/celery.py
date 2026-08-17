@@ -31,7 +31,6 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
-from lemur.exceptions import PendingCertificateTerminalError
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -361,9 +360,8 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
 
-            if isinstance(
-                cert.get("last_error"), PendingCertificateTerminalError
-            ) or pending_certificate_service.is_terminal_failure(cert.get("last_error")):
+            last_error = cert.get("last_error")
+            if pending_certificate_service.is_terminal_failure(last_error):
                 # Config / DNS-delegation / credential failure — retrying can never
                 # succeed and only burns the CA's rate limit. Fail fast.
                 error_log["message"] = "Terminal failure, resolving pending certificate"
@@ -371,8 +369,8 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
                 # delivery failure can't leave the pending cert unresolved (and
                 # retried, re-exhausting the CA rate limit).
                 pending_certificate_service.update(
-                    cert.get("pending_cert").id,
-                    status=str(cert.get("last_error")),
+                    pending_cert.id,
+                    status=str(last_error),
                     resolved=True,
                 )
                 send_pending_failure_notification(
@@ -389,12 +387,12 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
                     send_reissue_failed_notification(pending_cert)
                 # Mark the pending cert as resolved
                 pending_certificate_service.update(
-                    cert.get("pending_cert").id, resolved=True
+                    pending_cert.id, resolved=True
                 )
             else:
                 pending_certificate_service.increment_attempt(pending_cert)
                 pending_certificate_service.update(
-                    cert.get("pending_cert").id, status=str(cert.get("last_error"))
+                    pending_cert.id, status=str(last_error)
                 )
                 # Add failed pending cert task back to queue
                 fetch_acme_cert.delay(id, notify_reissue_cert_id)

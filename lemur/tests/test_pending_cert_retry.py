@@ -100,10 +100,10 @@ def _assert_resolved(mocks):
 
 
 def test_fetch_acme_cert_terminal_failure_marks_resolved_no_requeue():
+    from lemur.exceptions import NoDNSProviderError
+
     pc = _pending_cert(1)
-    mocks = _run_fetch_acme_cert(
-        pc, Exception("No DNS providers found for domain: us3.ddbuild.io")
-    )
+    mocks = _run_fetch_acme_cert(pc, NoDNSProviderError("no provider for zone"))
 
     # Marked resolved
     _assert_resolved(mocks)
@@ -141,10 +141,12 @@ def test_fetch_acme_cert_terminal_typed_error_marks_resolved_no_requeue():
 
 def test_fetch_acme_cert_terminal_persists_resolved_before_notify():
     """The pending cert is marked resolved even if notification delivery raises."""
+    from lemur.exceptions import NoDNSProviderError
+
     pc = _pending_cert(1)
     mocks = _run_fetch_acme_cert(
         pc,
-        Exception("No DNS providers found for domain: us3.ddbuild.io"),
+        NoDNSProviderError("no provider for zone"),
         notify_side_effect=RuntimeError("smtp down"),
     )
 

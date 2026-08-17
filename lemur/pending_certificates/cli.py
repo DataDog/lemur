@@ -13,7 +13,6 @@ from flask_script import Manager
 
 from lemur.authorities.service import get as get_authority
 from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
-from lemur.exceptions import PendingCertificateTerminalError
 from lemur.notifications.messaging import send_pending_failure_notification
 from lemur.pending_certificates import service as pending_certificate_service
 from lemur.plugins.base import plugins
@@ -110,17 +109,14 @@ def fetch_all_acme():
             error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
 
-            if isinstance(
-                cert.get("last_error"), PendingCertificateTerminalError
-            ) or pending_certificate_service.is_terminal_failure(cert.get("last_error")):
-                error_log["message"] = (
-                    "Terminal failure, marking pending certificate as resolved"
-                )
+            last_error = cert.get("last_error")
+            if pending_certificate_service.is_terminal_failure(last_error):
+                error_log["message"] = "Terminal failure, marking pending certificate as resolved"
                 # Persist the terminal state before notifying so a notification
                 # delivery failure can't leave the pending cert unresolved.
                 pending_certificate_service.update(
                     pending_cert.id,
-                    status=str(cert.get("last_error")),
+                    status=str(last_error),
                     resolved=True,
                 )
                 send_pending_failure_notification(
@@ -136,7 +132,7 @@ def fetch_all_acme():
             else:
                 pending_certificate_service.increment_attempt(pending_cert)
                 pending_certificate_service.update(
-                    cert.get("pending_cert").id, status=str(cert.get("last_error"))
+                    pending_cert.id, status=str(last_error)
                 )
             current_app.logger.error(error_log)
     log_data["message"] = "Complete"

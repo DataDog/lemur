@@ -153,27 +153,28 @@ def test_is_terminal_failure_invalid_configuration():
 
 
 def test_is_terminal_failure_no_dns_provider():
+    from lemur.exceptions import NoDNSProviderError
     from lemur.pending_certificates.service import is_terminal_failure
 
-    assert is_terminal_failure(
-        Exception("No DNS providers found for domain: us3.ddbuild.io")
-    )
+    assert is_terminal_failure(NoDNSProviderError("no provider for us3.ddbuild.io"))
 
 
 def test_is_terminal_failure_no_dns_challenges():
+    from lemur.exceptions import DNSChallengeSetupError
     from lemur.pending_certificates.service import is_terminal_failure
 
     assert is_terminal_failure(
-        Exception("Unable to determine DNS challenges from authorizations")
+        DNSChallengeSetupError("Unable to determine DNS challenges from authorizations")
     )
 
 
 def test_is_terminal_failure_auth():
+    from lemur.exceptions import ACMEAuthenticationError
     from lemur.pending_certificates.service import is_terminal_failure
 
-    assert is_terminal_failure(Exception("unauthorized"))
-    assert is_terminal_failure(Exception("authentication failed"))
-    assert is_terminal_failure(Exception("HTTP 403"))
+    assert is_terminal_failure(ACMEAuthenticationError("unauthorized"))
+    assert is_terminal_failure(ACMEAuthenticationError("authentication failed"))
+    assert is_terminal_failure(ACMEAuthenticationError("HTTP 403"))
 
 
 def test_is_terminal_failure_transient_is_false():
@@ -183,15 +184,6 @@ def test_is_terminal_failure_transient_is_false():
     assert not is_terminal_failure(ValueError("Failed verification"))
     assert not is_terminal_failure(Exception("order is not ready"))
     assert not is_terminal_failure(Exception("some unrelated transient error"))
-
-
-def test_is_terminal_failure_case_insensitive():
-    from lemur.pending_certificates.service import is_terminal_failure
-
-    assert is_terminal_failure(Exception("UNAUTHORIZED"))
-    assert is_terminal_failure(Exception("No DNS PROVIDERS found for domain: x"))
-    assert is_terminal_failure(Exception("Authentication failed"))
-    assert is_terminal_failure(Exception("HTTP 401 Unauthorized"))
 
 
 def test_is_terminal_failure_none_is_false():
