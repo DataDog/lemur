@@ -525,6 +525,7 @@ class AcmeDnsHandler(AcmeHandler):
 
             # If CNAME exists, set host to the target address
             target_domain = domain
+            cname_delegation_pending = False
             if current_app.config.get("ACME_ENABLE_DELEGATED_CNAME", False):
                 cname_result, _ = self.strip_wildcard(domain)
                 cname_result = challenges.DNS01().validation_domain_name(cname_result)
@@ -538,8 +539,21 @@ class AcmeDnsHandler(AcmeHandler):
                         1,
                         metric_tags={"domain": domain},
                     )
+                else:
+                    # Delegated CNAME is enabled but not resolving yet. This is
+                    # typically transient DNS propagation — retryable, not terminal.
+                    cname_delegation_pending = True
 
             if not self.dns_providers_for_domain.get(target_domain):
+                if cname_delegation_pending:
+                    # The CNAME hasn't propagated; don't classify this as a terminal
+                    # config error. Treat it as transient so the retry loop can pick
+                    # it up once the delegation resolves.
+                    raise ValueError(
+                        "Delegated CNAME not yet resolving for domain: {}".format(
+                            domain
+                        )
+                    )
                 metrics.send(
                     "get_authorizations_no_dns_provider_for_domain", "counter", 1
                 )

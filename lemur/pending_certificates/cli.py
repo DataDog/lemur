@@ -116,11 +116,16 @@ def fetch_all_acme():
                 error_log["message"] = (
                     "Terminal failure, marking pending certificate as resolved"
                 )
+                # Persist the terminal state before notifying so a notification
+                # delivery failure can't leave the pending cert unresolved.
+                pending_certificate_service.update(
+                    pending_cert.id,
+                    status=str(cert.get("last_error")),
+                    resolved=True,
+                )
                 send_pending_failure_notification(
                     pending_cert, notify_owner=pending_cert.notify
                 )
-                # Mark "resolved" as True
-                pending_certificate_service.update(pending_cert.id, resolved=True)
             elif pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
                 error_log["message"] = "Marking pending certificate as resolved"
                 send_pending_failure_notification(

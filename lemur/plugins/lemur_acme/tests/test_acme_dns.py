@@ -415,6 +415,31 @@ class TestAcmeDns(unittest.TestCase):
         )
         self.assertEqual(result, ["test"])
 
+    def test_get_authorizations_delegated_cname_pending_is_transient(self):
+        """When delegated CNAME is enabled but not resolving, raise transient (not terminal)."""
+        current_app.config["ACME_ENABLE_DELEGATED_CNAME"] = True
+        self.acme.get_cname = Mock(return_value=False)
+        self.acme.dns_providers_for_domain = {}
+
+        mock_order_info = Mock()
+        mock_order_info.domains = ["test.fakedomain.net"]
+
+        with self.assertRaises(ValueError):
+            self.acme.get_authorizations("acme_client", Mock(), mock_order_info)
+
+    def test_get_authorizations_no_provider_terminal(self):
+        """Without delegated CNAME, a missing provider is a terminal NoDNSProviderError."""
+        from lemur.exceptions import NoDNSProviderError
+
+        current_app.config["ACME_ENABLE_DELEGATED_CNAME"] = False
+        self.acme.dns_providers_for_domain = {}
+
+        mock_order_info = Mock()
+        mock_order_info.domains = ["test.fakedomain.net"]
+
+        with self.assertRaises(NoDNSProviderError):
+            self.acme.get_authorizations("acme_client", Mock(), mock_order_info)
+
     @patch(
         "lemur.plugins.lemur_acme.plugin.AcmeDnsHandler.complete_dns_challenge",
         return_value="test",

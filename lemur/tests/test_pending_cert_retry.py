@@ -8,6 +8,8 @@ failure keeps the existing bounded retry (increment + re-queue).
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # celery.py connects to Redis at module level; pre-import it with Redis mocked so
 # the @patch decorators below don't trigger a real Redis connection on first import.
 if "lemur.common.celery" not in sys.modules:
@@ -17,9 +19,13 @@ if "lemur.common.celery" not in sys.modules:
 
 import lemur.common.celery as _celery_module  # noqa: E402
 
-_celery_module.current_app = MagicMock()
-
 from lemur.common.celery import fetch_acme_cert  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _mock_celery_current_app(monkeypatch):
+    """Scope the current_app mock to each test and restore the original on teardown."""
+    monkeypatch.setattr(_celery_module, "current_app", MagicMock())
 
 
 def _pending_cert(id, number_attempts=0):
@@ -33,7 +39,7 @@ def _pending_cert(id, number_attempts=0):
     return pc
 
 
-def _run_fetch_acme_cert(pc, last_error):
+def _run_fetch_acme_cert(pc, last_error, notify_side_effect=None):
     """Run fetch_acme_cert(id) with get_ordered_certificates returning a single failure.
 
     Returns the started mocks keyed by name so tests can assert on call behavior.
@@ -54,7 +60,10 @@ def _run_fetch_acme_cert(pc, last_error):
         ),
         patch("lemur.common.celery.plugins.get", return_value=plugin),
         patch("lemur.common.celery.pending_certificate_service.get", return_value=pc),
-        patch("lemur.common.celery.send_pending_failure_notification"),
+        patch(
+            "lemur.common.celery.send_pending_failure_notification",
+            side_effect=notify_side_effect,
+        ),
         patch("lemur.common.celery.pending_certificate_service.update"),
         patch("lemur.common.celery.pending_certificate_service.increment_attempt"),
         patch("lemur.common.celery.fetch_acme_cert.delay"),
@@ -62,6 +71,10 @@ def _run_fetch_acme_cert(pc, last_error):
     started = [p.start() for p in patchers]
     try:
         fetch_acme_cert(pc.id)
+    except Exception:
+        # Notification delivery (or other) failure. The helper still returns the
+        # mocks so tests can assert on persisted state after a raised notification.
+        pass
     finally:
         for p in patchers:
             p.stop()
@@ -78,6 +91,14 @@ def _run_fetch_acme_cert(pc, last_error):
     }
 
 
+def _assert_resolved(mocks):
+    """Assert the pending cert was marked resolved (regardless of status kwarg)."""
+    update_mock = mocks["pending_certificate_service.update"]
+    assert any(
+        call.kwargs.get("resolved") is True for call in update_mock.call_args_list
+    )
+
+
 def test_fetch_acme_cert_terminal_failure_marks_resolved_no_requeue():
     pc = _pending_cert(1)
     mocks = _run_fetch_acme_cert(
@@ -85,7 +106,7 @@ def test_fetch_acme_cert_terminal_failure_marks_resolved_no_requeue():
     )
 
     # Marked resolved
-    mocks["pending_certificate_service.update"].assert_any_call(1, resolved=True)
+    _assert_resolved(mocks)
     # Notified
     mocks["send_pending_failure_notification"].assert_called_once()
     # Did NOT re-queue and did NOT increment attempts
@@ -103,3 +124,31 @@ def test_fetch_acme_cert_transient_failure_requeues():
     # Did NOT mark resolved
     for call in mocks["pending_certificate_service.update"].call_args_list:
         assert call.kwargs.get("resolved") is not True
+
+
+def test_fetch_acme_cert_terminal_typed_error_marks_resolved_no_requeue():
+    """A typed terminal error is classified via isinstance and fails fast."""
+    from lemur.exceptions import NoDNSProviderError
+
+    pc = _pending_cert(1)
+    mocks = _run_fetch_acme_cert(pc, NoDNSProviderError("no provider for zone"))
+
+    _assert_resolved(mocks)
+    mocks["send_pending_failure_notification"].assert_called_once()
+    mocks["fetch_acme_cert.delay"].assert_not_called()
+    mocks["pending_certificate_service.increment_attempt"].assert_not_called()
+
+
+def test_fetch_acme_cert_terminal_persists_resolved_before_notify():
+    """The pending cert is marked resolved even if notification delivery raises."""
+    pc = _pending_cert(1)
+    mocks = _run_fetch_acme_cert(
+        pc,
+        Exception("No DNS providers found for domain: us3.ddbuild.io"),
+        notify_side_effect=RuntimeError("smtp down"),
+    )
+
+    # Still marked resolved (persisted before the notification was attempted)
+    _assert_resolved(mocks)
+    # Not re-queued despite the notification failure
+    mocks["fetch_acme_cert.delay"].assert_not_called()

@@ -367,14 +367,19 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
                 # Config / DNS-delegation / credential failure — retrying can never
                 # succeed and only burns the CA's rate limit. Fail fast.
                 error_log["message"] = "Terminal failure, resolving pending certificate"
+                # Persist the terminal state before notifying so a notification
+                # delivery failure can't leave the pending cert unresolved (and
+                # retried, re-exhausting the CA rate limit).
+                pending_certificate_service.update(
+                    cert.get("pending_cert").id,
+                    status=str(cert.get("last_error")),
+                    resolved=True,
+                )
                 send_pending_failure_notification(
                     pending_cert, notify_owner=pending_cert.notify
                 )
                 if notify_reissue_cert_id is not None:
                     send_reissue_failed_notification(pending_cert)
-                pending_certificate_service.update(
-                    cert.get("pending_cert").id, resolved=True
-                )
             elif pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
                 error_log["message"] = "Deleting pending certificate"
                 send_pending_failure_notification(
