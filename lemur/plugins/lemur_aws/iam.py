@@ -177,7 +177,7 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
             "upload_cert", "counter", 1, metric_tags={"path": path, "outcome": outcome}
         )
     except Exception:
-        current_app.logger.exception("Failed to emit upload_cert metric")
+        current_app.logger.exception(f"Failed to emit upload_cert metric, path: {path}, outcome {outcome}")
 
     return response
 
