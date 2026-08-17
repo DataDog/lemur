@@ -389,9 +389,8 @@ class Certificate(db.Model):
         on the rotation policy associated.
         :return:
         """
-        return case(
-            [(extract("day", cls.not_after - func.now()) <= RotationPolicy.days, True)],
-            else_=False,
+        return cls.rotation_policy.has(
+            extract("day", cls.not_after - func.now()) <= RotationPolicy.days
         )
 
     @property
