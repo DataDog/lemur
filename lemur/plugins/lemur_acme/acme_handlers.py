@@ -33,7 +33,13 @@ from lemur.authorities import service as authorities_service
 from lemur.common.utils import data_encrypt, data_decrypt, is_json
 from lemur.common.utils import generate_private_key, key_to_alg
 from lemur.dns_providers import service as dns_provider_service
-from lemur.exceptions import InvalidAuthority, UnknownProvider, InvalidConfiguration
+from lemur.exceptions import (
+    DNSChallengeSetupError,
+    InvalidAuthority,
+    InvalidConfiguration,
+    NoDNSProviderError,
+    UnknownProvider,
+)
 from lemur.extensions import metrics
 from lemur.plugins.lemur_acme import cloudflare, dyn, route53, ultradns, powerdns, nsone
 
@@ -425,7 +431,9 @@ class AcmeDnsHandler(AcmeHandler):
         if not dns_challenges:
             capture_exception()
             metrics.send("start_dns_challenge_error_no_dns_challenges", "counter", 1)
-            raise Exception("Unable to determine DNS challenges from authorizations")
+            raise DNSChallengeSetupError(
+                "Unable to determine DNS challenges from authorizations"
+            )
 
         for dns_challenge in dns_challenges:
             if not cname_delegation:
@@ -458,7 +466,7 @@ class AcmeDnsHandler(AcmeHandler):
         dns_providers = self.dns_providers_for_domain.get(authz_record.target_domain)
         if not dns_providers:
             metrics.send("complete_dns_challenge_error_no_dnsproviders", "counter", 1)
-            raise Exception(
+            raise NoDNSProviderError(
                 "No DNS providers found for domain: {}".format(
                     authz_record.target_domain
                 )
@@ -535,7 +543,7 @@ class AcmeDnsHandler(AcmeHandler):
                 metrics.send(
                     "get_authorizations_no_dns_provider_for_domain", "counter", 1
                 )
-                raise Exception(
+                raise NoDNSProviderError(
                     "No DNS providers found for domain: {}".format(target_domain)
                 )
 

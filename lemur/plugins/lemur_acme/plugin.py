@@ -22,13 +22,47 @@ from lemur.authorizations import service as authorization_service
 from lemur.common.utils import check_validation, drop_last_cert_from_chain, csr_to_string
 from lemur.constants import CRLReason, EMAIL_RE
 from lemur.dns_providers import service as dns_provider_service
-from lemur.exceptions import InvalidConfiguration
+from lemur.exceptions import (
+    ACMEAuthenticationError,
+    InvalidConfiguration,
+    PendingCertificateTerminalError,
+)
 from lemur.extensions import metrics
 
 from lemur.plugins import lemur_acme as acme
 from lemur.plugins.bases import IssuerPlugin
 from lemur.plugins.lemur_acme.acme_handlers import AcmeHandler, AcmeDnsHandler
 from lemur.plugins.lemur_acme.challenge_types import AcmeHttpChallenge, AcmeDnsChallenge
+
+
+def _extract_http_status(e):
+    """Best-effort extraction of an upstream HTTP status code from an exception."""
+    # requests.HTTPError
+    resp = getattr(e, "response", None)
+    if resp is not None and hasattr(resp, "status_code"):
+        return resp.status_code
+    # botocore ClientError
+    if isinstance(e, ClientError):
+        try:
+            return e.response["ResponseMetadata"]["HTTPStatusCode"]
+        except (KeyError, TypeError):
+            return None
+    # acme.messages.Error exposes a `status` attribute
+    status = getattr(e, "status", None)
+    if isinstance(status, int):
+        return status
+    return None
+
+
+def _classify_pending_error(e):
+    """Wrap a raised error in a terminal exception type when it is known to be a
+    configuration/DNS-delegation/credential failure that retrying cannot resolve.
+    Returns the original error unchanged for transient failures."""
+    if isinstance(e, PendingCertificateTerminalError):
+        return e
+    if _extract_http_status(e) in (401, 403):
+        return ACMEAuthenticationError(e)
+    return e
 
 
 class ACMEIssuerPlugin(IssuerPlugin):
@@ -228,12 +262,12 @@ class ACMEIssuerPlugin(IssuerPlugin):
                 current_app.logger.error(
                     f"Unable to resolve pending cert: {pending_cert}", exc_info=True
                 )
-
-                error = e
-                if globals().get("order") and order:
-                    error += f" Order uri: {order.uri}"
                 certs.append(
-                    {"cert": False, "pending_cert": pending_cert, "last_error": e}
+                    {
+                        "cert": False,
+                        "pending_cert": pending_cert,
+                        "last_error": _classify_pending_error(e),
+                    }
                 )
 
         for entry in pending:
@@ -263,7 +297,6 @@ class ACMEIssuerPlugin(IssuerPlugin):
                 capture_exception()
                 metrics.send("get_ordered_certificates_resolution_error", "counter", 1)
                 order_url = order.uri
-                error = f"{e}. Order URI: {order_url}"
                 current_app.logger.error(
                     f"Unable to resolve pending cert: {pending_cert}. "
                     f"Check out {order_url} for more information.",
@@ -273,7 +306,7 @@ class ACMEIssuerPlugin(IssuerPlugin):
                     {
                         "cert": False,
                         "pending_cert": entry["pending_cert"],
-                        "last_error": error,
+                        "last_error": _classify_pending_error(e),
                     }
                 )
                 # Ensure DNS records get deleted

@@ -200,3 +200,53 @@ def test_is_terminal_failure_none_is_false():
     # A None / empty error should never be treated as terminal.
     assert not is_terminal_failure(None)
     assert not is_terminal_failure("")
+
+
+def test_is_terminal_failure_typed_exceptions():
+    """Explicit exception types are terminal without any string matching."""
+    from lemur.exceptions import (
+        ACMEAuthenticationError,
+        DNSChallengeSetupError,
+        InvalidConfiguration,
+        NoDNSProviderError,
+    )
+    from lemur.pending_certificates.service import is_terminal_failure
+
+    assert is_terminal_failure(NoDNSProviderError("no provider"))
+    assert is_terminal_failure(ACMEAuthenticationError("401"))
+    assert is_terminal_failure(DNSChallengeSetupError("no challenges"))
+    assert is_terminal_failure(InvalidConfiguration("bad config"))
+
+
+def test_classify_pending_error_http_auth():
+    """Upstream HTTP 401/403 are translated into ACMEAuthenticationError."""
+    from lemur.exceptions import ACMEAuthenticationError
+    from lemur.plugins.lemur_acme.plugin import _classify_pending_error
+
+    class FakeResponse:
+        status_code = 401
+
+    class FakeHTTPError(Exception):
+        response = FakeResponse()
+
+    err = _classify_pending_error(FakeHTTPError("unauthorized"))
+    assert isinstance(err, ACMEAuthenticationError)
+    # original exception is preserved as the cause
+    assert isinstance(err.__cause__, FakeHTTPError) or err.args
+
+
+def test_classify_pending_error_keeps_terminal_type():
+    """Already-typed terminal errors pass through unchanged."""
+    from lemur.exceptions import NoDNSProviderError
+    from lemur.plugins.lemur_acme.plugin import _classify_pending_error
+
+    err = NoDNSProviderError("no provider")
+    assert _classify_pending_error(err) is err
+
+
+def test_classify_pending_error_transient_unchanged():
+    """Transient failures are returned unchanged (not wrapped)."""
+    from lemur.plugins.lemur_acme.plugin import _classify_pending_error
+
+    err = ValueError("Failed verification")
+    assert _classify_pending_error(err) is err

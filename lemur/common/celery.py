@@ -31,6 +31,7 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
+from lemur.exceptions import PendingCertificateTerminalError
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -360,7 +361,9 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
 
-            if pending_certificate_service.is_terminal_failure(cert.get("last_error")):
+            if isinstance(
+                cert.get("last_error"), PendingCertificateTerminalError
+            ) or pending_certificate_service.is_terminal_failure(cert.get("last_error")):
                 # Config / DNS-delegation / credential failure — retrying can never
                 # succeed and only burns the CA's rate limit. Fail fast.
                 error_log["message"] = "Terminal failure, resolving pending certificate"

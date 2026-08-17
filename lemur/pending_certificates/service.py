@@ -17,7 +17,7 @@ from lemur.common.utils import truthiness, parse_cert_chain, parse_certificate
 from lemur.common import validators
 from lemur.destinations.models import Destination
 from lemur.domains.models import Domain
-from lemur.exceptions import InvalidConfiguration
+from lemur.exceptions import PendingCertificateTerminalError
 from lemur.extensions import metrics
 from lemur.notifications.models import Notification
 from lemur.pending_certificates.models import PendingCertificate
@@ -203,9 +203,14 @@ def is_terminal_failure(error):
     """
     Return True if a pending-certificate failure is terminal (a configuration,
     DNS-delegation, or credential problem that retrying will never resolve).
-    Matching is case-insensitive.
+
+    The live retry path classifies failures by explicit exception type
+    (``PendingCertificateTerminalError`` and subclasses) rather than by matching
+    on mutable exception text. The string-marker fallback below is retained only
+    for pending certificates whose ``status`` was stored as free text before this
+    change and for any error that escaped classification.
     """
-    if isinstance(error, InvalidConfiguration):
+    if isinstance(error, PendingCertificateTerminalError):
         return True
     message = str(error).lower()
     return any(marker in message for marker in _TERMINAL_FAILURE_MARKERS)

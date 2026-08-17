@@ -13,6 +13,7 @@ from flask_script import Manager
 
 from lemur.authorities.service import get as get_authority
 from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
+from lemur.exceptions import PendingCertificateTerminalError
 from lemur.notifications.messaging import send_pending_failure_notification
 from lemur.pending_certificates import service as pending_certificate_service
 from lemur.plugins.base import plugins
@@ -109,7 +110,9 @@ def fetch_all_acme():
             error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
 
-            if pending_certificate_service.is_terminal_failure(cert.get("last_error")):
+            if isinstance(
+                cert.get("last_error"), PendingCertificateTerminalError
+            ) or pending_certificate_service.is_terminal_failure(cert.get("last_error")):
                 error_log["message"] = (
                     "Terminal failure, marking pending certificate as resolved"
                 )

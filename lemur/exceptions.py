@@ -45,7 +45,32 @@ class AttrNotFound(LemurException):
         return repr("The field '{0}' is not sortable or filterable".format(self.field))
 
 
-class InvalidConfiguration(Exception):
+class PendingCertificateTerminalError(Exception):
+    """
+    Base class for pending-certificate failures that retrying can never resolve.
+
+    Terminal failures are configuration, DNS-delegation, or credential problems
+    (e.g. no DNS provider configured for a domain, broken ACME CNAME delegation,
+    or invalid ACME account credentials). Re-queueing these only re-runs the ACME
+    order/challenge and burns the CA's rate limit (Let's Encrypt: 5 duplicate
+    certificates / failed validations per week per domain), so they must fail fast
+    and mark the pending certificate resolved instead of retrying.
+    """
+
+
+class ACMEAuthenticationError(PendingCertificateTerminalError):
+    """The ACME CA rejected our credentials (upstream HTTP 401/403)."""
+
+
+class NoDNSProviderError(PendingCertificateTerminalError):
+    """No DNS provider is authoritative for the validation domain."""
+
+
+class DNSChallengeSetupError(PendingCertificateTerminalError):
+    """The DNS-01 challenge could not be set up (delegation/config problem)."""
+
+
+class InvalidConfiguration(PendingCertificateTerminalError):
     pass
 
 
