@@ -297,15 +297,6 @@ def report_failed_task(**kwargs):
         log_data.update(error_tags)
         current_app.logger.error(log_data)
         metrics.send("celery.failed_task", "counter", 1, metric_tags=error_tags)
-        # Per-task failure counter, symmetric with the per-task `.success` counter
-        # emitted at the end of each task. Drives the renewal-pipeline SLO
-        # (success / (success + failed) per task). Low-cardinality tags only.
-        metrics.send(
-            f"{error_tags['task_name']}.failed",
-            "counter",
-            1,
-            metric_tags={"task_name": error_tags["task_name"]},
-        )
 
 
 @task_revoked.connect
