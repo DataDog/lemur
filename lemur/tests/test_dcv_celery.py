@@ -211,3 +211,18 @@ def test_certificate_expirations_metrics_invokes_dcv_helper(
     mock_dcv_helper.assert_called_once()
     mock_cli_certificate.expiration_metrics.assert_called_once()
     mock_certificate_service.send_source_destination_pairing_metrics.assert_called_once()
+
+
+@patch("lemur.common.celery._emit_dcv_expiration_metrics")
+def test_check_dcv_expiration_deprecated_alias_delegates(mock_dcv_helper):
+    """The deprecated alias stays registered under the old FQN and delegates to
+    the folded helper, so in-flight/beat-fired messages don't hit unregistered-task
+    errors (EVBL-51)."""
+    from lemur.common.celery import _check_dcv_expiration_deprecated
+
+    # Registered under the exact old fully-qualified name used by the beat schedule.
+    assert _check_dcv_expiration_deprecated.name == "lemur.common.celery.check_dcv_expiration"
+
+    _check_dcv_expiration_deprecated.run()
+
+    mock_dcv_helper.assert_called_once()

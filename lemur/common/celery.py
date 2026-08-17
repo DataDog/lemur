@@ -1257,3 +1257,22 @@ def _emit_dcv_expiration_metrics():
     current_app.logger.info(
         f"_emit_dcv_expiration_metrics: done. domains={total_domains} errors={total_errors}"
     )
+
+
+@celery_app.task(
+    name="lemur.common.celery.check_dcv_expiration",
+    soft_time_limit=3600,
+)
+def _check_dcv_expiration_deprecated():
+    """
+    Deprecated alias for the former standalone check_dcv_expiration task (EVBL-51).
+
+    check_dcv_expiration was folded into certificate_expirations_metrics. This stub
+    keeps the old fully-qualified task name registered so any messages still in the
+    broker (or a beat schedule entry not yet removed) resolve instead of failing with
+    "Received unregistered task of type 'lemur.common.celery.check_dcv_expiration'".
+
+    Remove this alias once the CELERYBEAT_SCHEDULE entry is dropped and the queue
+    has drained (one deploy cycle).
+    """
+    _emit_dcv_expiration_metrics()
