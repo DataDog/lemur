@@ -94,12 +94,9 @@ def test_issuer_plugin_dcv_default_returns_empty():
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-@patch("lemur.common.celery.celery_app")
-def test_check_dcv_expiration_emits_metric_for_active_domain(
-    mock_celery_app, mock_current_app, mock_metrics, mock_plugins
+def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
+    mock_current_app, mock_metrics, mock_plugins
 ):
-    mock_celery_app.current_task = None
-
     fake_plugin = MagicMock()
     fake_plugin.slug = "digicert-issuer"
     fake_plugin.get_dcv_expiration_data.return_value = [
@@ -112,9 +109,9 @@ def test_check_dcv_expiration_emits_metric_for_active_domain(
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
-    from lemur.common.celery import check_dcv_expiration
+    from lemur.common.celery import _emit_dcv_expiration_metrics
 
-    check_dcv_expiration.run()
+    _emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
     dcv_calls = [c for c in gauge_calls if "dcv.days_until_expiration" in c.args[0]]
@@ -130,12 +127,9 @@ def test_check_dcv_expiration_emits_metric_for_active_domain(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-@patch("lemur.common.celery.celery_app")
-def test_check_dcv_expiration_plugin_exception_does_not_stop_others(
-    mock_celery_app, mock_current_app, mock_metrics, mock_plugins
+def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
+    mock_current_app, mock_metrics, mock_plugins
 ):
-    mock_celery_app.current_task = None
-
     bad_plugin = MagicMock()
     bad_plugin.slug = "bad-issuer"
     bad_plugin.get_dcv_expiration_data.side_effect = RuntimeError("network error")
@@ -152,9 +146,9 @@ def test_check_dcv_expiration_plugin_exception_does_not_stop_others(
     ]
     mock_plugins.all.return_value = [bad_plugin, good_plugin]
 
-    from lemur.common.celery import check_dcv_expiration
+    from lemur.common.celery import _emit_dcv_expiration_metrics
 
-    check_dcv_expiration.run()
+    _emit_dcv_expiration_metrics()
 
     dcv_calls = [
         c
@@ -177,23 +171,41 @@ def test_check_dcv_expiration_plugin_exception_does_not_stop_others(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-@patch("lemur.common.celery.celery_app")
-def test_check_dcv_expiration_empty_data_no_metric(
-    mock_celery_app, mock_current_app, mock_metrics, mock_plugins
+def test_emit_dcv_expiration_metrics_empty_data_no_metric(
+    mock_current_app, mock_metrics, mock_plugins
 ):
-    mock_celery_app.current_task = None
-
     no_dcv_plugin = MagicMock()
     no_dcv_plugin.slug = "no-dcv-issuer"
     no_dcv_plugin.get_dcv_expiration_data.return_value = []
     mock_plugins.all.return_value = [no_dcv_plugin]
 
-    from lemur.common.celery import check_dcv_expiration
+    from lemur.common.celery import _emit_dcv_expiration_metrics
 
-    check_dcv_expiration.run()
+    _emit_dcv_expiration_metrics()
 
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
     ]
     assert len(dcv_calls) == 0
+
+
+@patch("lemur.common.celery._emit_dcv_expiration_metrics")
+@patch("lemur.common.celery.certificate_service")
+@patch("lemur.common.celery.cli_certificate")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+@patch("lemur.common.celery.celery_app")
+def test_certificate_expirations_metrics_invokes_dcv_helper(
+    mock_celery_app, mock_current_app, mock_metrics,
+    mock_cli_certificate, mock_certificate_service, mock_dcv_helper,
+):
+    mock_celery_app.current_task = None
+
+    from lemur.common.celery import certificate_expirations_metrics
+
+    certificate_expirations_metrics.run()
+
+    mock_dcv_helper.assert_called_once()
+    mock_cli_certificate.expiration_metrics.assert_called_once()
+    mock_certificate_service.send_source_destination_pairing_metrics.assert_called_once()

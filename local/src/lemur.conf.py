@@ -168,12 +168,15 @@ CELERYBEAT_SCHEDULE = {
     #     },
     #     'schedule': crontab(hour=10, minute=0, day_of_week='mon-fri'),
     # },
-    # 'check_dcv_expiration': {
-    #     'task': 'lemur.common.celery.check_dcv_expiration',
+    # DCV token expiry gauges are emitted by the consolidated
+    # certificate_expirations_metrics task (EVBL-51); the former standalone
+    # check_dcv_expiration task has been removed.
+    # 'certificate_expirations_metrics': {
+    #     'task': 'lemur.common.celery.certificate_expirations_metrics',
     #     'options': {
-    #         'expires': 86400
+    #         'expires': 180
     #     },
-    #     'schedule': crontab(hour=6, minute=0),
+    #     'schedule': crontab(hour="*"),
     # }
 }
 
