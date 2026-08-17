@@ -79,3 +79,41 @@ def test_task_duration_not_emitted_when_no_start_time(mock_metrics):
         _celery_module.report_successful_task(sender=fake_task, request=fake_task.request)
 
     assert not [c for c in mock_metrics.send.call_args_list if c.args[0] == "celery.task_duration"]
+
+
+@patch("lemur.common.celery.metrics")
+def test_per_task_failed_counter_emitted_on_failure(mock_metrics):
+    _celery_module._task_started_at.clear()
+
+    with patch.object(_celery_module, "current_app", MagicMock()):
+        fake_task = FakeTask(task_id="task-4", name="lemur.common.celery.certificate_reissue")
+        _celery_module.report_failed_task(
+            sender=fake_task,
+            request=fake_task.request,
+            einfo=FakeEinfo(RuntimeError("boom")),
+        )
+
+    failed_calls = [
+        c for c in mock_metrics.send.call_args_list if c.args[0].endswith(".failed")
+    ]
+    assert len(failed_calls) == 1
+    assert failed_calls[0].args[0] == "lemur.common.celery.certificate_reissue.failed"
+    assert failed_calls[0].kwargs["metric_tags"] == {
+        "task_name": "lemur.common.celery.certificate_reissue"
+    }
+
+
+@patch("lemur.common.celery.metrics")
+def test_per_task_failed_counter_absent_on_success(mock_metrics):
+    _celery_module._task_started_at.clear()
+
+    with patch.object(_celery_module, "current_app", MagicMock()), patch(
+        "lemur.common.celery.time.time", return_value=2000
+    ):
+        fake_task = FakeTask(task_id="task-5", name="lemur.common.celery.certificate_reissue")
+        _celery_module.report_successful_task(sender=fake_task, request=fake_task.request)
+
+    failed_calls = [
+        c for c in mock_metrics.send.call_args_list if c.args[0].endswith(".failed")
+    ]
+    assert failed_calls == []
