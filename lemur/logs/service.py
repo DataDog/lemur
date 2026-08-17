@@ -9,6 +9,7 @@
 """
 
 from flask import current_app, g
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 from lemur import database
 from lemur.logs.models import Log
@@ -48,7 +49,16 @@ def audit_log(action, entity, message):
     :return:
     """
 
-    user = g.current_user.email if hasattr(g, "current_user") else "LEMUR"
+    current_user = getattr(g, "current_user", None)
+    if current_user is not None:
+        try:
+            user = current_user.email
+        except DetachedInstanceError:
+            # g.current_user may be a detached/expired instance in some
+            # contexts (e.g. tests); fall back to the anonymous label.
+            user = "LEMUR"
+    else:
+        user = "LEMUR"
     log_data = {
         "function": "lemur-audit",
         "action": action,
