@@ -415,8 +415,10 @@ class TestAcmeDns(unittest.TestCase):
         )
         self.assertEqual(result, ["test"])
 
-    def test_get_authorizations_delegated_cname_pending_is_transient(self):
-        """When delegated CNAME is enabled but not resolving, raise transient (not terminal)."""
+    def test_get_authorizations_delegated_cname_no_provider_terminal(self):
+        """A missing provider is terminal even when delegated CNAME is enabled."""
+        from lemur.exceptions import NoDNSProviderError
+
         current_app.config["ACME_ENABLE_DELEGATED_CNAME"] = True
         self.acme.get_cname = Mock(return_value=False)
         self.acme.dns_providers_for_domain = {}
@@ -424,7 +426,9 @@ class TestAcmeDns(unittest.TestCase):
         mock_order_info = Mock()
         mock_order_info.domains = ["test.fakedomain.net"]
 
-        with self.assertRaises(ValueError):
+        # No provider (and no resolvable delegation) is a terminal config error —
+        # retrying would only exhaust the CA rate limit, so fail fast.
+        with self.assertRaises(NoDNSProviderError):
             self.acme.get_authorizations("acme_client", Mock(), mock_order_info)
 
     def test_get_authorizations_no_provider_terminal(self):
