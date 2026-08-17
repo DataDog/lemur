@@ -5,7 +5,7 @@ import pytest
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from flask import current_app
+from flask import current_app, g
 from flask_principal import identity_changed, Identity
 from sqlalchemy.sql import text
 
@@ -104,6 +104,11 @@ def session(db, request):
     db.session.begin_nested()
     yield db.session
     db.session.rollback()
+    # g is app-context scoped and persists across tests. Clear request-scoped
+    # state so a stale, detached User from an earlier test isn't reused by a
+    # later test (which raises DetachedInstanceError when its attributes are
+    # expired).
+    g.pop("current_user", None)
 
 
 @pytest.fixture(scope="function")
