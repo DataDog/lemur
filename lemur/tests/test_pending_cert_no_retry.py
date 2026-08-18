@@ -124,3 +124,12 @@ def test_fetch_acme_cert_failure_logs_rate_limit_context():
     assert log["dns_provider_id"] == pc.dns_provider_id
     assert log["rate_limit_relevant"] is True
     assert "Failed verification" in log["last_error"]
+
+
+def test_fetch_acme_cert_failure_logs_default_last_error_when_missing():
+    """A missing last_error is logged as a meaningful default, not 'None'."""
+    pc = _pending_cert(1, number_attempts=0)
+    mocks = _run_fetch_acme_cert(pc, None)
+
+    log = _rate_limit_error_log(mocks)
+    assert log["last_error"] == "No error message provided by CA"

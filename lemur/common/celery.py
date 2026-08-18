@@ -365,7 +365,10 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             error_log["authority_id"] = pending_cert.authority_id
             error_log["number_attempts"] = pending_cert.number_attempts
             error_log["dns_provider_id"] = pending_cert.dns_provider_id
-            error_log["last_error"] = str(cert.get("last_error"))
+            last_error = cert.get("last_error")
+            error_log["last_error"] = (
+                str(last_error) if last_error is not None else "No error message provided by CA"
+            )
             # Every failed issuance consumes the CA's ACME rate limit (e.g. Let's
             # Encrypt: 5 duplicate certs / failed validations per week per domain).
             # Always emit the full context so rate-limit burn is attributable to a
@@ -376,6 +379,11 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             # through Celery's configured handlers.
             error_log["rate_limit_relevant"] = True
 
+            # Give up when number_attempts reaches ACME_ADDITIONAL_ATTEMPTS. With
+            # retries disabled (ACME_ADDITIONAL_ATTEMPTS = 0) this is always true on
+            # the first failure, so the else (re-queue) branch below is effectively
+            # dead code — retained only so retries can be re-enabled later by bumping
+            # the constant without restructuring this logic.
             if pending_cert.number_attempts >= ACME_ADDITIONAL_ATTEMPTS:
                 error_log["message"] = "Deleting pending certificate"
                 send_pending_failure_notification(
