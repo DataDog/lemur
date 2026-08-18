@@ -126,6 +126,25 @@ def test_fetch_acme_cert_transient_failure_requeues():
         assert call.kwargs.get("resolved") is not True
 
 
+def test_fetch_acme_cert_transient_at_max_attempts_resolves_no_requeue():
+    """A transient failure at the retry cap resolves instead of re-queuing.
+
+    The retry cap is ACME_ADDITIONAL_ATTEMPTS additional attempts beyond the
+    initial one (total = ACME_ADDITIONAL_ATTEMPTS + 1). Once number_attempts
+    reaches the cap, the next failure gives up and marks resolved rather than
+    burning another attempt against the CA's rate limit.
+    """
+    from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
+
+    pc = _pending_cert(1, number_attempts=ACME_ADDITIONAL_ATTEMPTS)
+    mocks = _run_fetch_acme_cert(pc, ValueError("Failed verification"))
+
+    # At the cap: marked resolved, NOT re-queued, NOT incremented further
+    _assert_resolved(mocks)
+    mocks["fetch_acme_cert.delay"].assert_not_called()
+    mocks["pending_certificate_service.increment_attempt"].assert_not_called()
+
+
 def test_fetch_acme_cert_terminal_typed_error_marks_resolved_no_requeue():
     """A typed terminal error is classified via isinstance and fails fast."""
     from lemur.exceptions import NoDNSProviderError

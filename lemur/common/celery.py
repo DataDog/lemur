@@ -378,7 +378,7 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
                 )
                 if notify_reissue_cert_id is not None:
                     send_reissue_failed_notification(pending_cert)
-            elif pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
+            elif pending_cert.number_attempts >= ACME_ADDITIONAL_ATTEMPTS:
                 error_log["message"] = "Deleting pending certificate"
                 send_pending_failure_notification(
                     pending_cert, notify_owner=pending_cert.notify
