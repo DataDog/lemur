@@ -357,10 +357,19 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             error_log = copy.deepcopy(log_data)
             error_log["message"] = "Pending certificate creation failure"
             error_log["pending_cert_id"] = pending_cert.id
-            error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
+            error_log["authority"] = cert_authority.name
+            error_log["authority_id"] = pending_cert.authority_id
+            error_log["number_attempts"] = pending_cert.number_attempts
+            error_log["dns_provider_id"] = pending_cert.dns_provider_id
+            error_log["last_error"] = str(cert.get("last_error"))
+            # Every failed issuance consumes the CA's ACME rate limit (e.g. Let's
+            # Encrypt: 5 duplicate certs / failed validations per week per domain).
+            # Always emit the full context so rate-limit burn is attributable to a
+            # specific cert / domain / authority for triage.
+            error_log["rate_limit_relevant"] = True
 
-            if pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
+            if pending_cert.number_attempts >= ACME_ADDITIONAL_ATTEMPTS:
                 error_log["message"] = "Deleting pending certificate"
                 send_pending_failure_notification(
                     pending_cert, notify_owner=pending_cert.notify
