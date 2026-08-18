@@ -69,6 +69,7 @@ def _run_fetch_acme_cert(pc, last_error):
         patch("lemur.common.celery.pending_certificate_service.update"),
         patch("lemur.common.celery.pending_certificate_service.increment_attempt"),
         patch("lemur.common.celery.fetch_acme_cert.delay"),
+        patch("lemur.common.celery.logger"),
     ]
     started = [p.start() for p in patchers]
     try:
@@ -82,7 +83,7 @@ def _run_fetch_acme_cert(pc, last_error):
         "update": started[5],
         "increment_attempt": started[6],
         "delay": started[7],
-        "logger": _celery_module.current_app.logger,
+        "logger": started[8],
     }
 
 

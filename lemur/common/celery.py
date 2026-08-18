@@ -9,6 +9,7 @@ command: celery -A lemur.common.celery worker --loglevel=info -l DEBUG -B
 """
 
 import copy
+import logging
 import sys
 import time
 from celery import Celery
@@ -36,6 +37,8 @@ from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
 from lemur import fips
 from lemur.notifications import cli as cli_notification
+
+logger = logging.getLogger(__name__)
 from lemur.notifications.messaging import (
     send_pending_failure_notification,
     send_reissue_no_endpoints_notification,
@@ -366,7 +369,11 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             # Every failed issuance consumes the CA's ACME rate limit (e.g. Let's
             # Encrypt: 5 duplicate certs / failed validations per week per domain).
             # Always emit the full context so rate-limit burn is attributable to a
-            # specific cert / domain / authority for triage.
+            # specific cert / domain / authority for triage. Log via the module
+            # logger (not current_app.logger): in the celery worker, app.logger's
+            # handlers are cleared and it propagates to an unhandled root logger,
+            # so current_app.logger.error() is dropped. The module logger emits
+            # through Celery's configured handlers.
             error_log["rate_limit_relevant"] = True
 
             if pending_cert.number_attempts >= ACME_ADDITIONAL_ATTEMPTS:
@@ -387,7 +394,7 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
                 )
                 # Add failed pending cert task back to queue
                 fetch_acme_cert.delay(id, notify_reissue_cert_id)
-            current_app.logger.error(error_log)
+            logger.error(error_log)
     log_data["message"] = "Complete"
     log_data["new"] = new
     log_data["failed"] = failed
