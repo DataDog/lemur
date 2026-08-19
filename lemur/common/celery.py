@@ -9,7 +9,6 @@ command: celery -A lemur.common.celery worker --loglevel=info -l DEBUG -B
 """
 
 import copy
-import logging
 import sys
 import time
 from celery import Celery
@@ -38,11 +37,6 @@ from lemur.factory import create_app, json_log_formatter
 from lemur import fips
 from lemur.notifications import cli as cli_notification
 
-# Use a module-level logger rather than current_app.logger: in the Celery worker,
-# app.logger's handlers are cleared by _configure_worker_logging below, so
-# current_app.logger calls propagate to an unhandled root logger and are dropped.
-# The module logger emits through Celery's configured handlers.
-logger = logging.getLogger(__name__)
 from lemur.notifications.messaging import (
     send_pending_failure_notification,
     send_reissue_no_endpoints_notification,
@@ -402,7 +396,7 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
                 )
                 # Add failed pending cert task back to queue
                 fetch_acme_cert.delay(id, notify_reissue_cert_id)
-            logger.error(error_log)
+            current_app.logger.error(error_log)
     log_data["message"] = "Complete"
     log_data["new"] = new
     log_data["failed"] = failed

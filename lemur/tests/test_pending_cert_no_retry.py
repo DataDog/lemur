@@ -69,7 +69,6 @@ def _run_fetch_acme_cert(pc, last_error):
         patch("lemur.common.celery.pending_certificate_service.update"),
         patch("lemur.common.celery.pending_certificate_service.increment_attempt"),
         patch("lemur.common.celery.fetch_acme_cert.delay"),
-        patch("lemur.common.celery.logger"),
     ]
     started = [p.start() for p in patchers]
     try:
@@ -83,13 +82,12 @@ def _run_fetch_acme_cert(pc, last_error):
         "update": started[5],
         "increment_attempt": started[6],
         "delay": started[7],
-        "logger": started[8],
     }
 
 
 def _rate_limit_error_log(mocks):
-    """Return the failure error_log emitted via logger.error."""
-    for call in mocks["logger"].error.call_args_list:
+    """Return the failure error_log emitted via current_app.logger.error."""
+    for call in _celery_module.current_app.logger.error.call_args_list:
         if call.args and isinstance(call.args[0], dict):
             log = call.args[0]
             if log.get("rate_limit_relevant") is True:
