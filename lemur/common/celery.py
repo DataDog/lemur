@@ -372,15 +372,22 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             # specific cert / domain / authority for triage.
             error_log["rate_limit_relevant"] = True
 
-            error_log["message"] = "Deleting pending certificate"
-            send_pending_failure_notification(
-                pending_cert, notify_owner=pending_cert.notify
-            )
-            if notify_reissue_cert_id is not None:
-                send_reissue_failed_notification(pending_cert)
-            pending_certificate_service.update(
-                cert.get("pending_cert").id, resolved=True
-            )
+            if pending_cert.number_attempts >= 2:
+                error_log["message"] = "Deleting pending certificate"
+                send_pending_failure_notification(
+                    pending_cert, notify_owner=pending_cert.notify
+                )
+                if notify_reissue_cert_id is not None:
+                    send_reissue_failed_notification(pending_cert)
+                pending_certificate_service.update(
+                    cert.get("pending_cert").id, resolved=True
+                )
+            else:
+                pending_certificate_service.increment_attempt(pending_cert)
+                pending_certificate_service.update(
+                    cert.get("pending_cert").id, status=str(cert.get("last_error"))
+                )
+                fetch_acme_cert.delay(id, notify_reissue_cert_id)
             current_app.logger.error(error_log)
     log_data["message"] = "Complete"
     log_data["new"] = new

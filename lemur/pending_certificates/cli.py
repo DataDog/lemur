@@ -108,11 +108,17 @@ def fetch_all_acme():
             error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
 
-            error_log["message"] = "Marking pending certificate as resolved"
-            send_pending_failure_notification(
-                pending_cert, notify_owner=pending_cert.notify
-            )
-            pending_certificate_service.update(cert.id, resolved=True)
+            if pending_cert.number_attempts >= 2:
+                error_log["message"] = "Marking pending certificate as resolved"
+                send_pending_failure_notification(
+                    pending_cert, notify_owner=pending_cert.notify
+                )
+                pending_certificate_service.update(cert.id, resolved=True)
+            else:
+                pending_certificate_service.increment_attempt(pending_cert)
+                pending_certificate_service.update(
+                    cert.get("pending_cert").id, status=str(cert.get("last_error"))
+                )
             current_app.logger.error(error_log)
     log_data["message"] = "Complete"
     log_data["new"] = new
