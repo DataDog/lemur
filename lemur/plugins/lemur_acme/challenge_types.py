@@ -19,7 +19,6 @@ from flask import current_app
 from sentry_sdk import capture_exception
 
 from lemur.authorizations import service as authorization_service
-from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
 from lemur.common.utils import drop_last_cert_from_chain, csr_to_string
 from lemur.exceptions import LemurException, InvalidConfiguration
 from lemur.extensions import metrics
@@ -27,7 +26,6 @@ from lemur.plugins.base import plugins
 from lemur.destinations import service as destination_service
 from lemur.plugins.lemur_acme.acme_handlers import AcmeHandler, AcmeDnsHandler
 
-from retrying import retry
 
 
 class AcmeChallengeMissmatchError(LemurException):
@@ -299,7 +297,6 @@ class AcmeDnsChallenge(AcmeChallenge):
         # TODO add external ID (if possible)
         return pem_certificate, pem_certificate_chain, None
 
-    @retry(stop_max_attempt_number=ACME_ADDITIONAL_ATTEMPTS, wait_fixed=5000)
     def create_certificate_immediately(self, acme_client, order_info, csr):
         try:
             order = acme_client.new_order(csr_to_string(csr))

@@ -30,7 +30,6 @@ from lemur.authorities.service import get as get_authority
 from lemur.certificates import cli as cli_certificate
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
-from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -373,29 +372,15 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             # specific cert / domain / authority for triage.
             error_log["rate_limit_relevant"] = True
 
-            # Give up when number_attempts reaches ACME_ADDITIONAL_ATTEMPTS. With
-            # retries disabled (ACME_ADDITIONAL_ATTEMPTS = 0) this is always true on
-            # the first failure, so the else (re-queue) branch below is effectively
-            # dead code — retained only so retries can be re-enabled later by bumping
-            # the constant without restructuring this logic.
-            if pending_cert.number_attempts >= ACME_ADDITIONAL_ATTEMPTS:
-                error_log["message"] = "Deleting pending certificate"
-                send_pending_failure_notification(
-                    pending_cert, notify_owner=pending_cert.notify
-                )
-                if notify_reissue_cert_id is not None:
-                    send_reissue_failed_notification(pending_cert)
-                # Mark the pending cert as resolved
-                pending_certificate_service.update(
-                    cert.get("pending_cert").id, resolved=True
-                )
-            else:
-                pending_certificate_service.increment_attempt(pending_cert)
-                pending_certificate_service.update(
-                    cert.get("pending_cert").id, status=str(cert.get("last_error"))
-                )
-                # Add failed pending cert task back to queue
-                fetch_acme_cert.delay(id, notify_reissue_cert_id)
+            error_log["message"] = "Deleting pending certificate"
+            send_pending_failure_notification(
+                pending_cert, notify_owner=pending_cert.notify
+            )
+            if notify_reissue_cert_id is not None:
+                send_reissue_failed_notification(pending_cert)
+            pending_certificate_service.update(
+                cert.get("pending_cert").id, resolved=True
+            )
             current_app.logger.error(error_log)
     log_data["message"] = "Complete"
     log_data["new"] = new

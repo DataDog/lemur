@@ -20,7 +20,6 @@ FAILURE_METRIC_STATUS = "failure"
 # marked resolved immediately. Every failed issuance consumes the CA's ACME rate
 # limit (e.g. Let's Encrypt: 5 duplicate certs / failed validations per week per
 # domain), so re-queuing a deterministic failure just burns that budget.
-ACME_ADDITIONAL_ATTEMPTS = 0
 
 CERTIFICATE_KEY_TYPES = [
     "RSA2048",
