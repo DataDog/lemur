@@ -9,6 +9,7 @@
 
 import botocore
 
+from flask import current_app
 from retrying import retry
 from sentry_sdk import capture_exception
 
@@ -140,10 +141,10 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
     if not path or path == "/":
         path = "/"
 
-    metrics.send("upload_cert", "counter", 1, metric_tags={"name": name, "path": path})
+    outcome = "success"
     try:
         if cert_chain:
-            return client.upload_server_certificate(
+            response = client.upload_server_certificate(
                 Path=path,
                 ServerCertificateName=name,
                 CertificateBody=str(body),
@@ -151,7 +152,7 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
                 CertificateChain=str(cert_chain),
             )
         else:
-            return client.upload_server_certificate(
+            response = client.upload_server_certificate(
                 Path=path,
                 ServerCertificateName=name,
                 CertificateBody=str(body),
@@ -160,6 +161,25 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
     except botocore.exceptions.ClientError as e:
         if e.response["Error"]["Code"] != "EntityAlreadyExists":
             raise e
+        current_app.logger.error(
+            "Skipped IAM server-certificate upload; name already exists in account "
+            "(name=%s path=%s). Destination upload was a no-op.",
+            name,
+            path,
+        )
+        response = None
+        outcome = "skipped_already_exists"
+
+    # Never let a telemetry error escape: this function is retried, and the
+    # upload above is not idempotent, so a raised metric would re-run it.
+    try:
+        metrics.send(
+            "upload_cert", "counter", 1, metric_tags={"path": path, "outcome": outcome}
+        )
+    except Exception:
+        current_app.logger.exception(f"Failed to emit upload_cert metric, path: {path}, outcome {outcome}")
+
+    return response
 
 
 @sts_client("iam")
