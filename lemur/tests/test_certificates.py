@@ -98,6 +98,26 @@ def test_certificate_init_allows_no_creator(session):
     assert cert.user_id is None
 
 
+def test_pending_reissue_uses_certificate_rotation_policy(session):
+    from lemur.certificates.service import get_all_pending_reissue
+    from lemur.tests.factories import CertificateFactory, RotationPolicyFactory
+
+    short_policy = RotationPolicyFactory(days=30)
+    long_policy = RotationPolicyFactory(days=70)
+    short_policy_cert = CertificateFactory(
+        rotation=True, rotation_policy=short_policy
+    )
+    long_policy_cert = CertificateFactory(rotation=True, rotation_policy=long_policy)
+    short_policy_cert.not_after = arrow.utcnow().shift(days=+50)
+    long_policy_cert.not_after = arrow.utcnow().shift(days=+50)
+    session.flush()
+
+    pending = get_all_pending_reissue()
+
+    assert long_policy_cert in pending
+    assert short_policy_cert not in pending
+
+
 def test_get_or_increase_name(session, certificate):
     from lemur.certificates.models import get_or_increase_name
     from lemur.tests.factories import CertificateFactory
