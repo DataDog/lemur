@@ -27,7 +27,6 @@ from lemur.destinations import service as destination_service
 from lemur.plugins.lemur_acme.acme_handlers import AcmeHandler, AcmeDnsHandler
 
 
-
 class AcmeChallengeMissmatchError(LemurException):
     pass
 
