@@ -15,11 +15,6 @@ SUCCESS_METRIC_STATUS = "success"
 FAILURE_METRIC_STATUS = "failure"
 
 
-# when ACME attempts to resolve a certificate try in total 3 times
-# Retries are disabled: a pending cert is attempted exactly once and, on failure,
-# marked resolved immediately. Every failed issuance consumes the CA's ACME rate
-# limit (e.g. Let's Encrypt: 5 duplicate certs / failed validations per week per
-# domain), so re-queuing a deterministic failure just burns that budget.
 
 CERTIFICATE_KEY_TYPES = [
     "RSA2048",
