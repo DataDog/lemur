@@ -1,10 +1,10 @@
-"""Tests for fetch_acme_cert 3-attempt retry + ACME rate-limit logging (EVBL-47).
+"""Tests for fetch_acme_cert no-retry + ACME rate-limit logging (EVBL-47).
 
-Verifies that a pending certificate that fails issuance is retried up to 3 times
-in total (number_attempts 0, 1, 2), resolved and the owner notified on the third
-failure, and that the failure log always carries the full ACME rate-limit context
-(cn, authority, number of attempts, DNS provider, error) so rate-limit burn is
-attributable for triage.
+Verifies that, with retries disabled (ACME_ADDITIONAL_ATTEMPTS = 0), a pending
+certificate that fails issuance is resolved immediately on the first attempt (no
+re-queue), and that the failure log always carries the full ACME rate-limit
+context (cn, authority, number of attempts, DNS provider, error) so rate-limit
+burn is attributable for triage.
 """
 
 import sys
@@ -95,45 +95,23 @@ def _rate_limit_error_log(mocks):
     raise AssertionError("no rate-limit-relevant error log emitted")
 
 
-def test_fetch_acme_cert_first_failure_requeues():
-    """On the first failure (number_attempts=0) the cert is re-queued, not resolved."""
+def test_fetch_acme_cert_failure_resolves_immediately_no_requeue():
+    """With retries disabled, a failed pending cert is resolved on the first attempt."""
     pc = _pending_cert(1, number_attempts=0)
-    mocks = _run_fetch_acme_cert(pc, ValueError("dns timeout"))
-
-    mocks["increment_attempt"].assert_called_once()
-    mocks["delay"].assert_called_once()
-    assert not any(
-        call.kwargs.get("resolved") is True for call in mocks["update"].call_args_list
-    )
-
-
-def test_fetch_acme_cert_second_failure_requeues():
-    """On the second failure (number_attempts=1) the cert is still re-queued."""
-    pc = _pending_cert(1, number_attempts=1)
-    mocks = _run_fetch_acme_cert(pc, ValueError("dns timeout"))
-
-    mocks["increment_attempt"].assert_called_once()
-    mocks["delay"].assert_called_once()
-    assert not any(
-        call.kwargs.get("resolved") is True for call in mocks["update"].call_args_list
-    )
-
-
-def test_fetch_acme_cert_third_failure_resolves():
-    """On the third failure (number_attempts=2) the cert is resolved and owner notified."""
-    pc = _pending_cert(1, number_attempts=2)
     mocks = _run_fetch_acme_cert(pc, ValueError("Failed verification"))
 
+    # Marked resolved
     assert any(
         call.kwargs.get("resolved") is True for call in mocks["update"].call_args_list
     )
+    # Not re-queued, not incremented
     mocks["delay"].assert_not_called()
     mocks["increment_attempt"].assert_not_called()
 
 
 def test_fetch_acme_cert_failure_logs_rate_limit_context():
     """The failure log always carries the ACME rate-limit-relevant context."""
-    pc = _pending_cert(1, number_attempts=2)
+    pc = _pending_cert(1, number_attempts=0)
     mocks = _run_fetch_acme_cert(pc, ValueError("Failed verification"))
 
     log = _rate_limit_error_log(mocks)
@@ -148,7 +126,7 @@ def test_fetch_acme_cert_failure_logs_rate_limit_context():
 
 def test_fetch_acme_cert_failure_logs_default_last_error_when_missing():
     """A missing last_error is logged as a meaningful default, not 'None'."""
-    pc = _pending_cert(1, number_attempts=2)
+    pc = _pending_cert(1, number_attempts=0)
     mocks = _run_fetch_acme_cert(pc, None)
 
     log = _rate_limit_error_log(mocks)
