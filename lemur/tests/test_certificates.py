@@ -25,6 +25,13 @@ from lemur.certificates.service import (
 from lemur.certificates.views import *  # noqa
 from lemur.common import utils
 from lemur.domains.models import Domain
+from lemur.tests.ir50398_vectors import (
+    IR50398_DUAL_CHAIN,
+    IR50398_LEAF_CERT,
+    IR50398_R36_CERT,
+    IR50398_R46_AAA_CERT,
+    IR50398_R46_USERTRUST_CERT,
+)
 from lemur.tests.test_messaging import create_cert_that_expires_in_days
 
 from lemur.tests.vectors import (
@@ -884,8 +891,8 @@ def test_certificate_upload_schema_wrong_chain(client):
     data, errors = CertificateUploadInputSchema().load(data)
     assert errors == {
         "_schema": [
-            "Incorrect chain certificate(s) provided: 'san.example.org' is not signed by "
-            "'LemurTrust Unittests Root CA 2018'"
+            "Incorrect chain certificate(s) provided: 'LemurTrust Unittests Root CA 2018' "
+            "is not connected to the leaf"
         ]
     }
 
@@ -896,15 +903,89 @@ def test_certificate_upload_schema_wrong_chain_2nd(client):
     data = {
         "owner": "pwner@example.com",
         "body": SAN_CERT_STR,
-        "chain": INTERMEDIATE_CERT_STR + "\n" + SAN_CERT_STR,
+        "chain": INTERMEDIATE_CERT_STR + "\n" + IR50398_R46_AAA_CERT,
     }
     data, errors = CertificateUploadInputSchema().load(data)
     assert errors == {
         "_schema": [
-            "Incorrect chain certificate(s) provided: 'LemurTrust Unittests Class 1 CA 2018' is "
-            "not signed by 'san.example.org'"
+            "Incorrect chain certificate(s) provided: "
+            "'Sectigo Public Server Authentication Root R46' "
+            "is not connected to the leaf"
         ]
     }
+
+
+def test_certificate_upload_schema_cross_signed_chain(client):
+    from lemur.certificates.schemas import CertificateUploadInputSchema
+
+    data = {
+        "owner": "pwner@example.com",
+        "body": IR50398_LEAF_CERT,
+        "chain": IR50398_DUAL_CHAIN,
+    }
+
+    _, errors = CertificateUploadInputSchema().load(data)
+
+    assert not errors
+
+
+def test_certificate_integrity_cross_signed_chain_without_private_key(session):
+    from lemur.certificates.models import Certificate
+
+    certificate = Certificate(
+        body=IR50398_LEAF_CERT,
+        chain=IR50398_DUAL_CHAIN,
+        owner="pwner@example.com",
+    )
+
+    assert certificate.cn == "*.agent.datadoghq.com"
+
+
+def test_verify_cert_chain_accepts_cross_signed_bundle(app):
+    from lemur.common.validators import verify_cert_chain
+
+    certificates = [utils.parse_certificate(IR50398_LEAF_CERT)]
+    certificates.extend(utils.parse_cert_chain(IR50398_DUAL_CHAIN))
+
+    verify_cert_chain(certificates)
+
+
+def test_verify_cert_chain_rejects_orphan(app):
+    from lemur.common.validators import verify_cert_chain
+
+    certificates = [utils.parse_certificate(IR50398_LEAF_CERT)]
+    certificates.extend(utils.parse_cert_chain(IR50398_DUAL_CHAIN))
+    certificates.append(utils.parse_certificate(ROOTCA_CERT_STR))
+
+    with pytest.raises(ValidationError, match="not connected to the leaf"):
+        verify_cert_chain(certificates)
+
+
+def test_verify_cert_chain_rejects_duplicate(app):
+    from lemur.common.validators import verify_cert_chain
+
+    certificates = [
+        utils.parse_certificate(IR50398_LEAF_CERT),
+        utils.parse_certificate(IR50398_R36_CERT),
+        utils.parse_certificate(IR50398_R36_CERT),
+    ]
+
+    with pytest.raises(ValidationError, match="Duplicate certificate"):
+        verify_cert_chain(certificates)
+
+
+def test_verify_cert_chain_rejects_misordered_bundle(app):
+    from lemur.common.validators import verify_cert_chain
+
+    certificates = [
+        utils.parse_certificate(IR50398_LEAF_CERT),
+        utils.parse_certificate(IR50398_R46_USERTRUST_CERT),
+        utils.parse_certificate(IR50398_R36_CERT),
+        utils.parse_certificate(IR50398_R46_AAA_CERT),
+    ]
+
+    with pytest.raises(ValidationError, match="not in leaf-to-root order"):
+        verify_cert_chain(certificates)
 
 
 def test_certificate_revoke_schema():
