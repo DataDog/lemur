@@ -898,7 +898,8 @@ def test_certificate_upload_schema_wrong_chain(client):
     assert errors == {
         "_schema": [
             "Incorrect chain certificate(s) provided: 'LemurTrust Unittests Root CA 2018' "
-            "is not signed by any certificate in the chain"
+            "(position 1) does not sign any preceding certificate. The chain must be in "
+            "leaf-to-root order with every certificate connected to the leaf."
         ]
     }
 
@@ -915,13 +916,14 @@ def test_certificate_upload_schema_wrong_chain_2nd(client):
     assert errors == {
         "_schema": [
             "Incorrect chain certificate(s) provided: 'san.example.org' "
-            "is not signed by any certificate in the chain"
+            "(position 2) does not sign any preceding certificate. The chain must be in "
+            "leaf-to-root order with every certificate connected to the leaf."
         ]
     }
 
 
 # =============================================================================
-# Regression tests for verify_cert_chain() — linear chains (Step 2, RDNA-926)
+# Regression tests for verify_cert_chain(): linear chains (Step 2, RDNA-926)
 # =============================================================================
 
 def test_verify_cert_chain_linear_full(app):
@@ -952,7 +954,7 @@ def test_verify_cert_chain_wrong_chain(app):
     from lemur.common.validators import verify_cert_chain
     from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
 
-    with pytest.raises(ValidationError, match="not signed by any certificate in the chain"):
+    with pytest.raises(ValidationError, match="does not sign any preceding certificate"):
         verify_cert_chain([SAN_CERT, ROOTCA_CERT])
 
 
@@ -961,7 +963,7 @@ def test_verify_cert_chain_wrong_second_cert(app):
     from lemur.common.validators import verify_cert_chain
     from lemur.tests.vectors import SAN_CERT, INTERMEDIATE_CERT
 
-    with pytest.raises(ValidationError, match="not signed by any certificate in the chain"):
+    with pytest.raises(ValidationError, match="does not sign any preceding certificate"):
         verify_cert_chain([SAN_CERT, INTERMEDIATE_CERT, CROSS_SIGNED_ROOT_A_CERT])
 
 
@@ -970,7 +972,7 @@ def test_verify_cert_chain_custom_error_class(app):
     from lemur.common.validators import verify_cert_chain
     from lemur.tests.vectors import SAN_CERT, ROOTCA_CERT
 
-    with pytest.raises(AssertionError, match="not signed by any certificate in the chain"):
+    with pytest.raises(AssertionError, match="does not sign any preceding certificate"):
         verify_cert_chain([SAN_CERT, ROOTCA_CERT], error_class=AssertionError)
 
 
@@ -1028,10 +1030,10 @@ def test_verify_cert_chain_misordered_linear(app):
     """
     from lemur.common.validators import verify_cert_chain
 
-    with pytest.raises(ValidationError, match="not in leaf-to-root order"):
+    with pytest.raises(ValidationError, match="does not sign any preceding certificate"):
         verify_cert_chain([
             CROSS_SIGNED_LEAF_CERT,
-            CROSS_SIGNED_ROOT_A_CERT,  # root before intermediate — wrong order
+            CROSS_SIGNED_ROOT_A_CERT,  # root before intermediate, wrong order
             CROSS_SIGNED_INT_BY_A_CERT,
         ])
 
@@ -1078,7 +1080,7 @@ def test_check_integrity_nonlinear_chain(session):
         + CROSS_SIGNED_INT_BY_B_CERT_STR.strip()
     )
 
-    # Should not raise — check_integrity() is called in __init__
+    # Should not raise, check_integrity() is called in __init__
     cert = Certificate(
         body=CROSS_SIGNED_LEAF_CERT_STR,
         chain=chain_str,
@@ -1120,7 +1122,7 @@ def test_check_integrity_nonlinear_chain_with_orphan_rejected(session):
         + ORPHAN_CERT_STR.strip()
     )
 
-    with pytest.raises(AssertionError, match="not signed by any certificate in the chain"):
+    with pytest.raises(AssertionError, match="does not sign any preceding certificate"):
         Certificate(
             body=CROSS_SIGNED_LEAF_CERT_STR,
             chain=chain_str,

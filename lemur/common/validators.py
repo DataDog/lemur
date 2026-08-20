@@ -170,107 +170,65 @@ def verify_private_key_match(key, cert, error_class=ValidationError):
         raise error_class("Private key does not match certificate.")
 
 
+def _is_issuer(issuer, child, issuer_pos, child_pos):
+    """
+    Return True if ``issuer`` is the issuer of ``child``: the names line up and
+    issuer's public key verifies child's signature.
+
+    The subject/issuer name check comes first so a certificate that merely
+    reuses a signing key (but names a different subject) is not accepted as a
+    valid issuer. That keeps the orphan check meaningful while still allowing
+    cross-signed certs, which keep the same subject across their variants.
+    """
+    if issuer.subject != child.issuer:
+        return False
+    try:
+        check_cert_signature(child, issuer.public_key())
+        return True
+    except InvalidSignature:
+        return False
+    except UnsupportedAlgorithm as err:
+        # COMPAT: we cannot verify this signature algorithm (e.g. RSASSA-PSS),
+        # so trust the presented order for the immediately-adjacent hop only.
+        # Drop this once the algorithm is natively supported.
+        # See: https://github.com/DataDog/lemur/pull/254#issuecomment-4265512236
+        if issuer_pos == child_pos + 1:
+            current_app.logger.warning(
+                "Skipping chain validation for adjacent pair (unsupported algorithm): %s",
+                err,
+            )
+            return True
+        return False
+
+
 def verify_cert_chain(certs, error_class=ValidationError):
     """
-    Verifies that every certificate in the bundle is reachable from the leaf via
-    signature relationships (a connected DAG rooted at certs[0]).
+    Verify that a certificate bundle is a well-formed, leaf-first chain.
 
-    This supports both linear chains (the common case) and non-linear bundles such
-    as dual-chain cross-signed intermediates (e.g. Sectigo R46 signed by both
-    USERTrust and AAA). See RFC 8446 section 4.4.2 for background on non-linear
-    certificate messages.
+    Every certificate after the leaf (certs[0]) must be the issuer of at least
+    one certificate that appears before it. By induction this guarantees the
+    whole bundle chains back to the leaf, so it accepts linear chains and
+    non-linear bundles alike (e.g. a dual cross-signed intermediate such as
+    Sectigo R46 signed by both USERTrust and AAA, IR-50398), while rejecting
+    orphaned certs and out-of-order bundles. See RFC 8446 section 4.4.2 for
+    background on non-linear certificate messages.
 
-    Algorithm:
-      1. Start from the leaf (certs[0]).
-      2. For each visited cert, find all certs in the bundle whose public key
-         successfully verifies the visited cert's signature. Mark those as reached.
-      3. Walk transitively until no new certs are reached.
-      4. Any cert not reached from the leaf is rejected as orphaned.
+    A certificate whose issuer is not in the bundle is a valid top-of-chain
+    termination point (its parent is a root CA not included in the bundle).
 
-    Certs whose issuer is not in the bundle are valid top-of-chain termination
-    points (their parent is a root CA not included in the bundle).
-
-    :param certs: List of parsed certificates; certs[0] must be the leaf.
+    :param certs: List of parsed certificates, leaf first (see parse_cert_chain()).
     :param error_class: Exception class to raise on error.
     """
-    if len(certs) < 2:
-        return
-
     # Avoid circular import.
     from lemur.common import defaults
 
-    # Build the set of certs reachable from the leaf by walking signature relationships.
-    # Use indices to identify certs (avoids equality issues with x509 objects).
-    reached = {0}  # leaf is always reached
-    frontier = [0]
-
-    while frontier:
-        current_idx = frontier.pop()
-        current_cert = certs[current_idx]
-
-        for candidate_idx, candidate in enumerate(certs):
-            if candidate_idx in reached:
-                continue
-
-            try:
-                check_cert_signature(current_cert, candidate.public_key())
-            except InvalidSignature:
-                continue
-            except UnsupportedAlgorithm as err:
-                # COMPAT: Adjacency-only fallback for unsupported algorithms.
-                # Remove when RSASSA-PSS / other algorithms are natively supported.
-                # See: https://github.com/DataDog/lemur/pull/254#issuecomment-4265512236
-                if candidate_idx == current_idx + 1:
-                    current_app.logger.warning(
-                        "Skipping chain validation for adjacent pair (unsupported algorithm): %s", err
-                    )
-                else:
-                    continue
-
-            # candidate's public key verified current_cert's signature (or is
-            # an adjacent unsupported-algorithm fallback).
-            reached.add(candidate_idx)
-            frontier.append(candidate_idx)
-
-    # Every cert in the bundle must be reachable from the leaf.
-    unreached = set(range(len(certs))) - reached
-    if unreached:
-        # Report the first unreachable cert for a clear error message.
-        orphan_idx = min(unreached)
-        raise error_class(
-            "Incorrect chain certificate(s) provided: '%s' is not signed by any certificate in the chain"
-            % (defaults.common_name(certs[orphan_idx]) or "Unknown")
-        )
-
-    # Enforce leaf-to-root ordering: each cert after the leaf (position i > 0)
-    # must be an issuer of at least one cert that appears before it (position
-    # j < i). This ensures the chain is presented in the order TLS clients
-    # expect, while still allowing non-linear bundles where multiple issuers
-    # can appear at different positions.
     for i in range(1, len(certs)):
         candidate = certs[i]
-        signs_something_before = False
-        for j in range(i):
-            try:
-                check_cert_signature(certs[j], candidate.public_key())
-                signs_something_before = True
-                break
-            except InvalidSignature:
-                continue
-            except UnsupportedAlgorithm:
-                # COMPAT: Adjacency-only fallback for unsupported algorithms.
-                # Remove when RSASSA-PSS / other algorithms are natively supported.
-                # See: https://github.com/DataDog/lemur/pull/254#issuecomment-4265512236
-                if j == i - 1:
-                    signs_something_before = True
-                    break
-                continue
-
-        if not signs_something_before:
+        if not any(_is_issuer(candidate, certs[j], i, j) for j in range(i)):
             raise error_class(
-                "Incorrect chain certificate(s) provided: "
-                "chain is not in leaf-to-root order — '%s' (position %d) "
-                "does not sign any preceding certificate"
+                "Incorrect chain certificate(s) provided: '%s' (position %d) "
+                "does not sign any preceding certificate. The chain must be in "
+                "leaf-to-root order with every certificate connected to the leaf."
                 % (defaults.common_name(candidate) or "Unknown", i)
             )
 
