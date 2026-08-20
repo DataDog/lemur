@@ -54,6 +54,83 @@ from lemur.tests.vectors import (
 )
 
 
+def test_certificate_init_sets_authority_id_from_authority(session):
+    # Regression: create()/reissue construct a Certificate with the `authority` object (not `authority_id`).
+    from lemur.certificates.models import Certificate
+    from lemur.tests.factories import AuthorityFactory
+
+    authority = AuthorityFactory()
+    session.commit()
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com", authority=authority)
+
+    assert cert.authority_id == authority.id
+
+
+def test_certificate_init_allows_no_authority(session):
+    # Imported certs legitimately have no Lemur authority; authority_id must stay None.
+    from lemur.certificates.models import Certificate
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com")
+
+    assert cert.authority_id is None
+
+
+def test_certificate_init_transient_authority_leaves_id_none(session):
+    # An authority with no id yet (e.g. not flushed) must not raise; authority_id stays None.
+    from lemur.certificates.models import Certificate
+    from lemur.tests.factories import AuthorityFactory
+
+    transient = AuthorityFactory.build()
+    assert transient.id is None
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com", authority=transient)
+
+    assert cert.authority_id is None
+
+
+def test_certificate_init_sets_user_id_from_creator(session):
+    # Regression: create()/reissue construct a Certificate with the `creator` object (not `creator_id`).
+    from lemur.certificates.models import Certificate
+    from lemur.tests.factories import UserFactory
+
+    user = UserFactory()
+    session.commit()
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com", creator=user)
+
+    assert cert.user_id == user.id
+
+
+def test_certificate_init_allows_no_creator(session):
+    # Some paths construct without a creator (e.g. imports); user_id must stay None (no crash).
+    from lemur.certificates.models import Certificate
+
+    cert = Certificate(body=SAN_CERT_STR, owner="joe@example.com")
+
+    assert cert.user_id is None
+
+
+def test_pending_reissue_uses_certificate_rotation_policy(session):
+    from lemur.certificates.service import get_all_pending_reissue
+    from lemur.tests.factories import CertificateFactory, RotationPolicyFactory
+
+    short_policy = RotationPolicyFactory(days=30)
+    long_policy = RotationPolicyFactory(days=70)
+    short_policy_cert = CertificateFactory(
+        rotation=True, rotation_policy=short_policy
+    )
+    long_policy_cert = CertificateFactory(rotation=True, rotation_policy=long_policy)
+    short_policy_cert.not_after = arrow.utcnow().shift(days=+50)
+    long_policy_cert.not_after = arrow.utcnow().shift(days=+50)
+    session.flush()
+
+    pending = get_all_pending_reissue()
+
+    assert long_policy_cert in pending
+    assert short_policy_cert not in pending
+
+
 def test_get_or_increase_name(session, certificate):
     from lemur.certificates.models import get_or_increase_name
     from lemur.tests.factories import CertificateFactory
@@ -2048,10 +2125,94 @@ def test_allowed_issuance_for_domain(
 def test_send_certificate_expiration_metrics(certificate):
     from lemur.certificates.service import send_certificate_expiration_metrics
 
-    new_cert = create_cert_that_expires_in_days(10)
+    create_cert_that_expires_in_days(10)
 
     success, failure = send_certificate_expiration_metrics()
     assert failure == 0
+
+
+def test_send_certificate_expiration_metrics_has_been_replaced_tag(
+    session, destination_plugin
+):
+    from lemur.certificates.service import send_certificate_expiration_metrics
+    from lemur.tests.factories import CertificateFactory, DestinationFactory
+
+    old_cert = create_cert_that_expires_in_days(10)
+    old_cert.issuer = None
+    old_cert.signing_algorithm = None
+    dest = DestinationFactory(
+        description='{"datacenter":"us1.release.staging.dog","type":"isp"}'
+    )
+    old_cert.destinations.append(dest)
+
+    new_cert = CertificateFactory()
+    new_cert.replaces.append(old_cert)
+    session.flush()
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        send_certificate_expiration_metrics()
+
+    expiry_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.days_until_expiration"
+    ]
+    tags_by_cert_id = {
+        c.kwargs["metric_tags"]["cert_id"]: c.kwargs["metric_tags"]
+        for c in expiry_calls
+    }
+
+    assert old_cert.id in tags_by_cert_id
+    assert tags_by_cert_id[old_cert.id]["has_been_replaced"] is True
+    assert tags_by_cert_id[old_cert.id]["issuer"] == "unknown"
+    assert tags_by_cert_id[old_cert.id]["signing_algorithm"] == "unknown"
+
+    dest_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.by_destination"
+    ]
+    dest_tags = next(
+        c.kwargs["metric_tags"]
+        for c in dest_calls
+        if c.kwargs["metric_tags"]["destination"] == dest.label
+    )
+    assert dest_tags["cert_id"] == old_cert.id
+    assert dest_tags["plugin_name"] == "test-destination"
+    assert dest_tags["plugin"] == "Test"
+    assert dest_tags["datacenter"] == "us1.release.staging.dog"
+
+
+def test_send_certificate_expiration_metrics_rotation_authority_tags(session):
+    from lemur.certificates.service import send_certificate_expiration_metrics
+    from lemur.tests.factories import AuthorityFactory
+
+    authority = AuthorityFactory()
+
+    rotating_cert = create_cert_that_expires_in_days(10)
+    rotating_cert.rotation = True
+    rotating_cert.authority = authority
+
+    # Mirrors an imported/discovered cert: no owning authority, rotation off.
+    imported_cert = create_cert_that_expires_in_days(10)
+    imported_cert.rotation = False
+    imported_cert.authority = None
+    session.flush()
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        send_certificate_expiration_metrics()
+
+    tags_by_cert_id = {
+        c.kwargs["metric_tags"]["cert_id"]: c.kwargs["metric_tags"]
+        for c in mock_metrics.send.call_args_list
+        if c.args[0] == "certificates.days_until_expiration"
+    }
+
+    assert tags_by_cert_id[rotating_cert.id]["rotation"] is True
+    assert tags_by_cert_id[rotating_cert.id]["authority"] == authority.name
+
+    assert tags_by_cert_id[imported_cert.id]["rotation"] is False
+    assert tags_by_cert_id[imported_cert.id]["authority"] is None
 
 
 @pytest.mark.parametrize(
@@ -2081,3 +2242,39 @@ def test_get_cert_expiry_in_days(certificate):
     new_cert = create_cert_that_expires_in_days(10)
 
     assert _get_cert_expiry_in_days(new_cert.not_after) == 10
+
+
+def test_send_source_destination_pairing_metrics(certificate):
+    from lemur.certificates.service import send_source_destination_pairing_metrics
+    from lemur.tests.factories import SourceFactory, DestinationFactory
+
+    DC_DESC = '{"datacenter":"us1.prod","type":"aws"}'
+
+    # "shared" is paired; "orphan-src" has no destination; "orphan-dst" has no source
+    SourceFactory(label="shared", description=DC_DESC)
+    SourceFactory(label="orphan-src")
+    DestinationFactory(label="shared", description=DC_DESC)
+    DestinationFactory(label="orphan-dst")
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        send_source_destination_pairing_metrics()
+
+    src_tags_by_name = {
+        tags["source_name"]: tags
+        for call in mock_metrics.send.call_args_list
+        if (tags := call.kwargs["metric_tags"]) and call.args[0] == "source.paired"
+    }
+    assert src_tags_by_name["shared"]["has_destination"] == "true"
+    assert src_tags_by_name["shared"]["datacenter"] == "us1.prod"
+    assert src_tags_by_name["orphan-src"]["has_destination"] == "false"
+    assert "datacenter" not in src_tags_by_name["orphan-src"]
+
+    dst_tags_by_name = {
+        tags["destination_name"]: tags
+        for call in mock_metrics.send.call_args_list
+        if (tags := call.kwargs["metric_tags"]) and call.args[0] == "destination.paired"
+    }
+    assert dst_tags_by_name["shared"]["has_source"] == "true"
+    assert dst_tags_by_name["shared"]["datacenter"] == "us1.prod"
+    assert dst_tags_by_name["orphan-dst"]["has_source"] == "false"
+    assert "datacenter" not in dst_tags_by_name["orphan-dst"]

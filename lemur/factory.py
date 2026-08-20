@@ -68,6 +68,7 @@ def create_app(app_name=None, blueprints=None, config=None):
     configure_logging(app)
     configure_database(app)
     install_plugins(app)
+    configure_default_rotation_policy(app)
 
     @app.teardown_appcontext
     def teardown(exception=None):
@@ -75,6 +76,28 @@ def create_app(app_name=None, blueprints=None, config=None):
             db.session.remove()
 
     return app
+
+
+def configure_default_rotation_policy(app):
+    """
+    Ensures the named "default" RotationPolicy exists and its days are in sync
+    with LEMUR_DEFAULT_ROTATION_INTERVAL. Called once at boot via create_app()
+    so every process (web, celery worker, celery beat) starts with the policy
+    matching the configured value.
+    """
+    from lemur.policies import service as policy_service
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    with app.app_context():
+        try:
+            policy_service.update_default_rotation_policy()
+        except (OperationalError, ProgrammingError):
+            # rotation_policies table doesn't exist yet (fresh DB / migrations
+            # not yet run, or test DB before create_all). Safe to skip — the
+            # policy will be synced on the next boot after migrations complete.
+            app.logger.debug(
+                "Skipping default rotation policy sync: table not ready"
+            )
 
 
 def from_file(file_path, silent=False):
@@ -197,6 +220,14 @@ def configure_database(app):
         FlaskReplicated(app)
 
 
+def json_log_formatter():
+    """
+    Builds the JSON log formatter shared by the Flask app and the Celery
+    worker so both emit identically-shaped structured logs.
+    """
+    return logmatic.JsonFormatter(extra={"hostname": socket.gethostname()})
+
+
 def configure_logging(app):
     """
     Sets up application wide logging.
@@ -221,9 +252,7 @@ def configure_logging(app):
     )
 
     if app.config.get("LOG_JSON", False):
-        handler.setFormatter(
-            logmatic.JsonFormatter(extra={"hostname": socket.gethostname()})
-        )
+        handler.setFormatter(json_log_formatter())
 
     handler.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
     app.logger.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))

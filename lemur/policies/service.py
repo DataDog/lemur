@@ -6,8 +6,35 @@
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
 
+from flask import current_app
+
 from lemur import database
 from lemur.policies.models import RotationPolicy
+
+
+def update_default_rotation_policy():
+    """
+    Return the named "default" RotationPolicy, keeping it in sync with
+    LEMUR_DEFAULT_ROTATION_INTERVAL: creates it if missing, updates its days
+    if the config has changed. This policy is the NULL-policy fallback in
+    Certificate.__init__.
+    The default rotation policy is refreshed as a part of the pre-query sync
+    in get_all_pending_reissue.
+    """
+    days = current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
+    policies = get_by_name("default")
+    if not policies:
+        current_app.logger.info(
+            "[+] Creating default rotation policy: days=%d", days
+        )
+        return create(days=days, name="default")
+    policy = policies[0]
+    if policy.days != days:
+        current_app.logger.info(
+            "[~] Updating default rotation policy: days %d -> %d", policy.days, days
+        )
+        update(policy.id, days=days)
+    return policy
 
 
 def get(policy_id):

@@ -167,8 +167,10 @@ CELERYBEAT_SCHEDULE = {
     #         'expires': 180
     #     },
     #     'schedule': crontab(hour=10, minute=0, day_of_week='mon-fri'),
-    # }
+    # },
 }
+
+DIGICERT_DCV_CHECK_ENABLED = True
 CELERY_TIMEZONE = "UTC"
 
 SQLALCHEMY_ENABLE_FLASK_REPLICATED = False
@@ -210,6 +212,9 @@ LEMUR_DEFAULT_ORGANIZATION = str(
 )
 LEMUR_DEFAULT_ORGANIZATIONAL_UNIT = str(
     os.environ.get("LEMUR_DEFAULT_ORGANIZATIONAL_UNIT", "")
+)
+LEMUR_DEFAULT_ROTATION_INTERVAL = int(
+    os.environ.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
 )
 
 LEMUR_DEFAULT_AUTHORITY = str(os.environ.get("LEMUR_DEFAULT_AUTHORITY", "ExampleCa"))

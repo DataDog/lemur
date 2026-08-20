@@ -14,7 +14,14 @@ import time
 from celery import Celery
 from celery.app.task import Context
 from celery.exceptions import SoftTimeLimitExceeded
-from celery.signals import task_failure, task_received, task_revoked, task_success
+from celery.signals import (
+    after_setup_logger,
+    after_setup_task_logger,
+    task_failure,
+    task_received,
+    task_revoked,
+    task_success,
+)
 from datetime import datetime, timezone, timedelta
 from flask import current_app
 from sentry_sdk import capture_exception
@@ -26,7 +33,7 @@ from lemur.common.redis import RedisHandler
 from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
-from lemur.factory import create_app
+from lemur.factory import create_app, json_log_formatter
 from lemur import fips
 from lemur.notifications import cli as cli_notification
 from lemur.notifications.messaging import (
@@ -55,6 +62,23 @@ def make_celery(app):
         broker=app.config.get("CELERY_BROKER_URL"),
     )
     celery.conf.update(app.config)
+
+    def _configure_worker_logging(logger, **kwargs):
+        # app.logger's handlers still propagate to root, so every
+        # current_app.logger call would otherwise be emitted twice: once
+        # bare/unformatted here, once cleanly through Celery's root handler.
+        app.logger.handlers.clear()
+
+        # Give Celery's own handlers the same JSON shape as the Flask app so
+        # worker and web logs are ingested identically.
+        if app.config.get("LOG_JSON", False):
+            formatter = json_log_formatter()
+            for handler in logger.handlers:
+                handler.setFormatter(formatter)
+
+    after_setup_logger.connect(_configure_worker_logging, weak=False)
+    after_setup_task_logger.connect(_configure_worker_logging, weak=False)
+
     TaskBase = celery.Task
 
     class ContextTask(TaskBase):
@@ -200,6 +224,14 @@ def report_successful_task(**kwargs):
         tags = get_celery_request_tags(**kwargs)
         red.set(f"{tags['task_name']}.last_success", int(time.time()))
         metrics.send("celery.successful_task", "TIMER", 1, metric_tags=tags)
+        # Emit failed_task=0 on success so the counter stays dense (0 when healthy)
+        # and the failure monitor can drop default_zero. Low-cardinality tags only.
+        metrics.send(
+            "celery.failed_task",
+            "counter",
+            0,
+            metric_tags={"task_name": tags["task_name"]},
+        )
 
 
 @task_failure.connect
@@ -224,7 +256,7 @@ def report_failed_task(**kwargs):
 
         log_data.update(error_tags)
         current_app.logger.error(log_data)
-        metrics.send("celery.failed_task", "TIMER", 1, metric_tags=error_tags)
+        metrics.send("celery.failed_task", "counter", 1, metric_tags=error_tags)
 
 
 @task_revoked.connect
@@ -505,15 +537,6 @@ def clean_source(source):
 
 
 @celery_app.task()
-def complete_sync_chain():
-    red.delete("sync_chain_active")
-    # Mark sync_all_sources as successful now that all sources have synced
-    function = f"{__name__}.sync_all_sources"
-    red.set(f"{function}.last_success", int(time.time()))
-    metrics.send(f"{function}.success", "counter", 1)
-
-
-@celery_app.task()
 def sync_all_sources():
     """
     This function will sync certificates from all sources. This function triggers one celery task per source.
@@ -534,29 +557,17 @@ def sync_all_sources():
         current_app.logger.debug(log_data)
         return
 
-    # Skip if a previous sync chain is still running
-    if red.get("sync_chain_active"):
-        log_data["message"] = "Skipping: previous sync chain is still running"
-        current_app.logger.warning(log_data)
-        return log_data
-
     sources = validate_sources("all")
-    # Source syncs are heavy, chain them sequentially so they don't flood the queue
-    from celery import chain
-    red.set("sync_chain_active", "1", ex=7200)  # cleared by complete_sync_chain at end of chain, 2h expiry is a safety net
-    tasks = []
     for source in sources:
         log_data["source"] = source.label
         current_app.logger.debug(log_data)
-        tasks.append(sync_source.si(source.label))
-    tasks.append(complete_sync_chain.si())
-    if tasks:
-        chain(*tasks).delay()
+        sync_source.delay(source.label)
 
+    metrics.send(f"{function}.success", "counter", 1)
     return log_data
 
 
-@celery_app.task(soft_time_limit=900)  # fail if a source task gets stuck
+@celery_app.task(soft_time_limit=7200)
 def sync_source(source):
     """
     This celery task will sync the specified source.
@@ -595,12 +606,6 @@ def sync_source(source):
             "sync_source_timeout", "counter", 1, metric_tags={"source": source}
         )
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
-        return
-    except Exception as e:
-        log_data["message"] = f"Error syncing source: {e}"
-        current_app.logger.error(log_data)
-        capture_exception()
-        metrics.send(f"{function}.failure", "counter", 1, metric_tags={"source": source})
         return
 
     log_data["message"] = "Done syncing source"
@@ -1157,5 +1162,117 @@ def certificate_expirations_metrics():
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
         return
 
+    try:
+        certificate_service.send_source_destination_pairing_metrics()
+    except Exception:
+        current_app.logger.exception("Error sending source/destination pairing metrics")
+        capture_exception()
+        metrics.send(
+            "source_destination_pairing_metrics.error", "counter", 1, metric_tags={"function": function}
+        )
+
+    # Folded in from the former standalone check_dcv_expiration task (EVBL-51):
+    # emit DCV token expiry gauges from the same consolidated expiry-metrics task.
+    try:
+        _emit_dcv_expiration_metrics()
+    except SoftTimeLimitExceeded:
+        log_data["message"] = "Time limit exceeded."
+        current_app.logger.error(log_data)
+        capture_exception()
+        metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
+        return
+    except Exception:
+        current_app.logger.exception("Error sending DCV expiration metrics")
+        capture_exception()
+        metrics.send(
+            "dcv_expiration_metrics.error", "counter", 1, metric_tags={"function": function}
+        )
+
     metrics.send(f"{function}.success", "counter", 1)
     return log_data
+
+
+def _emit_dcv_expiration_metrics():
+    """
+    Iterates all registered issuer plugins that implement get_dcv_expiration_data()
+    and emits dcv.days_until_expiration gauge per domain (RDNA-1000).
+
+    Folded into certificate_expirations_metrics as part of EVBL-51 so a single
+    task owns all certificate/DCV expiry telemetry.
+    """
+    total_domains = 0
+    total_errors = 0
+    now = datetime.now(timezone.utc)
+
+    for plugin in plugins.all(plugin_type="issuer"):
+        ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
+        try:
+            dcv_data = plugin.get_dcv_expiration_data()
+        except SoftTimeLimitExceeded:
+            raise
+        except Exception as e:
+            current_app.logger.warning(
+                f"_emit_dcv_expiration_metrics: {ca_name} raised {e}", exc_info=True
+            )
+            capture_exception()
+            total_errors += 1
+            continue
+
+        for entry in dcv_data:
+            try:
+                dcv_expiration = entry.get("dcv_expiration")
+                if not dcv_expiration:
+                    continue
+                expiry_dt = datetime.fromisoformat(
+                    dcv_expiration.replace("Z", "+00:00")
+                )
+                if expiry_dt.tzinfo is None:
+                    expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                days_remaining = (expiry_dt - now).days
+                metrics.send(
+                    "dcv.days_until_expiration",
+                    "gauge",
+                    days_remaining,
+                    metric_tags={
+                        "domain": entry.get("domain", "unknown"),
+                        "ca": ca_name,
+                        "validation_type": entry.get("validation_type", "unknown"),
+                        "org_id": entry.get("org_id", "unknown"),
+                        "dcv_method": entry.get("dcv_method", "unknown"),
+                    },
+                )
+                total_domains += 1
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception as e:
+                current_app.logger.warning(
+                    f"_emit_dcv_expiration_metrics: failed on entry for ca={ca_name}: {e}",
+                    exc_info=True,
+                )
+                capture_exception()
+                total_errors += 1
+
+    metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
+    metrics.send("dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
+    current_app.logger.info(
+        f"_emit_dcv_expiration_metrics: done. domains={total_domains} errors={total_errors}"
+    )
+
+
+@celery_app.task(
+    name="lemur.common.celery.check_dcv_expiration",
+    soft_time_limit=3600,
+)
+def _check_dcv_expiration_deprecated():
+    """
+    Deprecated alias for the former standalone check_dcv_expiration task (EVBL-51).
+
+    check_dcv_expiration was folded into certificate_expirations_metrics. This stub
+    keeps the old fully-qualified task name registered so any messages still in the
+    broker (or a beat schedule entry not yet removed) resolve instead of failing with
+    "Received unregistered task of type 'lemur.common.celery.check_dcv_expiration'".
+
+    Remove this alias once the CELERYBEAT_SCHEDULE entry is dropped and the queue
+    has drained (one deploy cycle).
+    """
+    _emit_dcv_expiration_metrics()

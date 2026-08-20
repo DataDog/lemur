@@ -13,7 +13,13 @@ def render(args):
     :param args:
     :return:
     """
+    filt = args.pop("filter", None)
     query = database.session_query(DnsProvider)
+
+    if filt:
+        terms = filt.split(";")
+        if len(terms) == 2 and terms[1]:
+            query = database.filter(query, DnsProvider, terms)
 
     return database.sort_and_page(query, DnsProvider, args)
 
@@ -116,6 +122,40 @@ def get_types():
         raise Exception("No DNS Provider configuration specified.")
     provider_config["total"] = len(provider_config.get("items"))
     return provider_config
+
+
+def update(dns_provider_id, data):
+    """
+    Updates an existing DNS provider.
+
+    :param dns_provider_id: Lemur assigned ID
+    :param data: dict with name, description, provider_type
+    :rtype: DnsProvider
+    """
+    dns_provider = get(dns_provider_id)
+    if not dns_provider:
+        return None
+
+    provider_name = data.get("name")
+    credentials = {}
+    for item in data.get("provider_type", {}).get("requirements", []):
+        credentials[item["name"]] = item["value"]
+
+    dns_provider.name = provider_name
+    dns_provider.description = data.get("description")
+    dns_provider.provider_type = data.get("provider_type", {}).get("name")
+    dns_provider.credentials = json.dumps(credentials)
+
+    log_service.audit_log(
+        "update_dns_provider",
+        provider_name,
+        "Updated DNS provider: name={name}, description={description}, provider_type={provider_type}".format(
+            name=provider_name,
+            description=data.get("description"),
+            provider_type=data.get("provider_type", {}).get("name"),
+        ),
+    )
+    return database.update(dns_provider)
 
 
 def set_domains(dns_provider, domains):

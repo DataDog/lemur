@@ -14,6 +14,7 @@ from sentry_sdk import capture_exception
 
 from lemur.extensions import metrics
 from lemur.exceptions import InvalidListener
+from lemur.plugins.lemur_aws.retry import THROTTLE_RETRY_KWARGS
 from lemur.plugins.lemur_aws.sts import sts_client
 
 
@@ -27,13 +28,12 @@ def retry_throttled(exception):
     if isinstance(exception, SoftTimeLimitExceeded):
         return False
 
-    # Log details about the exception
-    try:
-        raise exception
-    except Exception as e:
-        current_app.logger.error("ELB retry_throttled triggered", exc_info=True)
-        metrics.send("elb_retry", "counter", 1, metric_tags={"exception": str(e)})
-        capture_exception()
+    # This predicate runs on every failed attempt, so log at WARNING without a
+    # traceback (an ERROR + exc_info here flooded the logs under throttling).
+    # The final exception still propagates with its traceback if retries fail.
+    current_app.logger.warning("ELB retry_throttled triggered: %s", exception)
+    metrics.send("elb_retry", "counter", 1, metric_tags={"exception": str(exception)})
+    capture_exception(error=exception)
 
     if isinstance(exception, botocore.exceptions.ClientError):
         if exception.response["Error"]["Code"] == "LoadBalancerNotFound":
@@ -187,7 +187,7 @@ def get_all_elbs_v2(**kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def get_listener_arn_from_endpoint(endpoint_name, endpoint_port, **kwargs):
     """
     Get a listener ARN from an endpoint.
@@ -226,7 +226,7 @@ def get_listener_arn_from_endpoint(endpoint_name, endpoint_port, **kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=5)
+@retry(retry_on_exception=retry_throttled, stop_max_attempt_number=5, **THROTTLE_RETRY_KWARGS)
 def get_load_balancer_arn_from_endpoint(endpoint_name, **kwargs):
     """
     Get a load balancer ARN from an endpoint.
@@ -265,7 +265,7 @@ def get_elbs(**kwargs):
     return _get_elbs(**kwargs)
 
 
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def _get_elbs(**kwargs):
     """
     Fetches one page elb objects for a given account and region.
@@ -290,7 +290,7 @@ def get_elbs_v2(**kwargs):
     return _get_elbs_v2(**kwargs)
 
 
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def _get_elbs_v2(**kwargs):
     """
     Fetches one page of elb objects for a given account and region.
@@ -308,7 +308,7 @@ def _get_elbs_v2(**kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def describe_listeners_v2(**kwargs):
     """
     Fetches one page of listener objects for a given elb arn.
@@ -328,7 +328,7 @@ def describe_listeners_v2(**kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def describe_listener_certificates_v2(**kwargs):
     """
     Fetches one page of listener certificate objects for a given listener arn.
@@ -351,7 +351,7 @@ def describe_listener_certificates_v2(**kwargs):
 
 
 @sts_client("elb")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def describe_load_balancer_policies(load_balancer_name, policy_names, **kwargs):
     """
     Fetching all policies currently associated with an ELB.
@@ -385,7 +385,7 @@ def describe_load_balancer_policies(load_balancer_name, policy_names, **kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def describe_ssl_policies_v2(policy_names, **kwargs):
     """
     Fetching all policies currently associated with an ELB.
@@ -407,7 +407,7 @@ def describe_ssl_policies_v2(policy_names, **kwargs):
 
 
 @sts_client("elb")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def describe_load_balancer_types(policies, **kwargs):
     """
     Describe the policies with policy details.
@@ -421,7 +421,7 @@ def describe_load_balancer_types(policies, **kwargs):
 
 
 @sts_client("elb")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def attach_certificate(name, port, certificate_id, **kwargs):
     """
     Attaches a certificate to a listener, throws exception
@@ -445,7 +445,7 @@ def attach_certificate(name, port, certificate_id, **kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def attach_certificate_v2(listener_arn, port, certificates, **kwargs):
     """
     Attaches a certificate to a listener, throws exception
@@ -467,7 +467,7 @@ def attach_certificate_v2(listener_arn, port, certificates, **kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def add_listener_certificates_v2(listener_arn, certificates, **kwargs):
     """
     Adds the specified certificate to the certificate list for the listener, throws exception
@@ -498,7 +498,7 @@ def add_listener_certificates_v2(listener_arn, certificates, **kwargs):
 
 
 @sts_client("elbv2")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=20)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def remove_listener_certificates_v2(listener_arn, certificates, **kwargs):
     """
     Removes the specified certificate from the certificate list for the listener, throws exception

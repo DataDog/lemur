@@ -16,17 +16,28 @@ def wait_for_dns_change(change_id, client=None):
 
 @sts_client("route53")
 def find_zone_id(domain, client=None):
+    return _find_zone_id(domain, client)
+
+
+def _find_zone_id(domain, client=None):
     paginator = client.get_paginator("list_hosted_zones")
-    zones = []
+    min_diff_length = float("inf")
+    chosen_zone = None
+
     for page in paginator.paginate():
         for zone in page["HostedZones"]:
-            if domain.endswith(zone["Name"]) or (domain + ".").endswith(zone["Name"]):
+            zone_name = zone["Name"].rstrip(".")
+            if domain == zone_name or domain.endswith("." + zone_name):
                 if not zone["Config"]["PrivateZone"]:
-                    zones.append((zone["Name"], zone["Id"]))
+                    diff_length = len(domain) - len(zone_name)
+                    if diff_length < min_diff_length:
+                        min_diff_length = diff_length
+                        chosen_zone = (zone["Name"], zone["Id"])
 
-    if not zones:
-        raise ValueError("Unable to find a Route53 hosted zone for {}".format(domain))
-    return zones[0][1]
+    if chosen_zone is None:
+        raise ValueError(f"Unable to find a Route53 hosted zone for {domain}")
+
+    return chosen_zone[1]
 
 
 @sts_client("route53")

@@ -9,10 +9,12 @@
 
 import botocore
 
+from flask import current_app
 from retrying import retry
 from sentry_sdk import capture_exception
 
 from lemur.extensions import metrics
+from lemur.plugins.lemur_aws.retry import THROTTLE_RETRY_KWARGS
 from lemur.plugins.lemur_aws.sts import sts_client
 
 
@@ -121,7 +123,7 @@ def create_arn_from_cert(account_number, partition, certificate_name, path=""):
 
 
 @sts_client("iam")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
     """
     Upload a certificate to AWS
@@ -139,10 +141,10 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
     if not path or path == "/":
         path = "/"
 
-    metrics.send("upload_cert", "counter", 1, metric_tags={"name": name, "path": path})
+    outcome = "success"
     try:
         if cert_chain:
-            return client.upload_server_certificate(
+            response = client.upload_server_certificate(
                 Path=path,
                 ServerCertificateName=name,
                 CertificateBody=str(body),
@@ -150,7 +152,7 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
                 CertificateChain=str(cert_chain),
             )
         else:
-            return client.upload_server_certificate(
+            response = client.upload_server_certificate(
                 Path=path,
                 ServerCertificateName=name,
                 CertificateBody=str(body),
@@ -159,10 +161,29 @@ def upload_cert(name, body, private_key, path, cert_chain=None, **kwargs):
     except botocore.exceptions.ClientError as e:
         if e.response["Error"]["Code"] != "EntityAlreadyExists":
             raise e
+        current_app.logger.error(
+            "Skipped IAM server-certificate upload; name already exists in account "
+            "(name=%s path=%s). Destination upload was a no-op.",
+            name,
+            path,
+        )
+        response = None
+        outcome = "skipped_already_exists"
+
+    # Never let a telemetry error escape: this function is retried, and the
+    # upload above is not idempotent, so a raised metric would re-run it.
+    try:
+        metrics.send(
+            "upload_cert", "counter", 1, metric_tags={"path": path, "outcome": outcome}
+        )
+    except Exception:
+        current_app.logger.exception(f"Failed to emit upload_cert metric, path: {path}, outcome {outcome}")
+
+    return response
 
 
 @sts_client("iam")
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def delete_cert(cert_name, **kwargs):
     """
     Delete a certificate from AWS
@@ -189,7 +210,7 @@ def get_certificate(name, **kwargs):
     return _get_certificate(name, **kwargs)
 
 
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def _get_certificate(name, **kwargs):
     metrics.send("get_certificate", "counter", 1, metric_tags={"name": name})
     client = kwargs.pop("client")
@@ -212,7 +233,7 @@ def get_certificates(**kwargs):
     return _get_certificates(**kwargs)
 
 
-@retry(retry_on_exception=retry_throttled, wait_fixed=2000, stop_max_attempt_number=25)
+@retry(retry_on_exception=retry_throttled, **THROTTLE_RETRY_KWARGS)
 def _get_certificates(**kwargs):
     metrics.send("get_certificates", "counter", 1)
     return kwargs.pop("client").list_server_certificates(**kwargs)

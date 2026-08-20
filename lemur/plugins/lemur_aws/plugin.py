@@ -42,7 +42,7 @@ from lemur.common.utils import check_validation
 from lemur.extensions import metrics
 from lemur.plugins import lemur_aws as aws, ExpirationNotificationPlugin
 from lemur.plugins.bases import DestinationPlugin, ExportDestinationPlugin, SourcePlugin
-from lemur.plugins.lemur_aws import iam, s3, elb, ec2, sns, cloudfront
+from lemur.plugins.lemur_aws import acm, iam, s3, elb, ec2, sns, cloudfront
 
 
 def get_region_from_dns(dns):
@@ -152,6 +152,13 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
         LoadBalancerArn=elb_dict["LoadBalancerArn"],
     )
     for listener in listeners["Listeners"]:
+        # Only HTTPS/TLS listeners can carry certificates. AWS rejects
+        # DescribeListenerCertificates against any other protocol (HTTP, TCP,
+        # UDP, TCP_UDP, GENEVE for GWLB, ...) with a hard ValidationError
+        # rather than an empty result.
+        if listener["Protocol"] not in ("HTTPS", "TLS"):
+            continue
+
         listener_certificates = elb.describe_listener_certificates_v2(
             account_number=account_number,
             region=region,
@@ -326,8 +333,30 @@ class AWSSourcePlugin(SourcePlugin):
         else:
             regions = "".join(regions.split()).split(",")
 
+        excluded_regions = current_app.config.get("LEMUR_AWS_EXCLUDED_REGIONS", [])
+        if excluded_regions:
+            regions = [r for r in regions if r not in excluded_regions]
+
         for region in regions:
-            elbs = elb.get_all_elbs(account_number=account_number, region=region)
+            try:
+                elbs = elb.get_all_elbs(account_number=account_number, region=region)
+            except Exception:  # noqa
+                current_app.logger.warning(
+                    {
+                        "message": "Failed to describe classic load balancers, skipping region",
+                        "account_number": account_number,
+                        "region": region,
+                    }
+                )
+                capture_exception()
+                metrics.send(
+                    "source_sync_fail",
+                    "counter",
+                    1,
+                    metric_tags={"source": f"{account_number}/{region}/classic"},
+                )
+                continue
+
             current_app.logger.info(
                 {
                     "message": "Describing classic load balancers",
@@ -345,7 +374,25 @@ class AWSSourcePlugin(SourcePlugin):
                     continue
 
             # fetch advanced ELBs
-            elbs_v2 = elb.get_all_elbs_v2(account_number=account_number, region=region)
+            try:
+                elbs_v2 = elb.get_all_elbs_v2(account_number=account_number, region=region)
+            except Exception:  # noqa
+                current_app.logger.warning(
+                    {
+                        "message": "Failed to describe advanced load balancers, skipping region",
+                        "account_number": account_number,
+                        "region": region,
+                    }
+                )
+                capture_exception()
+                metrics.send(
+                    "source_sync_fail",
+                    "counter",
+                    1,
+                    metric_tags={"source": f"{account_number}/{region}/elbv2"},
+                )
+                continue
+
             current_app.logger.info(
                 {
                     "message": "Describing advanced load balancers",
@@ -588,6 +635,45 @@ class AWSSourcePlugin(SourcePlugin):
         return certificate_names
 
 
+class ACMSourcePlugin(SourcePlugin):
+    title = "AWS-ACM"
+    slug = "aws-acm-source"
+    description = "Discovers imported certificates in one AWS ACM account and region"
+    version = aws.VERSION
+
+    author = "Datadog"
+    author_url = "https://github.com/DataDog/lemur"
+
+    options = [
+        {
+            "name": "accountNumber",
+            "type": "str",
+            "required": True,
+            "validation": check_validation("^[0-9]{12,12}$"),
+            "helpMessage": "Must be a valid AWS account number!",
+        },
+        {
+            "name": "region",
+            "type": "str",
+            "required": True,
+            "helpMessage": "AWS region containing the imported ACM certificates.",
+        },
+    ]
+
+    def get_certificates(self, options, **kwargs):
+        certificates = acm.get_imported_certificates(
+            account_number=self.get_option("accountNumber", options),
+            region=self.get_option("region", options),
+        )
+        return [
+            {"body": certificate["body"], "chain": certificate.get("chain")}
+            for certificate in certificates
+        ]
+
+    def get_endpoints(self, options, **kwargs):
+        return []
+
+
 class AWSDestinationPlugin(DestinationPlugin):
     title = "AWS"
     slug = "aws-destination"
@@ -635,6 +721,43 @@ class AWSDestinationPlugin(DestinationPlugin):
     def clean(self, certificate, options, **kwargs):
         account_number = self.get_option("accountNumber", options)
         iam.delete_cert(certificate.name, account_number=account_number)
+
+
+class ACMDestinationPlugin(DestinationPlugin):
+    title = "AWS-ACM"
+    slug = "aws-acm-destination"
+    description = "Imports certificates into one AWS ACM account and region"
+    version = aws.VERSION
+    sync_as_source = True
+    sync_as_source_name = ACMSourcePlugin.slug
+
+    author = "Datadog"
+    author_url = "https://github.com/DataDog/lemur"
+
+    options = [
+        {
+            "name": "accountNumber",
+            "type": "str",
+            "required": True,
+            "validation": check_validation("^[0-9]{12,12}$"),
+            "helpMessage": "Must be a valid AWS account number!",
+        },
+        {
+            "name": "region",
+            "type": "str",
+            "required": True,
+            "helpMessage": "AWS region where the certificate will be imported.",
+        },
+    ]
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        return acm.upload_cert(
+            body,
+            private_key,
+            cert_chain=cert_chain,
+            account_number=self.get_option("accountNumber", options),
+            region=self.get_option("region", options),
+        )
 
 
 class S3DestinationPlugin(ExportDestinationPlugin):
