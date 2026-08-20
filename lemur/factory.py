@@ -258,10 +258,6 @@ def configure_logging(app):
     app.logger.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
     app.logger.addHandler(handler)
 
-    stream_handler = StreamHandler()
-    stream_handler.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
-    app.logger.addHandler(stream_handler)
-
     if app.config.get("DEBUG_DUMP", False):
         activate_debug_dump()
 
