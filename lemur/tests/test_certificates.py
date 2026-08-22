@@ -2057,3 +2057,74 @@ def test_send_source_destination_pairing_metrics(certificate):
     assert dst_tags_by_name["shared"]["datacenter"] == "us1.prod"
     assert dst_tags_by_name["orphan-dst"]["has_source"] == "false"
     assert "datacenter" not in dst_tags_by_name["orphan-dst"]
+# is_attached_to_endpoint — hasattr guard tests
+# ---------------------------------------------------------------------------
+
+
+def test_is_attached_to_endpoint_plugin_missing_method(app):
+    """Plugin without get_endpoint_certificate_names returns True (fail-closed, no AttributeError)."""
+    from unittest.mock import MagicMock, patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    plugin = MagicMock(spec=[])  # spec=[] → hasattr returns False for everything
+    plugin.plugin_name = "test-no-method-source"
+    source = MagicMock()
+    source.plugin = plugin
+    endpoint = MagicMock()
+    endpoint.source = source
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = endpoint
+        result = is_attached_to_endpoint("my-cert", "my-endpoint")
+
+    assert result is True
+
+
+def test_is_attached_to_endpoint_endpoint_not_found(app):
+    """Endpoint lookup returning None returns False (no AttributeError) — nothing to be attached to."""
+    from unittest.mock import patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = None
+        result = is_attached_to_endpoint("my-cert", "missing-endpoint")
+
+    assert result is False
+
+
+def test_is_attached_to_endpoint_plugin_has_method_cert_present():
+    """Plugin with get_endpoint_certificate_names returns True when cert is in list."""
+    from unittest.mock import MagicMock, patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    plugin = MagicMock()
+    plugin.get_endpoint_certificate_names.return_value = ["my-cert", "other-cert"]
+    source = MagicMock()
+    source.plugin = plugin
+    endpoint = MagicMock()
+    endpoint.source = source
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = endpoint
+        result = is_attached_to_endpoint("my-cert", "my-endpoint")
+
+    assert result is True
+
+
+def test_is_attached_to_endpoint_plugin_has_method_cert_absent():
+    """Plugin with get_endpoint_certificate_names returns False when cert not in list."""
+    from unittest.mock import MagicMock, patch
+    from lemur.certificates.service import is_attached_to_endpoint
+
+    plugin = MagicMock()
+    plugin.get_endpoint_certificate_names.return_value = ["other-cert"]
+    source = MagicMock()
+    source.plugin = plugin
+    endpoint = MagicMock()
+    endpoint.source = source
+
+    with patch("lemur.certificates.service.endpoint_service") as mock_ep_svc:
+        mock_ep_svc.get_by_name.return_value = endpoint
+        result = is_attached_to_endpoint("my-cert", "my-endpoint")
+
+    assert result is False
