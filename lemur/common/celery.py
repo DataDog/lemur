@@ -126,19 +126,25 @@ def get_celery_request_tags(**kwargs):
     if request and not isinstance(
         request, Context
     ):  # unlike others, task_revoked sends a Context for `request`
+        task_request = request
         task_name = request.name
         task_id = request.id
         receiver_hostname = request.hostname
     else:
+        task_request = sender.request
         task_name = sender.name
         task_id = sender.request.id
         receiver_hostname = sender.request.hostname
+
+    delivery_info = getattr(task_request, "delivery_info", None) or {}
+    queue = delivery_info.get("routing_key") or "unknown"
 
     tags = {
         "task_name": task_name,
         "task_id": task_id,
         "sender_hostname": sender_hostname,
         "receiver_hostname": receiver_hostname,
+        "queue": queue,
     }
     if kwargs.get("exception"):
         tags["error"] = repr(kwargs["exception"])
