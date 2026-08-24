@@ -516,12 +516,19 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                 continue
             domain_name = domain.get("name", "unknown")
             org_id = str(domain.get("organization", {}).get("id", "unknown"))
+            # DCV method (e.g. dns-cname-token, persistent-txt) — DigiCert is
+            # moving domains to persistent DNS validation; tag it so persistent
+            # domains can be distinguished in the expiry metric.
+            dcv_method = domain.get("dcv_method") or "unknown"
+            dcv_approval_method = domain.get("dcv_approval_method") or "unknown"
             for val_type, dcv_exp in dcv_exp_map.items():
                 results.append({
                     "domain": domain_name,
                     "dcv_expiration": dcv_exp,
                     "validation_type": val_type,
                     "org_id": org_id,
+                    "dcv_method": dcv_method,
+                    "dcv_approval_method": dcv_approval_method,
                 })
         return results
 
