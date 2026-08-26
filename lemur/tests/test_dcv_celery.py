@@ -32,6 +32,41 @@ def test_make_celery_registers_a_receiver_that_clears_app_logger_handlers():
     fake_app.logger.handlers.clear.assert_called_once()
 
 
+def test_make_celery_receiver_closes_app_logger_handlers_before_clearing():
+    fake_app = MagicMock()
+    handler = MagicMock()
+    fake_app.logger.handlers = [handler]
+    fake_app.config.get.return_value = False
+
+    with patch("lemur.common.celery.after_setup_logger") as mock_signal, patch(
+        "lemur.common.celery.after_setup_task_logger"
+    ):
+        _celery_module.make_celery(fake_app)
+
+    receiver = mock_signal.connect.call_args.args[0]
+    receiver(logger=MagicMock())
+
+    handler.close.assert_called_once()
+    assert fake_app.logger.handlers == []
+
+
+def test_make_celery_receiver_restores_app_logger_propagation():
+    fake_app = MagicMock()
+    fake_app.logger = MagicMock()
+    fake_app.logger.propagate = False
+    fake_app.config.get.return_value = False
+
+    with patch("lemur.common.celery.after_setup_logger") as mock_signal, patch(
+        "lemur.common.celery.after_setup_task_logger"
+    ):
+        _celery_module.make_celery(fake_app)
+
+    receiver = mock_signal.connect.call_args.args[0]
+    receiver(logger=MagicMock())
+
+    assert fake_app.logger.propagate is True
+
+
 def test_make_celery_receiver_applies_json_formatter_when_log_json_enabled():
     fake_app = MagicMock()
     fake_app.config.get.return_value = True

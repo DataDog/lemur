@@ -64,10 +64,12 @@ def make_celery(app):
     celery.conf.update(app.config)
 
     def _configure_worker_logging(logger, **kwargs):
-        # app.logger's handlers still propagate to root, so every
-        # current_app.logger call would otherwise be emitted twice: once
-        # bare/unformatted here, once cleanly through Celery's root handler.
+        # Web logging owns its handler and disables propagation. Celery owns
+        # the root handler, so route current_app.logger through that instead.
+        for handler in app.logger.handlers:
+            handler.close()
         app.logger.handlers.clear()
+        app.logger.propagate = True
 
         # Give Celery's own handlers the same JSON shape as the Flask app so
         # worker and web logs are ingested identically.
