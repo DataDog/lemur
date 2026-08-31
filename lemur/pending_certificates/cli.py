@@ -12,7 +12,6 @@ from flask import current_app
 from flask_script import Manager
 
 from lemur.authorities.service import get as get_authority
-from lemur.constants import ACME_ADDITIONAL_ATTEMPTS
 from lemur.notifications.messaging import send_pending_failure_notification
 from lemur.pending_certificates import service as pending_certificate_service
 from lemur.plugins.base import plugins
@@ -109,18 +108,11 @@ def fetch_all_acme():
             error_log["last_error"] = cert.get("last_error")
             error_log["cn"] = pending_cert.cn
 
-            if pending_cert.number_attempts > ACME_ADDITIONAL_ATTEMPTS:
-                error_log["message"] = "Marking pending certificate as resolved"
-                send_pending_failure_notification(
-                    pending_cert, notify_owner=pending_cert.notify
-                )
-                # Mark "resolved" as True
-                pending_certificate_service.update(cert.id, resolved=True)
-            else:
-                pending_certificate_service.increment_attempt(pending_cert)
-                pending_certificate_service.update(
-                    cert.get("pending_cert").id, status=str(cert.get("last_error"))
-                )
+            error_log["message"] = "Marking pending certificate as resolved"
+            send_pending_failure_notification(
+                pending_cert, notify_owner=pending_cert.notify
+            )
+            pending_certificate_service.update(cert.id, resolved=True)
             current_app.logger.error(error_log)
     log_data["message"] = "Complete"
     log_data["new"] = new
