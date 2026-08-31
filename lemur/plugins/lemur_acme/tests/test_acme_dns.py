@@ -3,6 +3,7 @@ from unittest.mock import patch, Mock
 
 import josepy as jose
 
+from acme import errors
 from acme.messages import STATUS_PENDING, STATUS_VALID
 from cryptography.x509 import DNSName
 from flask import Flask, current_app
@@ -209,6 +210,93 @@ class TestAcmeDns(unittest.TestCase):
         mock_crypto.dump_certificate = Mock(return_value=b"chain")
         mock_order = Mock()
         self.acme.request_certificate(mock_acme, [], mock_order)
+
+    def _make_order(self, fullchain_pem="fullchain"):
+        order = Mock()
+        order.uri = "https://acme.test/order/1"
+        order.fullchain_pem = fullchain_pem
+        order.alternative_fullchains_pem = []
+        order.authorizations = []
+        return order
+
+    @patch(
+        "lemur.plugins.lemur_acme.acme_handlers.AcmeDnsHandler.log_remaining_validation"
+    )
+    @patch(
+        "lemur.plugins.lemur_acme.acme_handlers.AcmeDnsHandler.extract_cert_and_chain"
+    )
+    def test_request_certificate_recovers_issued_cert_when_fullchain_missing(
+        self, mock_extract, mock_log
+    ):
+        """finalize_order returns an order with no fullchain after the CA
+        issued the cert — the issued cert must be recovered, not dropped."""
+        mock_extract.return_value = ("CERT", "CHAIN")
+        acme_client = Mock()
+        acme_client.net.account.uri = "https://acme.test/acct/1"
+        order = self._make_order(fullchain_pem=None)
+        acme_client.poll_authorizations.return_value = order
+        acme_client.finalize_order.return_value = order
+        recovered = self._make_order(fullchain_pem="fullchain")
+        acme_client.poll_finalization.return_value = recovered
+
+        cert, chain = self.acme.request_certificate(acme_client, [], order)
+
+        self.assertEqual(cert, "CERT")
+        self.assertEqual(chain, "CHAIN")
+        acme_client.poll_finalization.assert_called_once()
+        mock_extract.assert_called_once_with("fullchain", [])
+
+    @patch(
+        "lemur.plugins.lemur_acme.acme_handlers.AcmeDnsHandler.log_remaining_validation"
+    )
+    @patch(
+        "lemur.plugins.lemur_acme.acme_handlers.AcmeDnsHandler.extract_cert_and_chain"
+    )
+    def test_request_certificate_recovers_issued_cert_on_validation_error(
+        self, mock_extract, mock_log
+    ):
+        """finalize_order raises ValidationError after the CA issued the cert —
+        the issued cert must be recovered, not dropped."""
+        mock_extract.return_value = ("CERT", "CHAIN")
+        acme_client = Mock()
+        acme_client.net.account.uri = "https://acme.test/acct/1"
+        order = self._make_order(fullchain_pem=None)
+        acme_client.poll_authorizations.return_value = order
+        acme_client.finalize_order.side_effect = errors.ValidationError(
+            failed_authzrs=[]
+        )
+        recovered = self._make_order(fullchain_pem="fullchain")
+        acme_client.poll_finalization.return_value = recovered
+
+        cert, chain = self.acme.request_certificate(acme_client, [], order)
+
+        self.assertEqual(cert, "CERT")
+        self.assertEqual(chain, "CHAIN")
+        acme_client.poll_finalization.assert_called_once()
+
+    @patch(
+        "lemur.plugins.lemur_acme.acme_handlers.AcmeDnsHandler.log_remaining_validation"
+    )
+    @patch(
+        "lemur.plugins.lemur_acme.acme_handlers.AcmeDnsHandler.extract_cert_and_chain"
+    )
+    def test_request_certificate_raises_when_recovery_fails(
+        self, mock_extract, mock_log
+    ):
+        """If the issued cert cannot be recovered from the CA, raise so the
+        pending cert is retried rather than silently dropped."""
+        acme_client = Mock()
+        acme_client.net.account.uri = "https://acme.test/acct/1"
+        order = self._make_order(fullchain_pem=None)
+        acme_client.poll_authorizations.return_value = order
+        acme_client.finalize_order.return_value = order
+        # Recovery fails to produce a fullchain.
+        acme_client.poll_finalization.return_value = self._make_order(
+            fullchain_pem=None
+        )
+
+        with self.assertRaises(Exception):
+            self.acme.request_certificate(acme_client, [], order)
 
     def test_setup_acme_client_fail(self):
         mock_authority = Mock()
