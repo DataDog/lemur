@@ -16,13 +16,14 @@ import logmatic
 import errno
 import socket
 import stat
+import sys
 
 try:
     from importlib.metadata import entry_points
 except ImportError:
     from importlib_metadata import entry_points
 
-from logging import Formatter, StreamHandler
+from logging import FileHandler, Formatter, StreamHandler
 from logging.handlers import RotatingFileHandler
 
 from flask import Flask, current_app
@@ -235,15 +236,22 @@ def configure_logging(app):
     :param app:
     """
     logfile = app.config.get("LOG_FILE", "lemur.log")
-    # if the log file is a character special device file (ie. stdout/stderr),
-    # file rotation will not work and must be disabled.
-    disable_file_rotation = os.path.exists(logfile) and stat.S_ISCHR(
-        os.stat(logfile).st_mode
-    )
-    if disable_file_rotation:
-        handler = StreamHandler(open(logfile, "a"))
+    if logfile == "/dev/stdout":
+        handler = StreamHandler(sys.stdout)
+    elif logfile == "/dev/stderr":
+        handler = StreamHandler(sys.stderr)
     else:
-        handler = RotatingFileHandler(logfile, maxBytes=10000000, backupCount=100)
+        # If the log file is a character special device file, file rotation
+        # will not work and must be disabled.
+        disable_file_rotation = os.path.exists(logfile) and stat.S_ISCHR(
+            os.stat(logfile).st_mode
+        )
+        if disable_file_rotation:
+            handler = FileHandler(logfile)
+        else:
+            handler = RotatingFileHandler(
+                logfile, maxBytes=10000000, backupCount=100
+            )
 
     handler.setFormatter(
         Formatter(
@@ -254,13 +262,15 @@ def configure_logging(app):
     if app.config.get("LOG_JSON", False):
         handler.setFormatter(json_log_formatter())
 
-    handler.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
-    app.logger.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
-    app.logger.addHandler(handler)
+    log_level = app.config.get("LOG_LEVEL", "DEBUG")
+    handler.setLevel(log_level)
+    app.logger.setLevel(log_level)
 
-    stream_handler = StreamHandler()
-    stream_handler.setLevel(app.config.get("LOG_LEVEL", "DEBUG"))
-    app.logger.addHandler(stream_handler)
+    for existing_handler in app.logger.handlers:
+        existing_handler.close()
+    app.logger.handlers.clear()
+    app.logger.addHandler(handler)
+    app.logger.propagate = False
 
     if app.config.get("DEBUG_DUMP", False):
         activate_debug_dump()
