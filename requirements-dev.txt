@@ -193,8 +193,8 @@ coverage==7.13.5
     # via -r requirements-tests.txt
 cryptography==43.0.1
     # via
-    #   -r requirements-tests.txt
     #   -r requirements-dev.in
+    #   -r requirements-tests.txt
     #   acme
     #   azure-identity
     #   azure-keyvault-keys
@@ -209,6 +209,7 @@ cryptography==43.0.1
     #   pyspnego
     #   python-jose
     #   requests-ntlm
+    #   secretstorage
     #   sshpubkeys
     #   types-paramiko
     #   types-pyopenssl
@@ -385,8 +386,8 @@ iniconfig==2.3.0
     #   pytest
 invoke==2.2.1
     # via
-    #   -r requirements-tests.txt
     #   -r requirements-dev.in
+    #   -r requirements-tests.txt
     #   paramiko
 isodate==0.7.2
     # via
@@ -411,6 +412,10 @@ javaobj-py3==0.4.4
     # via
     #   -r requirements-tests.txt
     #   pyjks
+jeepney==0.9.0
+    # via
+    #   keyring
+    #   secretstorage
 jinja2==3.1.6
     # via
     #   -r requirements-tests.txt
@@ -740,7 +745,7 @@ python-json-logger==4.0.0
     # via
     #   -r requirements-tests.txt
     #   logmatic-python
-python-ldap==3.4.5
+python-ldap==3.4.7
     # via -r requirements-tests.txt
 pytokens==0.4.1
     # via
@@ -839,6 +844,8 @@ s3transfer==0.16.0
     # via
     #   -r requirements-tests.txt
     #   boto3
+secretstorage==3.5.0
+    # via keyring
 sentry-sdk==2.55.0
     # via -r requirements-tests.txt
 simplejson==3.20.2
