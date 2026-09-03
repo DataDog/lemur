@@ -90,9 +90,16 @@ def sync_endpoints(source):
         return new, updated, updated_by_hash
 
     for endpoint in endpoints:
+        # A single logical hostname can be served from many DCs (e.g. COA, where
+        # each DC is its own source/destination with a distinct hostname). Use the
+        # source's hostname as the endpoint ``name`` so each DC keeps its own
+        # Endpoint row instead of collapsing to one. See CLOUDR-1927.
+        hostname = get_plugin_option("hostname", source.options or [])
+        if hostname:
+            endpoint["name"] = hostname
         try:
-            exists = endpoint_service.get_by_dnsname_and_port(
-                endpoint["dnsname"], endpoint["port"]
+            exists = endpoint_service.get_by_dnsname_port_and_source(
+                endpoint["dnsname"], endpoint["port"], source
             )
         except OperationalError as e:
             # This is a workaround for handling sqlalchemy error "idle-in-transaction timeout", which is seen rarely
@@ -102,8 +109,8 @@ def sync_endpoints(source):
                 # all the update, insert operations are committed individually. So this should be harmless/no-op
                 database.rollback()
                 # retry one more time
-                exists = endpoint_service.get_by_dnsname_and_port(
-                    endpoint["dnsname"], endpoint["port"]
+                exists = endpoint_service.get_by_dnsname_port_and_source(
+                    endpoint["dnsname"], endpoint["port"], source
                 )
             else:
                 raise e
