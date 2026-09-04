@@ -192,7 +192,7 @@ configobj==5.0.9
     # via
     #   -r requirements-tests.txt
     #   certbot
-coverage==7.15.4
+coverage==7.16.0
     # via -r requirements-tests.txt
 cryptography==43.0.1
     # via
@@ -336,7 +336,7 @@ googleapis-common-protos==1.73.0
     #   google-api-core
     #   grpc-google-iam-v1
     #   grpcio-status
-graphql-core==3.2.11
+graphql-core==3.2.12
     # via -r requirements-tests.txt
 grpc-google-iam-v1==0.14.3
     # via
@@ -585,7 +585,7 @@ pem==23.1.0
     # via
     #   -r requirements-docs.in
     #   -r requirements-tests.txt
-platformdirs==4.11.3
+platformdirs==4.11.5
     # via
     #   -r requirements-tests.txt
     #   black
@@ -782,7 +782,7 @@ requests-oauthlib==2.0.0
     # via
     #   -r requirements-tests.txt
     #   msrest
-responses==0.26.2
+responses==0.26.3
     # via
     #   -r requirements-tests.txt
     #   moto
@@ -897,7 +897,7 @@ twofish==0.3.0
     # via
     #   -r requirements-tests.txt
     #   pyjks
-types-cffi==2.0.0.20260518
+types-cffi==2.1.0.20260827
     # via
     #   -r requirements-tests.txt
     #   types-pyopenssl
