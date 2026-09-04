@@ -170,7 +170,16 @@ def retrieve_user_memberships(user_api_url, user_membership_provider, access_tok
     return user, user_membership
 
 
-def create_user_roles(profile, assign_default_role=True):
+def user_has_default_role(user):
+    default_role = current_app.config.get("LEMUR_DEFAULT_ROLE")
+    return bool(
+        user
+        and default_role
+        and any(role.name == default_role for role in user.roles)
+    )
+
+
+def create_user_roles(profile, assign_default_role=False):
     """Creates new roles based on profile information.
 
     :param profile:
@@ -210,7 +219,7 @@ def create_user_roles(profile, assign_default_role=True):
 
     roles.append(role)
 
-    # assign the configured default role when requested
+    # retain the configured default role for existing members
     if assign_default_role and current_app.config.get("LEMUR_DEFAULT_ROLE"):
         default = role_service.get_by_name(current_app.config["LEMUR_DEFAULT_ROLE"])
         if not default:
@@ -491,7 +500,9 @@ class Ping(Resource):
             current_app.config.get("USER_MEMBERSHIP_PROVIDER"),
             access_token,
         )
-        roles = create_user_roles(profile)
+        roles = create_user_roles(
+            profile, assign_default_role=user_has_default_role(user)
+        )
         user = update_user(user, profile, roles)
 
         if not user or not user.active:
@@ -553,7 +564,9 @@ class OAuth2(Resource):
             return error_code
 
         user, profile = retrieve_user(user_api_url, access_token)
-        roles = create_user_roles(profile)
+        roles = create_user_roles(
+            profile, assign_default_role=user_has_default_role(user)
+        )
         user = update_user(user, profile, roles)
 
         if not user.active:
@@ -652,14 +665,9 @@ class Vault(Resource):
         profile = authenticator.authenticate(id_token)
 
         user = user_service.get_by_email(profile["email"])
-        default_role = current_app.config.get("LEMUR_DEFAULT_ROLE")
-        assign_default_role = bool(
-            user
-            and default_role
-            and any(role.name == default_role for role in user.roles)
+        roles = create_user_roles(
+            profile, assign_default_role=user_has_default_role(user)
         )
-
-        roles = create_user_roles(profile, assign_default_role=assign_default_role)
         user = update_user(user, profile, roles)
 
         if not user.active:
