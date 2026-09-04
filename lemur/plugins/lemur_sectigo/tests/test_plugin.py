@@ -131,6 +131,38 @@ class TestSectigoIssuerPlugin(TestCase):
                 assert (INTERMEDIATE_CERT_STR + ROOTCA_CERT_STR) == ca_bundle
                 assert 3000 == cert_id
 
+    def test_get_dcv_expiration_data(self):
+        with self.app_context:
+            plugin = SectigoIssuerPlugin()
+            with requests_mock.Mocker() as m:
+                m.get(
+                    "mock://cert-manager.com/api/dcv/v1/validation",
+                    json=[
+                        {
+                            "domain": "datad0g.com",
+                            "dcvStatus": "EXPIRED",
+                            "dcvMethod": "CNAME",
+                            "dcvOrderStatus": "NOT_INITIATED",
+                            "dcvOrderMethod": "CNAME",
+                            "expirationDate": "2025-12-10",
+                        },
+                        {
+                            "domain": "*.lemur-sandbox.datad0g.com",
+                            "dcvStatus": "EXPIRED",
+                            "dcvMethod": "CNAME",
+                            "dcvOrderStatus": "NOT_INITIATED",
+                            "dcvOrderMethod": "CNAME",
+                            "expirationDate": "2025-12-10",
+                        },
+                    ],
+                )
+                result = plugin.get_dcv_expiration_data()
+            self.assertEqual(len(result), 2)
+            self.assertEqual(result[0]["domain"], "datad0g.com")
+            self.assertEqual(result[0]["dcv_expiration"], "2025-12-10")
+            self.assertEqual(result[0]["dcv_method"], "CNAME")
+            self.assertEqual(result[0]["validation_type"], "dv")
+
     def test_determine_certificate_term(self):
         with self.app_context:
             assert 365 == _determine_certificate_term(
