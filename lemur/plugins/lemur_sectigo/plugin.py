@@ -2,7 +2,7 @@ import arrow
 import pem
 import requests
 
-from cert_manager import Client, Organization, PendingError, SSL
+from cert_manager import Client, Domain, Organization, PendingError, SSL
 from flask import current_app
 from lemur.common.utils import validate_conf
 from lemur.plugins.bases import IssuerPlugin
@@ -100,6 +100,47 @@ class SectigoIssuerPlugin(IssuerPlugin):
 
     def cancel_ordered_certificate(self, pending_cert, **kwargs):
         raise NotImplementedError
+
+    def get_dcv_expiration_data(self):
+        """
+        Query Sectigo /api/dcv/v1/validation for domain DCV status + expiration.
+
+        Returns entries shaped like the DigiCert plugin so the consolidated
+        _emit_dcv_expiration_metrics task emits lemur.dcv.days_until_expiration
+        gauges tagged with ca=sectigo-issuer (RDNA-1000).
+        """
+        url = f"{self.client.base_url}/dcv/v1/validation"
+        response = self.client.session.get(url)
+        response.raise_for_status()
+        domain = Domain(client=self.client)
+        # Map domain name -> id so we can fetch org_id from the domain detail.
+        try:
+            id_by_name = {d["name"]: d["id"] for d in domain.all()}
+        except Exception:
+            id_by_name = {}
+        results = []
+        for entry in response.json():
+            name = entry.get("domain", "unknown")
+            org_id = "unknown"
+            did = id_by_name.get(name)
+            if did:
+                try:
+                    detail = domain.get(did)
+                    delegations = detail.get("delegations") or []
+                    if delegations:
+                        org_id = str(delegations[0].get("orgId", "unknown"))
+                except Exception:
+                    pass
+            results.append(
+                {
+                    "domain": name,
+                    "dcv_expiration": entry.get("expirationDate"),
+                    "validation_type": "dv",
+                    "org_id": org_id,
+                    "dcv_method": entry.get("dcvMethod", "unknown"),
+                }
+            )
+        return results
 
 
 def _retry_if_certificate_pending(exception):
