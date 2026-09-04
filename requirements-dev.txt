@@ -242,7 +242,7 @@ faker==40.31.0
     #   factory-boy
 fakeredis==2.36.2
     # via -r requirements-tests.txt
-filelock==3.31.0
+filelock==3.32.0
     # via
     #   python-discovery
     #   virtualenv
@@ -581,7 +581,7 @@ pluggy==1.6.0
     # via
     #   -r requirements-tests.txt
     #   pytest
-pre-commit==4.6.0
+pre-commit==4.6.1
     # via -r requirements-dev.in
 prompt-toolkit==3.0.52
     # via
@@ -702,7 +702,7 @@ python-dateutil==2.9.0.post0
     #   celery
     #   freezegun
     #   moto
-python-discovery==1.4.4
+python-discovery==1.5.0
     # via virtualenv
 python-dotenv==1.2.2
     # via
@@ -950,7 +950,7 @@ vine==5.1.0
     #   amqp
     #   celery
     #   kombu
-virtualenv==21.6.1
+virtualenv==21.7.0
     # via pre-commit
 wcwidth==0.6.0
     # via
