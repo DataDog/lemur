@@ -101,6 +101,29 @@ class SectigoIssuerPlugin(IssuerPlugin):
     def cancel_ordered_certificate(self, pending_cert, **kwargs):
         raise NotImplementedError
 
+    def get_dcv_expiration_data(self):
+        """
+        Query Sectigo /api/dcv/v1/validation for domain DCV status + expiration.
+
+        Returns entries shaped like the DigiCert plugin so the consolidated
+        _emit_dcv_expiration_metrics task emits lemur.dcv.days_until_expiration
+        gauges tagged with ca=sectigo-issuer (RDNA-1000).
+        """
+        url = f"{self.client.base_url}/dcv/v1/validation"
+        response = self.client.session.get(url)
+        response.raise_for_status()
+        results = []
+        for entry in response.json():
+            results.append(
+                {
+                    "domain": entry.get("domain", "unknown"),
+                    "dcv_expiration": entry.get("expirationDate"),
+                    "validation_type": "dv",
+                    "dcv_method": entry.get("dcvMethod", "unknown"),
+                }
+            )
+        return results
+
 
 def _retry_if_certificate_pending(exception):
     return isinstance(exception, PendingError)
