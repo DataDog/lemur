@@ -177,7 +177,12 @@ def write_access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if request.method not in SAFE_HTTP_METHODS and not write_permission.can():
-            return dict(message="Operator role is required for write operations"), 403
+            return (
+                dict(
+                    message="Operator-level permissions or higher are required for write operations"
+                ),
+                403,
+            )
 
         return f(*args, **kwargs)
 

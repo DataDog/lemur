@@ -45,7 +45,9 @@ def test_authenticated_resource_rejects_read_only_write_methods(
     )
 
     assert status == 403
-    assert response == {"message": "Operator role is required for write operations"}
+    assert response == {
+        "message": "Operator-level permissions or higher are required for write operations"
+    }
 
 
 @pytest.mark.parametrize("role_name", ["operator", "admin"])
