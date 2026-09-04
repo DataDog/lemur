@@ -35,6 +35,7 @@ from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
 api = Api(mod)
+DEFAULT_ROLE_GROUPS = {"resource-management", "team-fabricgateways"}
 
 
 def exchange_for_access_token(
@@ -170,13 +171,16 @@ def retrieve_user_memberships(user_api_url, user_membership_provider, access_tok
     return user, user_membership
 
 
-def user_has_default_role(user):
+def should_assign_default_role(user, profile):
     default_role = current_app.config.get("LEMUR_DEFAULT_ROLE")
-    return bool(
+    user_has_default_role = bool(
         user
         and default_role
         and any(role.name == default_role for role in user.roles)
     )
+    profile_groups = set(profile.get("groups", []))
+    profile_groups.update(profile.get("googleGroups", []))
+    return user_has_default_role or bool(DEFAULT_ROLE_GROUPS & profile_groups)
 
 
 def create_user_roles(profile, assign_default_role=False):
@@ -219,7 +223,7 @@ def create_user_roles(profile, assign_default_role=False):
 
     roles.append(role)
 
-    # retain the configured default role for existing members
+    # assign the configured default role to eligible users
     if assign_default_role and current_app.config.get("LEMUR_DEFAULT_ROLE"):
         default = role_service.get_by_name(current_app.config["LEMUR_DEFAULT_ROLE"])
         if not default:
@@ -501,7 +505,7 @@ class Ping(Resource):
             access_token,
         )
         roles = create_user_roles(
-            profile, assign_default_role=user_has_default_role(user)
+            profile, assign_default_role=should_assign_default_role(user, profile)
         )
         user = update_user(user, profile, roles)
 
@@ -565,7 +569,7 @@ class OAuth2(Resource):
 
         user, profile = retrieve_user(user_api_url, access_token)
         roles = create_user_roles(
-            profile, assign_default_role=user_has_default_role(user)
+            profile, assign_default_role=should_assign_default_role(user, profile)
         )
         user = update_user(user, profile, roles)
 
@@ -666,7 +670,7 @@ class Vault(Resource):
 
         user = user_service.get_by_email(profile["email"])
         roles = create_user_roles(
-            profile, assign_default_role=user_has_default_role(user)
+            profile, assign_default_role=should_assign_default_role(user, profile)
         )
         user = update_user(user, profile, roles)
 

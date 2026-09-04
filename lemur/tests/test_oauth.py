@@ -85,18 +85,20 @@ def test_create_user_roles_can_control_default_role(
 
 
 @pytest.mark.parametrize(
-    "existing_roles,assign_default_role",
+    "existing_roles,groups,assign_default_role",
     [
-        (None, False),
-        ([], False),
-        (["operator"], True),
-        (["admin"], False),
+        (None, [], False),
+        ([], ["unrelated-team"], False),
+        (["operator"], [], True),
+        (["admin"], [], False),
+        (None, ["resource-management"], True),
+        (None, ["team-fabricgateways"], True),
     ],
 )
-def test_vault_uses_existing_lemur_roles_for_default_role(
-    app, existing_roles, assign_default_role
+def test_vault_assigns_default_role_from_existing_roles_or_groups(
+    app, existing_roles, groups, assign_default_role
 ):
-    profile = {"email": "user@datadoghq.com", "groups": []}
+    profile = {"email": "user@datadoghq.com", "groups": groups}
     user = None
     if existing_roles is not None:
         user = SimpleNamespace(
@@ -131,3 +133,10 @@ def test_vault_uses_existing_lemur_roles_for_default_role(
     create_roles.assert_called_once_with(
         profile, assign_default_role=assign_default_role
     )
+
+
+def test_default_role_groups_support_google_group_profiles(app):
+    profile = {"googleGroups": ["resource-management"]}
+
+    with patch.dict(app.config, {"LEMUR_DEFAULT_ROLE": "operator"}):
+        assert should_assign_default_role(None, profile)
