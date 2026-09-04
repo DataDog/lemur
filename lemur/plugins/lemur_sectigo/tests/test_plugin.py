@@ -156,13 +156,36 @@ class TestSectigoIssuerPlugin(TestCase):
                         },
                     ],
                 )
+                # Domain.all() -> id/name map
+                m.get(
+                    "mock://cert-manager.com/api/domain/v1",
+                    json=[
+                        {"id": 322987, "name": "datad0g.com"},
+                        {"id": 322993, "name": "*.lemur-sandbox.datad0g.com"},
+                    ],
+                )
+                # Domain.get() -> detail with org_id in delegations
+                m.get(
+                    "mock://cert-manager.com/api/domain/v1/322987",
+                    json={
+                        "name": "datad0g.com",
+                        "delegations": [{"orgId": 35917, "certTypes": ["SSL"]}],
+                    },
+                )
+                m.get(
+                    "mock://cert-manager.com/api/domain/v1/322993",
+                    json={
+                        "name": "*.lemur-sandbox.datad0g.com",
+                        "delegations": [{"orgId": 35917, "certTypes": ["SSL"]}],
+                    },
+                )
                 result = plugin.get_dcv_expiration_data()
             self.assertEqual(len(result), 2)
             self.assertEqual(result[0]["domain"], "datad0g.com")
             self.assertEqual(result[0]["dcv_expiration"], "2025-12-10")
             self.assertEqual(result[0]["dcv_method"], "CNAME")
             self.assertEqual(result[0]["validation_type"], "dv")
-            self.assertEqual(result[0]["org_id"], "unknown")
+            self.assertEqual(result[0]["org_id"], "35917")
 
     def test_determine_certificate_term(self):
         with self.app_context:
