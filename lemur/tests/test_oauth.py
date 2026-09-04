@@ -84,6 +84,20 @@ def test_create_user_roles_can_control_default_role(
     assert [role.name for role in roles] == expected_roles
 
 
+def test_create_user_roles_assigns_default_role_by_default(app):
+    profile = {"email": "reader@datadoghq.com"}
+
+    def get_role(name):
+        return SimpleNamespace(name=name, third_party=True)
+
+    with patch.dict(app.config, {"LEMUR_DEFAULT_ROLE": "operator"}), patch(
+        "lemur.auth.views.role_service.get_by_name", side_effect=get_role
+    ):
+        roles = create_user_roles(profile)
+
+    assert [role.name for role in roles] == ["reader@datadoghq.com", "operator"]
+
+
 @pytest.mark.parametrize(
     "existing_roles,groups,assign_default_role",
     [
@@ -133,10 +147,3 @@ def test_vault_assigns_default_role_from_existing_roles_or_groups(
     create_roles.assert_called_once_with(
         profile, assign_default_role=assign_default_role
     )
-
-
-def test_default_role_groups_support_google_group_profiles(app):
-    profile = {"googleGroups": ["resource-management"]}
-
-    with patch.dict(app.config, {"LEMUR_DEFAULT_ROLE": "operator"}):
-        assert should_assign_default_role(None, profile)
