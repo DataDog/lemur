@@ -1,5 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from freezegun import freeze_time
+import pytest
 
 from flask import current_app
 
@@ -53,3 +57,70 @@ def test_verify_state_token(client):
     current_app.config["OAUTH_STATE_TOKEN_SECRET"] = None
     token_via_runtime_key = generate_state_token()
     assert verify_state_token(token_via_runtime_key)
+
+
+@pytest.mark.parametrize(
+    "assign_default_role,expected_roles",
+    [
+        (False, ["reader@datadoghq.com"]),
+        (True, ["reader@datadoghq.com", "operator"]),
+    ],
+)
+def test_create_user_roles_can_control_default_role(
+    app, assign_default_role, expected_roles
+):
+    profile = {"email": "reader@datadoghq.com"}
+
+    def get_role(name):
+        return SimpleNamespace(name=name, third_party=True)
+
+    with patch.dict(app.config, {"LEMUR_DEFAULT_ROLE": "operator"}), patch(
+        "lemur.auth.views.role_service.get_by_name", side_effect=get_role
+    ):
+        roles = create_user_roles(
+            profile, assign_default_role=assign_default_role
+        )
+
+    assert [role.name for role in roles] == expected_roles
+
+
+@pytest.mark.parametrize(
+    "email,groups,assign_default_role",
+    [
+        ("reader@datadoghq.com", ["unrelated-team"], False),
+        ("operator@datadoghq.com", ["lemur-operators"], True),
+        ("service@datadoghq.com", [], True),
+    ],
+)
+def test_vault_assigns_default_role_only_to_authorized_users(
+    app, email, groups, assign_default_role
+):
+    profile = {"email": email, "groups": groups}
+    user = SimpleNamespace(id=1, active=True)
+    authenticator = SimpleNamespace(authenticate=lambda token: profile)
+    config = {
+        "VAULT_CLIENT_ID": "lemur",
+        "VAULT_ISSUER_URL": "https://vault.example.com",
+        "VAULT_AUTHORIZED_EMAILS": ["service@datadoghq.com"],
+        "VAULT_AUTHORIZED_GROUPS": ["lemur-operators"],
+    }
+
+    with patch.dict(app.config, config), app.test_request_context(
+        json={"id_token": "token"}
+    ), patch(
+        "lemur.auth.views.JWTAuthenticator.instance", return_value=authenticator
+    ), patch("lemur.auth.views.user_service.get_by_email", return_value=user), patch(
+        "lemur.auth.views.create_user_roles", return_value=[]
+    ) as create_roles, patch(
+        "lemur.auth.views.update_user", return_value=user
+    ), patch(
+        "lemur.auth.views.create_token", return_value="session-token"
+    ), patch(
+        "lemur.auth.views.identity_changed.send"
+    ):
+        response = Vault().post()
+
+    assert response == {"token": "session-token"}
+    create_roles.assert_called_once_with(
+        profile, assign_default_role=assign_default_role
+    )
