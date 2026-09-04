@@ -85,24 +85,31 @@ def test_create_user_roles_can_control_default_role(
 
 
 @pytest.mark.parametrize(
-    "email,groups,assign_default_role",
+    "existing_roles,assign_default_role",
     [
-        ("reader@datadoghq.com", ["unrelated-team"], False),
-        ("operator@datadoghq.com", ["lemur-operators"], True),
-        ("service@datadoghq.com", [], True),
+        (None, False),
+        ([], False),
+        (["operator"], True),
+        (["admin"], False),
     ],
 )
-def test_vault_assigns_default_role_only_to_authorized_users(
-    app, email, groups, assign_default_role
+def test_vault_uses_existing_lemur_roles_for_default_role(
+    app, existing_roles, assign_default_role
 ):
-    profile = {"email": email, "groups": groups}
-    user = SimpleNamespace(id=1, active=True)
+    profile = {"email": "user@datadoghq.com", "groups": []}
+    user = None
+    if existing_roles is not None:
+        user = SimpleNamespace(
+            id=1,
+            active=True,
+            roles=[SimpleNamespace(name=role) for role in existing_roles],
+        )
+    updated_user = SimpleNamespace(id=1, active=True)
     authenticator = SimpleNamespace(authenticate=lambda token: profile)
     config = {
         "VAULT_CLIENT_ID": "lemur",
         "VAULT_ISSUER_URL": "https://vault.example.com",
-        "VAULT_AUTHORIZED_EMAILS": ["service@datadoghq.com"],
-        "VAULT_AUTHORIZED_GROUPS": ["lemur-operators"],
+        "LEMUR_DEFAULT_ROLE": "operator",
     }
 
     with patch.dict(app.config, config), app.test_request_context(
@@ -112,7 +119,7 @@ def test_vault_assigns_default_role_only_to_authorized_users(
     ), patch("lemur.auth.views.user_service.get_by_email", return_value=user), patch(
         "lemur.auth.views.create_user_roles", return_value=[]
     ) as create_roles, patch(
-        "lemur.auth.views.update_user", return_value=user
+        "lemur.auth.views.update_user", return_value=updated_user
     ), patch(
         "lemur.auth.views.create_token", return_value="session-token"
     ), patch(

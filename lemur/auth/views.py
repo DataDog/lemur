@@ -651,14 +651,13 @@ class Vault(Resource):
         )
         profile = authenticator.authenticate(id_token)
 
-        # A valid Vault JWT grants read access. The allowlists grant the configured default role.
-        authorized_emails = current_app.config.get("VAULT_AUTHORIZED_EMAILS") or []
-        authorized_groups = current_app.config.get("VAULT_AUTHORIZED_GROUPS") or []
-        assign_default_role = profile["email"] in authorized_emails or any(
-            group in authorized_groups for group in profile.get("groups", [])
-        )
-
         user = user_service.get_by_email(profile["email"])
+        default_role = current_app.config.get("LEMUR_DEFAULT_ROLE")
+        assign_default_role = bool(
+            user
+            and default_role
+            and any(role.name == default_role for role in user.roles)
+        )
 
         roles = create_user_roles(profile, assign_default_role=assign_default_role)
         user = update_user(user, profile, roles)
