@@ -23,7 +23,7 @@ try:
 except ImportError:
     from importlib_metadata import entry_points
 
-from logging import FileHandler, Formatter, StreamHandler
+from logging import FileHandler, Formatter, StreamHandler, getLogger
 from logging.handlers import RotatingFileHandler
 
 from flask import Flask, current_app
@@ -265,11 +265,16 @@ def configure_logging(app):
     log_level = app.config.get("LOG_LEVEL", "DEBUG")
     handler.setLevel(log_level)
     app.logger.setLevel(log_level)
+    root_logger = getLogger()
+    root_logger.setLevel(log_level)
 
-    for existing_handler in app.logger.handlers:
+    existing_handlers = set(app.logger.handlers + root_logger.handlers)
+    for existing_handler in existing_handlers:
         existing_handler.close()
     app.logger.handlers.clear()
+    root_logger.handlers.clear()
     app.logger.addHandler(handler)
+    root_logger.addHandler(handler)
     app.logger.propagate = False
 
     if app.config.get("DEBUG_DUMP", False):

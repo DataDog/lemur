@@ -21,6 +21,53 @@ def test_configure_logging_is_idempotent_for_json_stdout():
     assert app.logger.propagate is False
 
 
+def test_configure_logging_formats_third_party_root_log_once_as_json(capsys):
+    import json
+    import logging
+
+    from flask import Flask
+
+    from lemur.factory import configure_logging
+
+    app = Flask("test_third_party_root_logging")
+    app.config.update(LOG_FILE="/dev/stdout", LOG_JSON=True, LOG_LEVEL="INFO")
+    root_logger = logging.getLogger()
+    third_party_logger = logging.getLogger("third_party.test")
+    original_root_handlers = root_logger.handlers[:]
+    original_root_level = root_logger.level
+    original_third_party_handlers = third_party_logger.handlers[:]
+    original_third_party_level = third_party_logger.level
+    original_third_party_propagate = third_party_logger.propagate
+
+    try:
+        root_logger.handlers.clear()
+        third_party_logger.handlers.clear()
+        third_party_logger.setLevel(logging.INFO)
+        third_party_logger.propagate = True
+
+        configure_logging(app)
+        configure_logging(app)
+        capsys.readouterr()
+
+        third_party_logger.info("third-party message")
+
+        output_lines = capsys.readouterr().out.strip().splitlines()
+        assert len(output_lines) == 1
+        record = json.loads(output_lines[0])
+        assert record["message"] == "third-party message"
+        assert record["levelname"] == "INFO"
+    finally:
+        configured_handlers = set(app.logger.handlers + root_logger.handlers)
+        for handler in configured_handlers:
+            handler.close()
+        app.logger.handlers.clear()
+        root_logger.handlers[:] = original_root_handlers
+        root_logger.setLevel(original_root_level)
+        third_party_logger.handlers[:] = original_third_party_handlers
+        third_party_logger.setLevel(original_third_party_level)
+        third_party_logger.propagate = original_third_party_propagate
+
+
 def test_configure_logging_closes_replaced_character_device_handler():
     from flask import Flask
     from logging import FileHandler
