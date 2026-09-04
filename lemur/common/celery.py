@@ -31,6 +31,7 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.dns_providers import cli as cli_dns_providers
+from lemur.domains.service import get_all as get_all_domains
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
 from lemur import fips
@@ -1197,6 +1198,24 @@ def certificate_expirations_metrics():
     return log_data
 
 
+def _dcv_domain_is_known(domain, known_domains):
+    """
+    Return True if domain is a known domain or a subdomain of one (suffix match).
+
+    DigiCert may list a subdomain (e.g. lemur-sandbox.datad0g.com) while the
+    domains table holds the apex/base domain (datad0g.com), so match either an
+    exact name or a ".<known>" suffix.
+    """
+    if not domain or domain == "unknown":
+        return False
+    if domain in known_domains:
+        return True
+    for known in known_domains:
+        if domain.endswith("." + known):
+            return True
+    return False
+
+
 def _emit_dcv_expiration_metrics():
     """
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
@@ -1208,6 +1227,12 @@ def _emit_dcv_expiration_metrics():
     total_domains = 0
     total_errors = 0
     now = datetime.now(timezone.utc)
+
+    # Scope DCV metrics to the domains Lemur is aware of (from the domains table).
+    # This keeps each deployment reporting only its own domains (e.g. staging
+    # reports staging domains, not prod), since each deployment's DB holds its
+    # own domains.
+    known_domains = {d.name for d in get_all_domains()}
 
     for plugin in plugins.all(plugin_type="issuer"):
         ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
@@ -1225,6 +1250,9 @@ def _emit_dcv_expiration_metrics():
 
         for entry in dcv_data:
             try:
+                domain = entry.get("domain", "unknown")
+                if not _dcv_domain_is_known(domain, known_domains):
+                    continue
                 dcv_expiration = entry.get("dcv_expiration")
                 if not dcv_expiration:
                     continue
@@ -1239,7 +1267,7 @@ def _emit_dcv_expiration_metrics():
                     "gauge",
                     days_remaining,
                     metric_tags={
-                        "domain": entry.get("domain", "unknown"),
+                        "domain": domain,
                         "ca": ca_name,
                         "validation_type": entry.get("validation_type", "unknown"),
                         "org_id": entry.get("org_id", "unknown"),
