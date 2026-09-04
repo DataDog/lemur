@@ -320,5 +320,3 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "lemur-sandbox.datad0g.com"
-
-
