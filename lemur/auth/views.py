@@ -651,16 +651,16 @@ class Vault(Resource):
         )
         profile = authenticator.authenticate(id_token)
 
-        # A valid Vault JWT grants read access. The allowlists grant operator access.
+        # A valid Vault JWT grants read access. The allowlists grant the configured default role.
         authorized_emails = current_app.config.get("VAULT_AUTHORIZED_EMAILS") or []
         authorized_groups = current_app.config.get("VAULT_AUTHORIZED_GROUPS") or []
-        user_is_operator = profile["email"] in authorized_emails or any(
+        assign_default_role = profile["email"] in authorized_emails or any(
             group in authorized_groups for group in profile.get("groups", [])
         )
 
         user = user_service.get_by_email(profile["email"])
 
-        roles = create_user_roles(profile, assign_default_role=user_is_operator)
+        roles = create_user_roles(profile, assign_default_role=assign_default_role)
         user = update_user(user, profile, roles)
 
         if not user.active:
