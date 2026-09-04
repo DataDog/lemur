@@ -210,7 +210,7 @@ def create_user_roles(profile, assign_default_role=True):
 
     roles.append(role)
 
-    # every user is an operator (tied to a default role)
+    # assign the configured default role when requested
     if assign_default_role and current_app.config.get("LEMUR_DEFAULT_ROLE"):
         default = role_service.get_by_name(current_app.config["LEMUR_DEFAULT_ROLE"])
         if not default:
