@@ -47,7 +47,7 @@ def test_domain_post_(client, token, status):
 @pytest.mark.parametrize(
     "token,status",
     [
-        (VALID_USER_HEADER_TOKEN, 400),
+        (VALID_USER_HEADER_TOKEN, 403),
         (VALID_ADMIN_HEADER_TOKEN, 400),
         (VALID_ADMIN_API_TOKEN, 400),
         ("", 401),
@@ -99,7 +99,7 @@ def test_domain_patch(client, token, status):
 @pytest.mark.parametrize(
     "token,status",
     [
-        (VALID_USER_HEADER_TOKEN, 400),
+        (VALID_USER_HEADER_TOKEN, 403),
         (VALID_ADMIN_HEADER_TOKEN, 400),
         (VALID_ADMIN_API_TOKEN, 400),
         ("", 401),

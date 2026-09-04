@@ -79,7 +79,7 @@ def test_role_post_(client, token, status):
 @pytest.mark.parametrize(
     "token,status",
     [
-        (VALID_USER_HEADER_TOKEN, 400),
+        (VALID_USER_HEADER_TOKEN, 403),
         (VALID_ADMIN_HEADER_TOKEN, 400),
         (VALID_ADMIN_API_TOKEN, 400),
         ("", 401),
@@ -119,7 +119,7 @@ def test_role_put_with_data(client, session, token, status):
 def test_role_put_with_data_and_user(client, session):
     from lemur.auth.service import create_token
 
-    user = UserFactory()
+    user = UserFactory(roles=[RoleFactory(name="operator")])
     role = RoleFactory(users=[user])
     role1 = RoleFactory()
     user1 = UserFactory()

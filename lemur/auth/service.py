@@ -29,7 +29,10 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from lemur.users import service as user_service
 from lemur.api_keys import service as api_key_service
-from lemur.auth.permissions import AuthorityCreatorNeed, RoleMemberNeed
+from lemur.auth.permissions import AuthorityCreatorNeed, RoleMemberNeed, write_permission
+
+
+SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def get_rsa_public_key(n, e):
@@ -168,6 +171,19 @@ def login_required(f):
     return decorated_function
 
 
+def write_access_required(f):
+    """Require the operator or admin role for state-changing requests."""
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if request.method not in SAFE_HTTP_METHODS and not write_permission.can():
+            return dict(message="Operator role is required for write operations"), 403
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 def fetch_token_header(token):
     """
     Fetch the header out of the JWT token.
@@ -225,7 +241,10 @@ class AuthenticatedResource(Resource):
     Inherited by all resources that need to be protected by authentication.
     """
 
-    method_decorators = [login_required]
+    # Flask-RESTful applies decorators in list order, making the last one the
+    # outermost wrapper. Authentication must establish the principal before
+    # the write permission is evaluated.
+    method_decorators = [write_access_required, login_required]
 
     def __init__(self):
         super(AuthenticatedResource, self).__init__()
