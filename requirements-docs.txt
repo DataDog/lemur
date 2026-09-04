@@ -34,7 +34,7 @@ arrow==1.4.0
     # via
     #   -r requirements-docs.in
     #   -r requirements-tests.txt
-ast-serialize==0.6.0
+ast-serialize==0.8.0
     # via
     #   -r requirements-tests.txt
     #   mypy
@@ -48,10 +48,6 @@ attrs==26.1.0
     #   jsonschema
     #   jsonschema-path
     #   referencing
-aws-sam-translator==1.109.0
-    # via
-    #   -r requirements-tests.txt
-    #   cfn-lint
 aws-xray-sdk==2.15.0
     # via -r requirements-tests.txt
 azure-common==1.1.28
@@ -121,7 +117,6 @@ boto3==1.42.73
     # via
     #   -r requirements-docs.in
     #   -r requirements-tests.txt
-    #   aws-sam-translator
     #   moto
 botocore==1.42.73
     # via
@@ -158,7 +153,7 @@ cffi==2.0.0
     #   -r requirements-tests.txt
     #   cryptography
     #   pynacl
-cfn-lint==1.51.0
+cfn-lint==1.54.0
     # via -r requirements-tests.txt
 charset-normalizer==3.4.6
     # via
@@ -197,7 +192,7 @@ configobj==5.0.9
     # via
     #   -r requirements-tests.txt
     #   certbot
-coverage==7.15.3
+coverage==7.15.4
     # via -r requirements-tests.txt
 cryptography==43.0.1
     # via
@@ -450,7 +445,6 @@ jsonpointer==3.1.1
 jsonschema==4.26.0
     # via
     #   -r requirements-tests.txt
-    #   aws-sam-translator
     #   openapi-schema-validator
     #   openapi-spec-validator
 jsonschema-path==0.5.0
@@ -470,7 +464,7 @@ lazy-object-proxy==1.12.0
     # via
     #   -r requirements-tests.txt
     #   openapi-spec-validator
-librt==0.13.0
+librt==0.15.0
     # via
     #   -r requirements-tests.txt
     #   mypy
@@ -591,7 +585,7 @@ pem==23.1.0
     # via
     #   -r requirements-docs.in
     #   -r requirements-tests.txt
-platformdirs==4.11.0
+platformdirs==4.11.1
     # via
     #   -r requirements-tests.txt
     #   black
@@ -649,7 +643,6 @@ pycryptodomex==3.23.0
 pydantic==2.12.5
     # via
     #   -r requirements-tests.txt
-    #   aws-sam-translator
     #   cloudflare
     #   openapi-schema-validator
     #   openapi-spec-validator
@@ -658,7 +651,7 @@ pydantic-core==2.41.5
     # via
     #   -r requirements-tests.txt
     #   pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via
     #   -r requirements-tests.txt
     #   openapi-schema-validator
@@ -824,7 +817,7 @@ sentry-sdk==2.55.0
     # via
     #   -r requirements-docs.in
     #   -r requirements-tests.txt
-setuptools==83.0.0
+setuptools==84.0.0
     # via -r requirements-tests.txt
 simplejson==3.20.2
     # via -r requirements-tests.txt
@@ -926,7 +919,7 @@ types-redis==4.6.0.20241004
     # via -r requirements-tests.txt
 types-requests==2.33.0.20260712
     # via -r requirements-tests.txt
-types-setuptools==83.0.0.20260724
+types-setuptools==83.0.0.20260807
     # via
     #   -r requirements-tests.txt
     #   types-cffi
@@ -938,7 +931,6 @@ typing-extensions==4.15.0
     # via
     #   -r requirements-tests.txt
     #   alembic
-    #   aws-sam-translator
     #   azure-core
     #   azure-identity
     #   azure-keyvault-certificates
