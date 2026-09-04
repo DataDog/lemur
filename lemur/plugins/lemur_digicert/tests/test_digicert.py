@@ -335,7 +335,6 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
         "DIGICERT_ORG_ID": 111111,
         "DIGICERT_ORDER_TYPE": "ssl_plus",
         "DIGICERT_ROOT": "ROOT",
-        "DIGICERT_DCV_CHECK_ENABLED": True,
     }
 
     subject = DigiCertIssuerPlugin()
@@ -379,21 +378,3 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
     assert by_type["ov"]["dcv_expiration"] == "2026-09-01T00:00:00+00:00"
     assert by_type["ov"]["org_id"] == "42"
     assert by_type["ev"]["dcv_expiration"] == "2026-08-01T00:00:00+00:00"
-
-
-@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
-def test_get_dcv_expiration_data_disabled(mock_current_app):
-    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
-
-    mock_current_app.config = {
-        "DIGICERT_API_KEY": "api-key",
-        "DIGICERT_URL": "mock://www.digicert.com",
-        "DIGICERT_ORG_ID": 111111,
-        "DIGICERT_ORDER_TYPE": "ssl_plus",
-        "DIGICERT_ROOT": "ROOT",
-        "DIGICERT_DCV_CHECK_ENABLED": False,
-    }
-
-    subject = DigiCertIssuerPlugin()
-    result = subject.get_dcv_expiration_data()
-    assert result == []

@@ -162,6 +162,7 @@ class TestSectigoIssuerPlugin(TestCase):
             self.assertEqual(result[0]["dcv_expiration"], "2025-12-10")
             self.assertEqual(result[0]["dcv_method"], "CNAME")
             self.assertEqual(result[0]["validation_type"], "dv")
+            self.assertEqual(result[0]["org_id"], "unknown")
 
     def test_determine_certificate_term(self):
         with self.app_context:

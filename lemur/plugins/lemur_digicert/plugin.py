@@ -499,9 +499,6 @@ class DigiCertIssuerPlugin(IssuerPlugin):
 
     def get_dcv_expiration_data(self):
         """Queries DigiCert /v2/domain for all active domains and their DCV expiration dates."""
-        if not current_app.config.get("DIGICERT_DCV_CHECK_ENABLED", True):
-            return []
-
         base_url = current_app.config.get("DIGICERT_URL")
         if not base_url:
             raise ValueError("DIGICERT_URL is not configured; cannot perform DCV expiration check")
@@ -520,7 +517,6 @@ class DigiCertIssuerPlugin(IssuerPlugin):
             # moving domains to persistent DNS validation; tag it so persistent
             # domains can be distinguished in the expiry metric.
             dcv_method = domain.get("dcv_method") or "unknown"
-            dcv_approval_method = domain.get("dcv_approval_method") or "unknown"
             for val_type, dcv_exp in dcv_exp_map.items():
                 results.append({
                     "domain": domain_name,
@@ -528,7 +524,6 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                     "validation_type": val_type,
                     "org_id": org_id,
                     "dcv_method": dcv_method,
-                    "dcv_approval_method": dcv_approval_method,
                 })
         return results
 
