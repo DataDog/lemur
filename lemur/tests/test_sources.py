@@ -178,6 +178,117 @@ def test_sync_endpoints(session):
     assert ep4.sni_certificates[0].name == crt3.name
 
 
+def test_sync_endpoints_differentiates_by_hostname(session):
+    """CLOUDR-1927: a single (dnsname, port) served from multiple sources (DCs)
+    with distinct hostnames must produce one Endpoint row per hostname, not
+    collapse to a single row."""
+    from unittest import mock
+    from lemur.endpoints.models import Endpoint
+    from lemur.sources import service as source_service
+    from lemur.tests.factories import SourceFactory, CertificateFactory
+    from lemur.plugins.lemur_aws.plugin import AWSSourcePlugin
+
+    crt = CertificateFactory()
+
+    source_us1 = SourceFactory()
+    source_us1.plugin_name = "aws-source"
+    source_us1.options = [{"name": "hostname", "value": "adapter.us1.fabric.dog"}]
+    source_us5 = SourceFactory()
+    source_us5.plugin_name = "aws-source"
+    source_us5.options = [{"name": "hostname", "value": "adapter.us5.fabric.dog"}]
+
+    def endpoint_payload():
+        return [
+            dict(
+                name="ignored",  # overridden by the source hostname
+                dnsname="*.logs.mrf.datadoghq.com",
+                type="vault-managed",
+                port=443,
+                policy=dict(name="none", ciphers=[]),
+                primary_certificate=dict(
+                    name=crt.name,
+                    path="/kv/data/certs",
+                    registry_type="vault",
+                ),
+                sni_certificates=[],
+                registry_type="vault",
+            )
+        ]
+
+    with mock.patch.object(
+        AWSSourcePlugin, "get_endpoints", side_effect=lambda options: endpoint_payload()
+    ):
+        source_service.sync_endpoints(source_us1)
+        source_service.sync_endpoints(source_us5)
+
+    rows = Endpoint.query.filter(
+        Endpoint.dnsname == "*.logs.mrf.datadoghq.com"
+    ).all()
+    assert len(rows) == 2
+    assert {r.name for r in rows} == {
+        "adapter.us1.fabric.dog",
+        "adapter.us5.fabric.dog",
+    }
+
+
+def test_sync_endpoints_updates_existing_name_not_duplicates(session):
+    """CLOUDR-1927: an existing endpoint for the same source is matched on its
+    source_id and its name is updated to the source hostname, rather than a
+    duplicate row being appended."""
+    from unittest import mock
+    from lemur.endpoints.models import Endpoint
+    from lemur.sources import service as source_service
+    from lemur.tests.factories import (
+        SourceFactory,
+        CertificateFactory,
+        EndpointFactory,
+    )
+    from lemur.plugins.lemur_aws.plugin import AWSSourcePlugin
+
+    crt = CertificateFactory()
+    source = SourceFactory()
+    source.plugin_name = "aws-source"
+    source.options = [{"name": "hostname", "value": "adapter.us1.fabric.dog"}]
+
+    # Pre-existing endpoint for this source carrying the old (vault-path) name.
+    existing = EndpointFactory(
+        name="/kv/data/certs/old",
+        dnsname="*.unique2.datadoghq.com",
+        port=443,
+    )
+    existing.source = source
+    session.commit()
+
+    def endpoint_payload():
+        return [
+            dict(
+                name="ignored",
+                dnsname="*.unique2.datadoghq.com",
+                type="vault-managed",
+                port=443,
+                policy=dict(name="none", ciphers=[]),
+                primary_certificate=dict(
+                    name=crt.name,
+                    path="/kv/data/certs",
+                    registry_type="vault",
+                ),
+                sni_certificates=[],
+                registry_type="vault",
+            )
+        ]
+
+    with mock.patch.object(
+        AWSSourcePlugin, "get_endpoints", side_effect=lambda options: endpoint_payload()
+    ):
+        source_service.sync_endpoints(source)
+
+    rows = Endpoint.query.filter(
+        Endpoint.dnsname == "*.unique2.datadoghq.com"
+    ).all()
+    assert len(rows) == 1  # updated in place, not duplicated
+    assert rows[0].name == "adapter.us1.fabric.dog"
+
+
 @pytest.mark.parametrize(
     "token,status",
     [
