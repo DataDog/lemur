@@ -119,6 +119,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     "domain": entry.get("domain", "unknown"),
                     "dcv_expiration": entry.get("expirationDate"),
                     "validation_type": "dv",
+                    "org_id": "unknown",
                     "dcv_method": entry.get("dcvMethod", "unknown"),
                 }
             )
