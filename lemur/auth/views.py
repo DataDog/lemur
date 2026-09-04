@@ -35,6 +35,7 @@ from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
 api = Api(mod)
+VAULT_OPERATOR_GROUPS = {"resource-management", "team-fabricgateways"}
 
 
 def exchange_for_access_token(
@@ -170,10 +171,22 @@ def retrieve_user_memberships(user_api_url, user_membership_provider, access_tok
     return user, user_membership
 
 
-def create_user_roles(profile):
+def should_assign_vault_default_role(user, profile):
+    default_role = current_app.config.get("LEMUR_DEFAULT_ROLE")
+    user_has_default_role = bool(
+        user
+        and default_role
+        and any(role.name == default_role for role in user.roles)
+    )
+    profile_groups = set(profile.get("groups", []))
+    return user_has_default_role or bool(VAULT_OPERATOR_GROUPS & profile_groups)
+
+
+def create_user_roles(profile, assign_default_role=True):
     """Creates new roles based on profile information.
 
     :param profile:
+    :param assign_default_role:
     :return:
     """
     roles = []
@@ -209,8 +222,8 @@ def create_user_roles(profile):
 
     roles.append(role)
 
-    # every user is an operator (tied to a default role)
-    if current_app.config.get("LEMUR_DEFAULT_ROLE"):
+    # assign the configured default role unless the authentication flow opts out
+    if assign_default_role and current_app.config.get("LEMUR_DEFAULT_ROLE"):
         default = role_service.get_by_name(current_app.config["LEMUR_DEFAULT_ROLE"])
         if not default:
             default = role_service.create(
@@ -650,21 +663,11 @@ class Vault(Resource):
         )
         profile = authenticator.authenticate(id_token)
 
-        user_has_authorized_email = profile["email"] in current_app.config.get(
-            "VAULT_AUTHORIZED_EMAILS"
-        )
-        user_in_authorized_group = False
-        for group in current_app.config.get("VAULT_AUTHORIZED_GROUPS"):
-            if group in profile["groups"]:
-                user_in_authorized_group = True
-                break
-
-        if not user_has_authorized_email and not user_in_authorized_group:
-            return dict(message="The supplied credentials are invalid"), 403
-
         user = user_service.get_by_email(profile["email"])
-
-        roles = create_user_roles(profile)
+        roles = create_user_roles(
+            profile,
+            assign_default_role=should_assign_vault_default_role(user, profile),
+        )
         user = update_user(user, profile, roles)
 
         if not user.active:
