@@ -1188,10 +1188,10 @@ def test_upload_private_key_str(user):
         ("", 401),
     ],
 )
-def test_certificate_get_private_key(client, token, status):
+def test_certificate_get_private_key(client, token, status, issuer_plugin, certificate):
     assert (
         client.get(
-            api.url_for(Certificates, certificate_id=1), headers=token
+            api.url_for(Certificates, certificate_id=certificate.id), headers=token
         ).status_code
         == status
     )
@@ -1206,37 +1206,22 @@ def test_certificate_get_private_key(client, token, status):
         ("", 401),
     ],
 )
-def test_certificate_get(client, token, status):
+def test_certificate_get(client, token, status, issuer_plugin, certificate):
     assert (
         client.get(
-            api.url_for(Certificates, certificate_id=1), headers=token
+            api.url_for(Certificates, certificate_id=certificate.id), headers=token
         ).status_code
         == status
     )
 
 
-def test_certificate_get_body(client):
+def test_certificate_get_body(client, issuer_plugin, certificate):
     response_body = client.get(
-        api.url_for(Certificates, certificate_id=1), headers=VALID_USER_HEADER_TOKEN
+        api.url_for(Certificates, certificate_id=certificate.id), headers=VALID_USER_HEADER_TOKEN
     ).json
-    assert response_body["serial"] == "211983098819107449768450703123665283596"
-    assert response_body["serialHex"] == "9F7A75B39DAE4C3F9524C68B06DA6A0C"
-    assert response_body["distinguishedName"] == (
-        "L=Earth,"
-        "ST=N/A,"
-        "C=EE,"
-        "OU=Unittesting Operations Center,"
-        "O=LemurTrust Enterprises Ltd,"
-        "CN=LemurTrust Unittests Class 1 CA 2018"
-    )
-
-    # No authority details are provided in this test, no information about being cab_compliant is available.
-    # Thus original subject details should be returned.
-    assert response_body["country"] == "EE"
-    assert response_body["state"] == "N/A"
-    assert response_body["location"] == "Earth"
-    assert response_body["organization"] == "LemurTrust Enterprises Ltd"
-    assert response_body["organizationalUnit"] == "Unittesting Operations Center"
+    assert response_body["serial"] == str(certificate.serial)
+    assert response_body["serialHex"] == hex(int(certificate.serial))[2:].upper()
+    assert response_body["distinguishedName"] == certificate.parsed_cert.subject.rfc4514_string()
 
 
 @pytest.mark.parametrize(
@@ -1366,10 +1351,10 @@ def test_certificate_put_with_data(client, certificate, issuer_plugin):
         ("", 401),
     ],
 )
-def test_certificate_delete(client, token, status):
+def test_certificate_delete(client, token, status, issuer_plugin, certificate):
     assert (
         client.delete(
-            api.url_for(Certificates, certificate_id=1), headers=token
+            api.url_for(Certificates, certificate_id=certificate.id), headers=token
         ).status_code
         == status
     )
