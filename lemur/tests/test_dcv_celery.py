@@ -316,6 +316,19 @@ def test_check_dcv_expiration_deprecated_alias_delegates(mock_dcv_helper):
     mock_dcv_helper.assert_called_once()
 
 
+def test_squash_known_domains_prunes_subdomains():
+    from lemur.common.celery import _squash_known_domains
+
+    # Subdomains covered by an apex are pruned; distinct apexes are kept.
+    pruned = _squash_known_domains(
+        ["datad0g.com", "lemur-sandbox.datad0g.com", "us1.staging.dog", "datadoghq.com"]
+    )
+    assert pruned == {"datad0g.com", "us1.staging.dog", "datadoghq.com"}
+
+    # Empty / None entries are dropped.
+    assert _squash_known_domains(["", None, "a.com"]) == {"a.com"}
+
+
 def test_dcv_domain_is_known_suffix_match():
     from lemur.common.celery import _dcv_domain_is_known
 

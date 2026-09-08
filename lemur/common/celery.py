@@ -1246,20 +1246,39 @@ def certificate_expirations_metrics():
     return log_data
 
 
+def _squash_known_domains(domains):
+    """
+    Prune + squash the known-domain set to minimal apex domains.
+
+    Returns a set of apex domains with subdomains removed: any known domain that
+    is itself a subdomain of another known domain is redundant (the apex suffix
+    match already covers it), so it's pruned.
+    """
+    known = set()
+    for d in domains:
+        if not d:
+            continue
+        known.add(d.lower().lstrip("*.").rstrip("."))
+    pruned = set()
+    for d in known:
+        if not any(d != other and d.endswith("." + other) for other in known):
+            pruned.add(d)
+    return pruned
+
+
 def _dcv_domain_is_known(domain, known_domains):
     """
     Return True if domain is a known domain or a subdomain of one (suffix match).
 
-    DigiCert may list a subdomain (e.g. lemur-sandbox.datad0g.com) while the
-    domains table holds the apex/base domain (datad0g.com), so match either an
-    exact name or a ".<known>" suffix.
+    CA's may list a subdomain (e.g. lemur-sandbox.datad0g.com) while the
+    domains table holds the apex/base domain (datad0g.com), so normalize before matching.
     """
     if not domain or domain == "unknown":
         return False
-    if domain in known_domains:
-        return True
-    for known in known_domains:
-        if domain.endswith("." + known):
+    domain = domain.lower().rstrip(".")
+    parts = domain.split(".")
+    for i in range(len(parts)):
+        if ".".join(parts[i:]) in known_domains:
             return True
     return False
 
@@ -1280,7 +1299,7 @@ def _emit_dcv_expiration_metrics():
     # This keeps each deployment reporting only its own domains (e.g. staging
     # reports staging domains, not prod), since each deployment's DB holds its
     # own domains.
-    known_domains = {d.name for d in get_all_domains()}
+    known_domains = _squash_known_domains(d.name for d in get_all_domains())
 
     for plugin in plugins.all(plugin_type="issuer"):
         ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
@@ -1296,39 +1315,17 @@ def _emit_dcv_expiration_metrics():
             )
             capture_exception()
             metrics.send(
-                "dcv.expiration_check.plugin.errors", "count", 1, metric_tags={"ca": ca_name}
+                "dcv.expiration_check.plugin.errors", "counter", 1, metric_tags={"ca": ca_name}
             )
             continue
 
+        ca_domains = 0
         for entry in dcv_data:
             domain = entry.get("domain", "unknown")
             if not _dcv_domain_is_known(domain, known_domains):
                 continue
             dcv_expiration = entry.get("dcv_expiration")
             if not dcv_expiration:
-                # Expected condition (e.g. a CA returned the domain without DCV
-                # data) — handle it explicitly rather than routing through the
-                # exception handler, so it isn't mistaken for a real bug.
-                current_app.logger.warning(
-                    f"_emit_dcv_expiration_metrics: missing dcv_expiration for {domain} from {ca_name}"
-                )
-                metrics.send(
-                    "dcv.expiration_check.domain.missing_dcv",
-                    "gauge",
-                    1,
-                    metric_tags={"ca": ca_name, "domain": domain},
-                )
-                total_errors += 1
-                continue
-            try:
-                expiry_dt = datetime.fromisoformat(
-                    dcv_expiration.replace("Z", "+00:00")
-                )
-                if expiry_dt.tzinfo is None:
-                    expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
-                days_remaining = (expiry_dt - now).days
-            except (ValueError, TypeError) as e:
-                # Unexpected data-shape error (not a normal missing-DCV case).
                 current_app.logger.warning(
                     f"_emit_dcv_expiration_metrics: failed on entry for ca={ca_name}: {e}",
                     exc_info=True,
@@ -1336,12 +1333,18 @@ def _emit_dcv_expiration_metrics():
                 capture_exception()
                 metrics.send(
                     "dcv.expiration_check.domain.errors",
-                    "gauge",
+                    "counter",
                     1,
                     metric_tags={"ca": ca_name, "domain": domain},
                 )
                 total_errors += 1
                 continue
+            expiry_dt = datetime.fromisoformat(
+                dcv_expiration.replace("Z", "+00:00")
+            )
+            if expiry_dt.tzinfo is None:
+                expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+            days_remaining = (expiry_dt - now).days
             metrics.send(
                 "dcv.days_until_expiration",
                 "gauge",
@@ -1354,9 +1357,10 @@ def _emit_dcv_expiration_metrics():
                     "dcv_method": entry.get("dcv_method", "unknown"),
                 },
             )
-            total_domains += 1
+            ca_domains += 1
+        metrics.send("dcv.expiration_check.domains_checked", "gauge", ca_domains, metric_tags={"ca": ca_name})
+        total_domains += ca_domains
 
-    metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
     current_app.logger.info(
         f"_emit_dcv_expiration_metrics: done. domains={total_domains}, errors={total_errors}"
     )
