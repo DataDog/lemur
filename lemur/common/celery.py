@@ -1286,6 +1286,8 @@ def _emit_dcv_expiration_metrics():
         ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
         try:
             dcv_data = plugin.get_dcv_expiration_data()
+            if not dcv_data:
+                raise ValueError(f"{ca_name} returned no DCV data")
         except SoftTimeLimitExceeded:
             raise
         except Exception as e:
@@ -1293,47 +1295,66 @@ def _emit_dcv_expiration_metrics():
                 f"_emit_dcv_expiration_metrics: {ca_name} raised {e}", exc_info=True
             )
             capture_exception()
-            metrics.send("dcv.expiration_check.plugin.errors", "count", 1, metric_tags={"ca": ca_name,})
+            metrics.send(
+                "dcv.expiration_check.plugin.errors", "count", 1, metric_tags={"ca": ca_name}
+            )
+            continue
 
         for entry in dcv_data:
+            domain = entry.get("domain", "unknown")
+            if not _dcv_domain_is_known(domain, known_domains):
+                continue
+            dcv_expiration = entry.get("dcv_expiration")
+            if not dcv_expiration:
+                # Expected condition (e.g. a CA returned the domain without DCV
+                # data) — handle it explicitly rather than routing through the
+                # exception handler, so it isn't mistaken for a real bug.
+                current_app.logger.warning(
+                    f"_emit_dcv_expiration_metrics: missing dcv_expiration for {domain} from {ca_name}"
+                )
+                metrics.send(
+                    "dcv.expiration_check.domain.missing_dcv",
+                    "gauge",
+                    1,
+                    metric_tags={"ca": ca_name, "domain": domain},
+                )
+                total_errors += 1
+                continue
             try:
-                domain = entry.get("domain", "unknown")
-                if not _dcv_domain_is_known(domain, known_domains):
-                    continue
-                dcv_expiration = entry.get("dcv_expiration")
-                if not dcv_expiration:
-                    raise ValueError(f"Missing dcv_expiration for domain {domain} from {ca_name}")
                 expiry_dt = datetime.fromisoformat(
                     dcv_expiration.replace("Z", "+00:00")
                 )
                 if expiry_dt.tzinfo is None:
                     expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
                 days_remaining = (expiry_dt - now).days
-                metrics.send(
-                    "dcv.days_until_expiration",
-                    "gauge",
-                    days_remaining,
-                    metric_tags={
-                        "domain": domain,
-                        "ca": ca_name,
-                        "validation_type": entry.get("validation_type", "unknown"),
-                        "org_id": entry.get("org_id", "unknown"),
-                        "dcv_method": entry.get("dcv_method", "unknown"),
-                    },
-                )
-                total_domains += 1
-            except SoftTimeLimitExceeded:
-                raise
-            except Exception as e:
+            except (ValueError, TypeError) as e:
+                # Unexpected data-shape error (not a normal missing-DCV case).
                 current_app.logger.warning(
                     f"_emit_dcv_expiration_metrics: failed on entry for ca={ca_name}: {e}",
                     exc_info=True,
                 )
                 capture_exception()
-                metrics.send("dcv.expiration_check.domain.errors", "gauge", total_errors, metric_tags={
-                    "ca": ca_name,
+                metrics.send(
+                    "dcv.expiration_check.domain.errors",
+                    "gauge",
+                    1,
+                    metric_tags={"ca": ca_name, "domain": domain},
+                )
+                total_errors += 1
+                continue
+            metrics.send(
+                "dcv.days_until_expiration",
+                "gauge",
+                days_remaining,
+                metric_tags={
                     "domain": domain,
-                })
+                    "ca": ca_name,
+                    "validation_type": entry.get("validation_type", "unknown"),
+                    "org_id": entry.get("org_id", "unknown"),
+                    "dcv_method": entry.get("dcv_method", "unknown"),
+                },
+            )
+            total_domains += 1
 
     metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
     current_app.logger.info(

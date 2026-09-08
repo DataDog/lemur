@@ -116,7 +116,11 @@ class SectigoIssuerPlugin(IssuerPlugin):
         # Map domain name -> id so we can fetch org_id from the domain detail.
         try:
             id_by_name = {d["name"]: d["id"] for d in domain.all()}
-        except Exception:
+        except Exception as e:
+            current_app.logger.warning(
+                f"get_dcv_expiration_data: failed to map Sectigo domains to ids: {e}",
+                exc_info=True,
+            )
             id_by_name = {}
         results = []
         for entry in response.json():
@@ -129,8 +133,11 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     delegations = detail.get("delegations") or []
                     if delegations:
                         org_id = str(delegations[0].get("orgId", "unknown"))
-                except Exception:
-                    pass
+                except Exception as e:
+                    current_app.logger.warning(
+                        f"get_dcv_expiration_data: failed to fetch org_id for {name}: {e}",
+                        exc_info=True,
+                    )
             results.append(
                 {
                     "domain": name,
