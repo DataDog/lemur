@@ -31,7 +31,7 @@ azure-mgmt-core==1.6.0
     #   azure-mgmt-cdn
     #   azure-mgmt-network
     #   azure-mgmt-subscription
-azure-mgmt-network==31.0.1
+azure-mgmt-network==32.0.0
     # via -r requirements-datadog.in
 azure-mgmt-subscription==3.1.1
     # via -r requirements-datadog.in
@@ -93,7 +93,7 @@ grpcio-status==1.83.0
     # via google-api-core
 h11==0.16.0
     # via -r requirements-datadog.in
-idna==3.18
+idna==3.19
     # via
     #   anyio
     #   requests
@@ -138,7 +138,7 @@ proto-plus==1.28.3
     # via
     #   google-api-core
     #   google-cloud-compute
-protobuf==7.35.1
+protobuf==7.36.0
     # via
     #   google-api-core
     #   google-cloud-compute
