@@ -99,7 +99,7 @@ def test_create_user_roles_assigns_default_role_by_default(app):
 
 
 @pytest.mark.parametrize(
-    "existing_roles,groups,assign_default_role",
+    "existing_roles,groups,expected_operator",
     [
         (None, [], False),
         ([], ["unrelated-team"], False),
@@ -109,8 +109,8 @@ def test_create_user_roles_assigns_default_role_by_default(app):
         (None, ["team-fabricgateways"], True),
     ],
 )
-def test_vault_assigns_default_role_from_existing_roles_or_groups(
-    app, existing_roles, groups, assign_default_role
+def test_vault_elevates_operator_from_existing_roles_or_groups(
+    app, existing_roles, groups, expected_operator
 ):
     profile = {"email": "user@datadoghq.com", "groups": groups}
     user = None
@@ -122,10 +122,10 @@ def test_vault_assigns_default_role_from_existing_roles_or_groups(
         )
     updated_user = SimpleNamespace(id=1, active=True)
     authenticator = SimpleNamespace(authenticate=lambda token: profile)
+    operator_role = SimpleNamespace(name="operator")
     config = {
         "VAULT_CLIENT_ID": "lemur",
         "VAULT_ISSUER_URL": "https://vault.example.com",
-        "LEMUR_DEFAULT_ROLE": "operator",
     }
 
     with patch.dict(app.config, config), app.test_request_context(
@@ -135,8 +135,10 @@ def test_vault_assigns_default_role_from_existing_roles_or_groups(
     ), patch("lemur.auth.views.user_service.get_by_email", return_value=user), patch(
         "lemur.auth.views.create_user_roles", return_value=[]
     ) as create_roles, patch(
-        "lemur.auth.views.update_user", return_value=updated_user
+        "lemur.auth.views.role_service.get_by_name", return_value=operator_role
     ), patch(
+        "lemur.auth.views.update_user", return_value=updated_user
+    ) as update_user_mock, patch(
         "lemur.auth.views.create_token", return_value="session-token"
     ), patch(
         "lemur.auth.views.identity_changed.send"
@@ -144,6 +146,6 @@ def test_vault_assigns_default_role_from_existing_roles_or_groups(
         response = Vault().post()
 
     assert response == {"token": "session-token"}
-    create_roles.assert_called_once_with(
-        profile, assign_default_role=assign_default_role
-    )
+    create_roles.assert_called_once_with(profile, assign_default_role=False)
+    assigned_roles = update_user_mock.call_args.args[2]
+    assert (operator_role in assigned_roles) == expected_operator

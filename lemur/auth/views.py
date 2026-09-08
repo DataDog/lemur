@@ -35,6 +35,15 @@ from lemur.plugins.base import plugins
 
 mod = Blueprint("auth", __name__)
 api = Api(mod)
+# The Vault OIDC login path gives every authenticated user Lemur's read-only
+# baseline and elevates members of VAULT_OPERATOR_GROUPS to VAULT_OPERATOR_ROLE.
+# Both are overridden by the config keys of the same name; these are the fallbacks.
+# TODO: remove these hardcoded fallbacks once VAULT_OPERATOR_GROUPS and
+# VAULT_OPERATOR_ROLE are deployed to k8s-resources for all environments. Removing
+# them also requires setting both keys in the test config for
+# test_vault_elevates_operator_from_existing_roles_or_groups, which relies on
+# these fallbacks today.
+VAULT_OPERATOR_ROLE = "operator"
 VAULT_OPERATOR_GROUPS = {"resource-management", "team-fabricgateways"}
 
 
@@ -171,15 +180,14 @@ def retrieve_user_memberships(user_api_url, user_membership_provider, access_tok
     return user, user_membership
 
 
-def should_assign_vault_default_role(user, profile):
-    default_role = current_app.config.get("LEMUR_DEFAULT_ROLE")
-    user_has_default_role = bool(
-        user
-        and default_role
-        and any(role.name == default_role for role in user.roles)
+def should_assign_vault_operator_role(user, profile):
+    operator_role = current_app.config.get("VAULT_OPERATOR_ROLE") or VAULT_OPERATOR_ROLE
+    user_is_operator = bool(
+        user and any(role.name == operator_role for role in user.roles)
     )
     profile_groups = set(profile.get("groups", []))
-    return user_has_default_role or bool(VAULT_OPERATOR_GROUPS & profile_groups)
+    operator_groups = set(current_app.config.get("VAULT_OPERATOR_GROUPS") or VAULT_OPERATOR_GROUPS)
+    return user_is_operator or bool(operator_groups & profile_groups)
 
 
 def create_user_roles(profile, assign_default_role=True):
@@ -664,10 +672,17 @@ class Vault(Resource):
         profile = authenticator.authenticate(id_token)
 
         user = user_service.get_by_email(profile["email"])
-        roles = create_user_roles(
-            profile,
-            assign_default_role=should_assign_vault_default_role(user, profile),
-        )
+        # Everyone with a valid Vault token gets Lemur's read-only baseline (no
+        # role to assign). Operators are elevated explicitly below.
+        roles = create_user_roles(profile, assign_default_role=False)
+        if should_assign_vault_operator_role(user, profile):
+            operator_role = current_app.config.get("VAULT_OPERATOR_ROLE") or VAULT_OPERATOR_ROLE
+            role = role_service.get_by_name(operator_role)
+            if not role:
+                role = role_service.create(
+                    operator_role, description="This is the Lemur operator role."
+                )
+            roles.append(role)
         user = update_user(user, profile, roles)
 
         if not user.active:
