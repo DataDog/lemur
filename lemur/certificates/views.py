@@ -939,6 +939,14 @@ class Certificates(AuthenticatedResource):
                     403,
                 )
 
+        if data.get("rotation") and not cert.authority_id:
+            return (
+                dict(
+                    message="Certificates without an issuing authority cannot be automatically rotated."
+                ),
+                400,
+            )
+
         for destination in data["destinations"]:
             if destination.plugin.requires_key:
                 if not cert.private_key:
@@ -1088,6 +1096,14 @@ class Certificates(AuthenticatedResource):
                     dict(message="You are not authorized to update this certificate"),
                     403,
                 )
+
+        if data.get("rotation") and not cert.authority_id:
+            return (
+                dict(
+                    message="Certificates without an issuing authority cannot be automatically rotated."
+                ),
+                400,
+            )
 
         cert = service.update_switches(
             cert, notify_flag=data.get("notify"), rotation_flag=data.get("rotation")
