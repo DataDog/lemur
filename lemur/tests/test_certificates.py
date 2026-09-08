@@ -1347,7 +1347,6 @@ def test_certificate_put_with_data(client, certificate, issuer_plugin):
     [
         (VALID_USER_HEADER_TOKEN, 403),
         (VALID_ADMIN_HEADER_TOKEN, 204),
-        (VALID_ADMIN_API_TOKEN, 412),
         ("", 401),
     ],
 )
@@ -1357,6 +1356,26 @@ def test_certificate_delete(client, token, status, issuer_plugin, certificate):
             api.url_for(Certificates, certificate_id=certificate.id), headers=token
         ).status_code
         == status
+    )
+
+
+def test_certificate_delete_already_deleted(client, issuer_plugin, certificate):
+    # The certificate fixture is function-scoped, so each parametrized case gets a
+    # fresh certificate. Deleting an already-deleted certificate returns 412, so
+    # delete it first to exercise that path.
+    assert (
+        client.delete(
+            api.url_for(Certificates, certificate_id=certificate.id),
+            headers=VALID_ADMIN_HEADER_TOKEN,
+        ).status_code
+        == 204
+    )
+    assert (
+        client.delete(
+            api.url_for(Certificates, certificate_id=certificate.id),
+            headers=VALID_ADMIN_API_TOKEN,
+        ).status_code
+        == 412
     )
 
 
