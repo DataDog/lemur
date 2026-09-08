@@ -1293,8 +1293,7 @@ def _emit_dcv_expiration_metrics():
                 f"_emit_dcv_expiration_metrics: {ca_name} raised {e}", exc_info=True
             )
             capture_exception()
-            total_errors += 1
-            continue
+            metrics.send("dcv.expiration_check.plugin.errors", "count", 1, metric_tags={"ca": ca_name,})
 
         for entry in dcv_data:
             try:
@@ -1303,7 +1302,7 @@ def _emit_dcv_expiration_metrics():
                     continue
                 dcv_expiration = entry.get("dcv_expiration")
                 if not dcv_expiration:
-                    continue
+                    raise ValueError(f"Missing dcv_expiration for domain {domain} from {ca_name}")
                 expiry_dt = datetime.fromisoformat(
                     dcv_expiration.replace("Z", "+00:00")
                 )
@@ -1331,12 +1330,14 @@ def _emit_dcv_expiration_metrics():
                     exc_info=True,
                 )
                 capture_exception()
-                total_errors += 1
+                metrics.send("dcv.expiration_check.domain.errors", "gauge", total_errors, metric_tags={
+                    "ca": ca_name,
+                    "domain": domain,
+                })
 
     metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
-    metrics.send("dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
     current_app.logger.info(
-        f"_emit_dcv_expiration_metrics: done. domains={total_domains} errors={total_errors}"
+        f"_emit_dcv_expiration_metrics: done. domains={total_domains}, errors={total_errors}"
     )
 
 
