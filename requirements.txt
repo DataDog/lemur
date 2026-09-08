@@ -39,7 +39,7 @@ blinker==1.9.0
     # via flask
 cert-manager==4.0.0
     # via -r requirements-datadog.in
-certifi==2026.6.17
+certifi==2026.7.22
     # via
     #   msrest
     #   requests
@@ -72,7 +72,7 @@ flask-sqlalchemy==3.1.1
     # via flask-migrate
 google-api-core==2.32.0
     # via google-cloud-compute
-google-auth==2.56.0
+google-auth==2.56.2
     # via
     #   google-api-core
     #   google-cloud-compute
@@ -82,9 +82,9 @@ googleapis-common-protos==1.75.0
     # via
     #   google-api-core
     #   grpcio-status
-greenlet==3.5.3
+greenlet==3.5.4
     # via sqlalchemy
-grpcio==1.82.1
+grpcio==1.82.1.post125712670+dd.repackaging.125712670
     # via
     #   google-api-core
     #   google-cloud-compute
