@@ -27,7 +27,7 @@ def test_api_key_list_get(client, token, status):
 @pytest.mark.parametrize(
     "token,status",
     [
-        (VALID_USER_HEADER_TOKEN, 400),
+        (VALID_USER_HEADER_TOKEN, 403),
         (VALID_ADMIN_HEADER_TOKEN, 400),
         (VALID_ADMIN_API_TOKEN, 400),
         ("", 401),
@@ -43,7 +43,7 @@ def test_api_key_list_post_invalid(client, token, status):
 @pytest.mark.parametrize(
     "token,user_id,status",
     [
-        (VALID_USER_HEADER_TOKEN, 1, 200),
+        (VALID_USER_HEADER_TOKEN, 1, 403),
         (VALID_ADMIN_HEADER_TOKEN, 2, 200),
         (VALID_ADMIN_API_TOKEN, 2, 200),
         ("", 0, 401),
@@ -103,12 +103,12 @@ def test_api_key_list_post_valid_no_permission(client, token, status):
 @pytest.mark.parametrize(
     "token,ttl,status",
     [
-        (VALID_USER_HEADER_TOKEN, 0, 400),
-        (VALID_USER_HEADER_TOKEN, -2, 400),
-        (VALID_USER_HEADER_TOKEN, -100, 400),
+        (VALID_USER_HEADER_TOKEN, 0, 403),
+        (VALID_USER_HEADER_TOKEN, -2, 403),
+        (VALID_USER_HEADER_TOKEN, -100, 403),
         (VALID_ADMIN_HEADER_TOKEN, 0, 400),
-        (VALID_USER_HEADER_TOKEN, -1, 200),
-        (VALID_USER_HEADER_TOKEN, 30, 200),
+        (VALID_USER_HEADER_TOKEN, -1, 403),
+        (VALID_USER_HEADER_TOKEN, 30, 403),
     ],
 )
 def test_api_key_list_post_ttl_validation(client, token, ttl, status):
@@ -180,7 +180,7 @@ def test_user_api_key_list_get(client, token, status):
 @pytest.mark.parametrize(
     "token,status",
     [
-        (VALID_USER_HEADER_TOKEN, 400),
+        (VALID_USER_HEADER_TOKEN, 403),
         (VALID_ADMIN_HEADER_TOKEN, 400),
         (VALID_ADMIN_API_TOKEN, 400),
         ("", 401),
@@ -198,7 +198,7 @@ def test_user_api_key_list_post_invalid(client, token, status):
 @pytest.mark.parametrize(
     "token,user_id,status",
     [
-        (VALID_USER_HEADER_TOKEN, 1, 200),
+        (VALID_USER_HEADER_TOKEN, 1, 403),
         (VALID_ADMIN_HEADER_TOKEN, 2, 200),
         (VALID_ADMIN_API_TOKEN, 2, 200),
         ("", 0, 401),
