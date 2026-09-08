@@ -1290,6 +1290,28 @@ def test_certificate_update_rejects_rotation_without_authority(
     assert certificate.rotation is False
 
 
+@pytest.mark.parametrize("method", ["post", "put"])
+def test_certificate_update_allows_existing_rotation_without_authority(
+    client, certificate, session, method
+):
+    certificate.authority = None
+    certificate.rotation = True
+    session.commit()
+
+    data = {"rotation": True}
+    if method == "put":
+        data["owner"] = certificate.owner
+
+    response = getattr(client, method)(
+        api.url_for(Certificates, certificate_id=certificate.id),
+        data=json.dumps(data),
+        headers=VALID_ADMIN_HEADER_TOKEN,
+    )
+
+    assert response.status_code == 200
+    assert response.json["rotation"] is True
+
+
 @pytest.mark.parametrize(
     "token,status",
     [

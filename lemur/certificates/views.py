@@ -939,7 +939,7 @@ class Certificates(AuthenticatedResource):
                     403,
                 )
 
-        if data.get("rotation") and not cert.authority_id:
+        if data.get("rotation") and not cert.rotation and not cert.authority_id:
             return (
                 dict(
                     message="Certificates without an issuing authority cannot be automatically rotated."
@@ -1097,7 +1097,7 @@ class Certificates(AuthenticatedResource):
                     403,
                 )
 
-        if data.get("rotation") and not cert.authority_id:
+        if data.get("rotation") and not cert.rotation and not cert.authority_id:
             return (
                 dict(
                     message="Certificates without an issuing authority cannot be automatically rotated."
