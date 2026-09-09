@@ -48,24 +48,6 @@ def log_status_code(r, *args, **kwargs):
     current_app.logger.info(log_data)
 
 
-def _normalize_dcv_status(status):
-    """
-    Normalize a DigiCert dcv_status to the shared active/pending/expired vocabulary.
-
-    DigiCert's per-domain /validation endpoint reports complete/pending/failed;
-    map complete -> active and failed -> expired so the tag matches the shared
-    vocabulary (and the list-endpoint fallback's active/pending).
-    """
-    if not status:
-        return "unknown"
-    status = status.lower()
-    if status == "complete":
-        return "active"
-    if status == "failed":
-        return "expired"
-    return status
-
-
 def signature_hash(signing_algorithm):
     """Converts Lemur's signing algorithm into a format DigiCert understands.
 
@@ -527,7 +509,6 @@ class DigiCertIssuerPlugin(IssuerPlugin):
           - validation_type: str  -- "ov" / "ev" (DigiCert)
           - org_id: str
           - dcv_method: str  -- e.g. dns-cname-token, persistent-txt
-          - dcv_status: str  -- active / pending / expired (DigiCert)
         """
         base_url = current_app.config.get("DIGICERT_URL")
         if not base_url:
@@ -546,24 +527,6 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                 continue
             org_id = str(domain.get("organization", {}).get("id", "unknown"))
             dcv_method = domain.get("dcv_method") or "unknown"
-            dcv_status_by_type = {}
-            domain_id = domain.get("id")
-            if domain_id:
-                try:
-                    val_resp = self.session.get(
-                        f"{base_url}/services/v2/domain/{domain_id}/validation"
-                    )
-                    val_data = handle_response(val_resp)
-                    for v in val_data.get("validations", []):
-                        dcv_status_by_type[v.get("type")] = _normalize_dcv_status(
-                            v.get("dcv_status", "unknown")
-                        )
-                except Exception:
-                    # Fall back to the list endpoint's per-type status rather than
-                    # failing the whole run; never block metric emission. The list
-                    # endpoint already reports active/pending (shared vocabulary).
-                    for v in domain.get("validations", []):
-                        dcv_status_by_type[v.get("type")] = v.get("status", "unknown")
             for val_type, dcv_exp in dcv_exp_map.items():
                 results.append({
                     "domain": domain_name,
@@ -571,7 +534,6 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                     "validation_type": val_type,
                     "org_id": org_id,
                     "dcv_method": dcv_method,
-                    "dcv_status": (dcv_status_by_type.get(val_type) or "unknown").lower(),
                 })
         return results
 

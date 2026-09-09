@@ -1283,23 +1283,6 @@ def _dcv_domain_is_known(domain, known_domains):
     return False
 
 
-def _dcv_status_ok(ca_name, dcv_status):
-    """
-    Return True if the CA's DCV validation status indicates a healthy/valid state.
-
-    Both DigiCert and Sectigo plugins normalize dcv_status to the shared
-    active/pending/expired vocabulary (DigiCert complete->active, failed->expired;
-    Sectigo VALIDATED->active, EXPIRED->expired). Only "active" is healthy;
-    pending/reuse-cycle and expired are not.
-
-    The raw status is still tagged on the gauge so a monitor can alert on the
-    specific broken value (dcv_status:expired) without treating a normal
-    pending/reuse-cycle state as a failure.
-    """
-    status = (dcv_status or "").strip().lower()
-    return status == "active"
-
-
 def emit_dcv_expiration_metrics():
     """
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
@@ -1346,22 +1329,6 @@ def emit_dcv_expiration_metrics():
             domain = entry.get("domain", "unknown")
             if not _dcv_domain_is_known(domain, known_domains):
                 continue
-            # Emit the DCV validation-status gauge for every known domain,
-            # independent of whether an expiration date is present (some CAs /
-            # accounts don't return one). 1 = healthy/valid, 0 = otherwise.
-            dcv_status = entry.get("dcv_status", "unknown")
-            metrics.send(
-                "dcv.validation_status",
-                "gauge",
-                1 if _dcv_status_ok(ca_name, dcv_status) else 0,
-                metric_tags={
-                    "domain": domain,
-                    "ca": ca_name,
-                    "dcv_status": dcv_status,
-                    "dcv_method": entry.get("dcv_method", "unknown"),
-                    "validation_type": entry.get("validation_type", "unknown"),
-                },
-            )
             dcv_expiration = entry.get("dcv_expiration")
             if not dcv_expiration:
                 if plugin_has_expiry:

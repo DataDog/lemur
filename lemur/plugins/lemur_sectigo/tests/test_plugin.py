@@ -187,7 +187,6 @@ class TestSectigoIssuerPlugin(TestCase):
             self.assertEqual(result[0]["dcv_method"], "dns-cname-token")
             self.assertEqual(result[0]["validation_type"], "dv")
             self.assertEqual(result[0]["org_id"], "35917")
-            self.assertEqual(result[0]["dcv_status"], "expired")
 
     def test_determine_certificate_term(self):
         with self.app_context:
