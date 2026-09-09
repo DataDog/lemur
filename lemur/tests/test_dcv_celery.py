@@ -229,14 +229,15 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "VALIDATED"
     assert vs_calls[0].kwargs["metric_tags"]["ca"] == "sectigo-issuer"
 
-    # No days_until_expiration gauge (no expiration date) but a missing_dcv error
+    # No days_until_expiration gauge (no expiration date); and because this
+    # plugin provides no expiry for any domain, no missing_dcv error is emitted.
     dcv_calls = [c for c in gauge_calls if "dcv.days_until_expiration" in c.args[0]]
     assert len(dcv_calls) == 0
     missing_calls = [
         c for c in mock_metrics.send.call_args_list
         if len(c.args) >= 1 and "dcv.expiration_check.domain.missing_dcv" in c.args[0]
     ]
-    assert len(missing_calls) == 1
+    assert len(missing_calls) == 0
 
 
 @patch("lemur.common.celery.get_all_domains")
@@ -319,7 +320,12 @@ def test_emit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
 ):
     # A known domain returned without dcv_expiration should be reported as a
     # missing_dcv error metric, not silently skipped and not emitted as a gauge.
-    mock_get_all_domains.return_value = [SimpleNamespace(name="nodcv.com")]
+    # The plugin provides expiry for another domain, so this is a per-domain
+    # anomaly (not a CA that returns no expiry at all).
+    mock_get_all_domains.return_value = [
+        SimpleNamespace(name="nodcv.com"),
+        SimpleNamespace(name="good.com"),
+    ]
     fake_plugin = MagicMock()
     fake_plugin.slug = "digicert-issuer"
     fake_plugin.get_dcv_expiration_data.return_value = [
@@ -329,7 +335,14 @@ def test_emit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
             "validation_type": "ov",
             "org_id": "42",
             "dcv_method": "persistent-txt",
-        }
+        },
+        {
+            "domain": "good.com",
+            "dcv_expiration": "2099-01-01T00:00:00+00:00",
+            "validation_type": "ov",
+            "org_id": "42",
+            "dcv_method": "persistent-txt",
+        },
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
@@ -337,12 +350,13 @@ def test_emit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
 
     _emit_dcv_expiration_metrics()
 
-    # No days_until_expiration gauge for the missing-DCV domain.
+    # days_until_expiration gauge only for the domain that has an expiry.
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
     ]
-    assert len(dcv_calls) == 0
+    assert len(dcv_calls) == 1
+    assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "good.com"
 
     # A missing_dcv error gauge is emitted, tagged with ca + domain.
     missing_calls = [

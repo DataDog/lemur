@@ -141,7 +141,9 @@ class SectigoIssuerPlugin(IssuerPlugin):
             results.append(
                 {
                     "domain": name,
-                    "dcv_expiration": entry.get("expirationDate"),
+                    # Prod Sectigo does not return expirationDate for its
+                    # persistent-txt domains, so there is no dcv_expiration to
+                    # report — DCV health is signaled via dcv_status below.
                     "validation_type": "dv",
                     "org_id": org_id,
                     "dcv_method": entry.get("dcvMethod", "unknown"),

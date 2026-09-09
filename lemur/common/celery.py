@@ -1341,6 +1341,11 @@ def _emit_dcv_expiration_metrics():
             )
             continue
 
+        # Some CAs/accounts don't return an expiry at all (e.g. prod Sectigo
+        # persistent-txt has no expirationDate). If a plugin provides no expiry
+        # for any domain, a missing dcv_expiration is expected, not an error.
+        plugin_has_expiry = any(e.get("dcv_expiration") for e in dcv_data)
+
         ca_domains = 0
         for entry in dcv_data:
             domain = entry.get("domain", "unknown")
@@ -1364,18 +1369,21 @@ def _emit_dcv_expiration_metrics():
             )
             dcv_expiration = entry.get("dcv_expiration")
             if not dcv_expiration:
-                current_app.logger.warning(
-                    f"_emit_dcv_expiration_metrics: missing DCV data for domain={domain} ca={ca_name}",
-                    exc_info=True,
-                )
-                capture_exception()
-                metrics.send(
-                    "dcv.expiration_check.domain.missing_dcv",
-                    "gauge",
-                    1,
-                    metric_tags={"ca": ca_name, "domain": domain},
-                )
-                total_errors += 1
+                if plugin_has_expiry:
+                    # Per-domain anomaly: this plugin generally provides expiry
+                    # but this domain is missing it.
+                    current_app.logger.warning(
+                        f"_emit_dcv_expiration_metrics: missing DCV data for domain={domain} ca={ca_name}",
+                        exc_info=True,
+                    )
+                    capture_exception()
+                    metrics.send(
+                        "dcv.expiration_check.domain.missing_dcv",
+                        "gauge",
+                        1,
+                        metric_tags={"ca": ca_name, "domain": domain},
+                    )
+                    total_errors += 1
                 continue
             expiry_dt = datetime.fromisoformat(
                 dcv_expiration.replace("Z", "+00:00")
