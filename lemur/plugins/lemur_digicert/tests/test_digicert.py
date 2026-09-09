@@ -345,6 +345,7 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
         text=json.dumps({
             "domains": [
                 {
+                    "id": 1,
                     "name": "example.com",
                     "is_active": True,
                     "dcv_expiration": {"ov": "2026-09-01T00:00:00+00:00", "ev": "2026-08-01T00:00:00+00:00"},
@@ -366,6 +367,17 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
             ]
         }),
     )
+    # Per-domain validation endpoint exposes dcv_status (complete/pending/failed).
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain/1/validation",
+        text=json.dumps({
+            "validations": [
+                {"type": "ov", "status": "active", "dcv_status": "complete"},
+                {"type": "ev", "status": "active", "dcv_status": "complete"},
+            ]
+        }),
+    )
     subject.session.mount("mock", adapter)
 
     result = subject.get_dcv_expiration_data()
@@ -378,3 +390,6 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
     assert by_type["ov"]["dcv_expiration"] == "2026-09-01T00:00:00+00:00"
     assert by_type["ov"]["org_id"] == "42"
     assert by_type["ev"]["dcv_expiration"] == "2026-08-01T00:00:00+00:00"
+    # dcv_status is populated from the per-domain /validation endpoint
+    assert by_type["ov"]["dcv_status"] == "complete"
+    assert by_type["ev"]["dcv_status"] == "complete"

@@ -145,6 +145,9 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     "validation_type": "dv",
                     "org_id": org_id,
                     "dcv_method": entry.get("dcvMethod", "unknown"),
+                    # Sectigo reports DCV validation state as dcvStatus
+                    # (VALIDATED / NOT_VALIDATED / EXPIRED).
+                    "dcv_status": entry.get("dcvStatus", "unknown"),
                 }
             )
         return results

@@ -1283,6 +1283,28 @@ def _dcv_domain_is_known(domain, known_domains):
     return False
 
 
+def _dcv_status_ok(ca_name, dcv_status):
+    """
+    Return True if the CA's DCV validation status indicates a healthy/valid state.
+
+    Each CA reports DCV status in its own vocabulary:
+      - DigiCert: complete / pending / failed
+      - Sectigo:  VALIDATED / NOT_VALIDATED / EXPIRED
+
+    Only the "good" state maps to 1; pending/reuse-cycle and failed states map to 0.
+    The raw status is tagged on the gauge so a monitor can alert on the specific
+    broken value per CA (e.g. dcv_status:failed for DigiCert, dcv_status:EXPIRED for
+    Sectigo) without treating a normal pending/reuse-cycle state as a failure.
+    """
+    status = (dcv_status or "").strip().lower()
+    if "digicert" in ca_name:
+        # complete (per-domain endpoint) or active (list-endpoint fallback)
+        return status in ("complete", "active")
+    if "sectigo" in ca_name:
+        return status == "validated"
+    return status in ("complete", "active", "validated")
+
+
 def _emit_dcv_expiration_metrics():
     """
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
@@ -1324,6 +1346,22 @@ def _emit_dcv_expiration_metrics():
             domain = entry.get("domain", "unknown")
             if not _dcv_domain_is_known(domain, known_domains):
                 continue
+            # Emit the DCV validation-status gauge for every known domain,
+            # independent of whether an expiration date is present (some CAs /
+            # accounts don't return one). 1 = healthy/valid, 0 = otherwise.
+            dcv_status = entry.get("dcv_status", "unknown")
+            metrics.send(
+                "dcv.validation_status",
+                "gauge",
+                1 if _dcv_status_ok(ca_name, dcv_status) else 0,
+                metric_tags={
+                    "domain": domain,
+                    "ca": ca_name,
+                    "dcv_status": dcv_status,
+                    "dcv_method": entry.get("dcv_method", "unknown"),
+                    "validation_type": entry.get("validation_type", "unknown"),
+                },
+            )
             dcv_expiration = entry.get("dcv_expiration")
             if not dcv_expiration:
                 current_app.logger.warning(

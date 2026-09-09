@@ -517,6 +517,26 @@ class DigiCertIssuerPlugin(IssuerPlugin):
             # moving domains to persistent DNS validation; tag it so persistent
             # domains can be distinguished in the expiry metric.
             dcv_method = domain.get("dcv_method") or "unknown"
+            # DCV validation status (complete/pending/failed) per validation type.
+            # The list endpoint only exposes validations[].status (active/pending);
+            # the per-domain /validation endpoint exposes dcv_status, which can be
+            # "failed" — the signal that distinguishes a broken DCV from a normal
+            # pending reuse-cycle state.
+            dcv_status_by_type = {}
+            domain_id = domain.get("id")
+            if domain_id:
+                try:
+                    val_resp = self.session.get(
+                        f"{base_url}/services/v2/domain/{domain_id}/validation"
+                    )
+                    val_data = handle_response(val_resp)
+                    for v in val_data.get("validations", []):
+                        dcv_status_by_type[v.get("type")] = v.get("dcv_status", "unknown")
+                except Exception:
+                    # Fall back to the list endpoint's per-type status rather than
+                    # failing the whole run; never block metric emission.
+                    for v in domain.get("validations", []):
+                        dcv_status_by_type[v.get("type")] = v.get("status", "unknown")
             for val_type, dcv_exp in dcv_exp_map.items():
                 results.append({
                     "domain": domain_name,
@@ -524,6 +544,7 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                     "validation_type": val_type,
                     "org_id": org_id,
                     "dcv_method": dcv_method,
+                    "dcv_status": dcv_status_by_type.get(val_type, "unknown"),
                 })
         return results
 
