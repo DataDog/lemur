@@ -20,12 +20,12 @@ _SECTIGO_DCV_METHOD_MAP = {
     "PERSISTENT_TXT": "persistent-txt",
 }
 
-# Map Sectigo's DCV status vocabulary to the shared complete/pending/failed set
+# Map Sectigo's DCV status vocabulary to the shared active/pending/expired set
 # used by DigiCert so the dcv_status tag is consistent across CAs.
 _SECTIGO_DCV_STATUS_MAP = {
-    "VALIDATED": "complete",
+    "VALIDATED": "active",
     "NOT_VALIDATED": "pending",
-    "EXPIRED": "failed",
+    "EXPIRED": "expired",
 }
 
 
@@ -145,7 +145,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
           - validation_type: str  -- "dv" (Sectigo)
           - org_id: str
           - dcv_method: str  -- e.g. CNAME, PERSISTENT_TXT
-          - dcv_status: str  -- VALIDATED / NOT_VALIDATED / EXPIRED (Sectigo)
+          - dcv_status: str  -- active / pending / expired (Sectigo)
         """
         url = f"{self.client.base_url}/dcv/v1/validation"
         response = self.client.session.get(url)
@@ -186,11 +186,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     "dcv_expiration": None,
                     "validation_type": "dv",
                     "org_id": org_id,
-                    # Normalized to the shared lowercase vocabulary (e.g.
-                    # PERSISTENT_TXT -> persistent-txt, CNAME -> dns-cname-token).
                     "dcv_method": _normalize_dcv_method(entry.get("dcvMethod", "unknown")),
-                    # Normalized to the shared complete/pending/failed vocabulary
-                    # (VALIDATED -> complete, NOT_VALIDATED -> pending, EXPIRED -> failed).
                     "dcv_status": _normalize_dcv_status(entry.get("dcvStatus", "unknown")),
                 }
             )

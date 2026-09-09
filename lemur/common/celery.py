@@ -1288,16 +1288,16 @@ def _dcv_status_ok(ca_name, dcv_status):
     Return True if the CA's DCV validation status indicates a healthy/valid state.
 
     Both DigiCert and Sectigo plugins normalize dcv_status to the shared
-    complete/pending/failed vocabulary (Sectigo VALIDATED -> complete, etc.), so
-    this is a single check. "complete" (or "active", the DigiCert list-endpoint
-    fallback) is healthy; pending/reuse-cycle and failed are not.
+    active/pending/expired vocabulary (DigiCert complete->active, failed->expired;
+    Sectigo VALIDATED->active, EXPIRED->expired). Only "active" is healthy;
+    pending/reuse-cycle and expired are not.
 
     The raw status is still tagged on the gauge so a monitor can alert on the
-    specific broken value (dcv_status:failed) without treating a normal
+    specific broken value (dcv_status:expired) without treating a normal
     pending/reuse-cycle state as a failure.
     """
     status = (dcv_status or "").strip().lower()
-    return status in ("complete", "active")
+    return status == "active"
 
 
 def emit_dcv_expiration_metrics():

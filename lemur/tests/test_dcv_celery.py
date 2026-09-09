@@ -144,7 +144,7 @@ def testemit_dcv_expiration_metrics_emits_metric_for_active_domain(
             "validation_type": "ov",
             "org_id": "42",
             "dcv_method": "persistent-txt",
-            "dcv_status": "complete",
+            "dcv_status": "active",
         }
     ]
     mock_plugins.all.return_value = [fake_plugin]
@@ -164,30 +164,29 @@ def testemit_dcv_expiration_metrics_emits_metric_for_active_domain(
     assert tags["dcv_method"] == "persistent-txt"
     assert dcv_calls[0].args[2] > 0
 
-    # dcv.validation_status gauge is emitted with 1 = healthy for complete status
+    # dcv.validation_status gauge is emitted with 1 = healthy for active status
     vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
     assert len(vs_calls) == 1
     assert vs_calls[0].args[2] == 1
     vs_tags = vs_calls[0].kwargs["metric_tags"]
     assert vs_tags["domain"] == "example.com"
     assert vs_tags["ca"] == "digicert-issuer"
-    assert vs_tags["dcv_status"] == "complete"
+    assert vs_tags["dcv_status"] == "active"
     assert vs_tags["dcv_method"] == "persistent-txt"
 
 
 def test_dcv_status_ok_mapping():
     from lemur.common.celery import _dcv_status_ok
 
-    # Shared vocabulary (both plugins normalize to complete/pending/failed)
-    assert _dcv_status_ok("digicert-issuer", "complete") is True
-    assert _dcv_status_ok("digicert-issuer", "active") is True  # list-endpoint fallback
+    # Shared vocabulary (both plugins normalize to active/pending/expired)
+    assert _dcv_status_ok("digicert-issuer", "active") is True
     assert _dcv_status_ok("digicert-issuer", "pending") is False
-    assert _dcv_status_ok("digicert-issuer", "failed") is False
+    assert _dcv_status_ok("digicert-issuer", "expired") is False
 
     # Sectigo statuses are normalized upstream to the shared vocabulary
-    assert _dcv_status_ok("sectigo-issuer", "complete") is True
+    assert _dcv_status_ok("sectigo-issuer", "active") is True
     assert _dcv_status_ok("sectigo-issuer", "pending") is False
-    assert _dcv_status_ok("sectigo-issuer", "failed") is False
+    assert _dcv_status_ok("sectigo-issuer", "expired") is False
 
     # unknown / missing -> not healthy (fail closed)
     assert _dcv_status_ok("digicert-issuer", "unknown") is False
@@ -213,7 +212,7 @@ def testemit_dcv_expiration_metrics_emits_validation_status_without_expiration(
             "validation_type": "dv",
             "org_id": "35917",
             "dcv_method": "persistent-txt",
-            "dcv_status": "complete",
+            "dcv_status": "active",
         }
     ]
     mock_plugins.all.return_value = [fake_plugin]
@@ -226,7 +225,7 @@ def testemit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
     assert len(vs_calls) == 1
     assert vs_calls[0].args[2] == 1  # complete -> healthy
-    assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "complete"
+    assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "active"
     assert vs_calls[0].kwargs["metric_tags"]["ca"] == "sectigo-issuer"
 
     # No days_until_expiration gauge (no expiration date); and because this
