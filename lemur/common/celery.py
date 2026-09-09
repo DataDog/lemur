@@ -1228,7 +1228,7 @@ def certificate_expirations_metrics():
     # Folded in from the former standalone check_dcv_expiration task (EVBL-51):
     # emit DCV token expiry gauges from the same consolidated expiry-metrics task.
     try:
-        _emit_dcv_expiration_metrics()
+        emit_dcv_expiration_metrics()
     except SoftTimeLimitExceeded:
         log_data["message"] = "Time limit exceeded."
         current_app.logger.error(log_data)
@@ -1300,7 +1300,7 @@ def _dcv_status_ok(ca_name, dcv_status):
     return status in ("complete", "active")
 
 
-def _emit_dcv_expiration_metrics():
+def emit_dcv_expiration_metrics():
     """
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
     and emits dcv.days_until_expiration gauge per domain (RDNA-1000).
@@ -1328,7 +1328,7 @@ def _emit_dcv_expiration_metrics():
             raise
         except Exception as e:
             current_app.logger.warning(
-                f"_emit_dcv_expiration_metrics: {ca_name} raised {e}", exc_info=True
+                f"emit_dcv_expiration_metrics: {ca_name} raised {e}", exc_info=True
             )
             capture_exception()
             metrics.send(
@@ -1368,7 +1368,7 @@ def _emit_dcv_expiration_metrics():
                     # Per-domain anomaly: this plugin generally provides expiry
                     # but this domain is missing it.
                     current_app.logger.warning(
-                        f"_emit_dcv_expiration_metrics: missing DCV data for domain={domain} ca={ca_name}",
+                        f"emit_dcv_expiration_metrics: missing DCV data for domain={domain} ca={ca_name}",
                         exc_info=True,
                     )
                     capture_exception()
@@ -1403,5 +1403,5 @@ def _emit_dcv_expiration_metrics():
         total_domains += ca_domains
 
     current_app.logger.info(
-        f"_emit_dcv_expiration_metrics: done. domains={total_domains}, errors={total_errors}"
+        f"emit_dcv_expiration_metrics: done. domains={total_domains}, errors={total_errors}"
     )

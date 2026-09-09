@@ -131,7 +131,7 @@ def test_issuer_plugin_dcv_default_returns_empty():
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
+def testemit_dcv_expiration_metrics_emits_metric_for_active_domain(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     mock_get_all_domains.return_value = [SimpleNamespace(name="example.com")]
@@ -149,9 +149,9 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
-    from lemur.common.celery import _emit_dcv_expiration_metrics
+    from lemur.common.celery import emit_dcv_expiration_metrics
 
-    _emit_dcv_expiration_metrics()
+    emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
     dcv_calls = [c for c in gauge_calls if "dcv.days_until_expiration" in c.args[0]]
@@ -198,7 +198,7 @@ def test_dcv_status_ok_mapping():
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
+def testemit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     # Sectigo prod does not return expirationDate, so dcv_expiration is absent;
@@ -218,9 +218,9 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
-    from lemur.common.celery import _emit_dcv_expiration_metrics
+    from lemur.common.celery import emit_dcv_expiration_metrics
 
-    _emit_dcv_expiration_metrics()
+    emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
     vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
@@ -244,7 +244,7 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
+def testemit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     mock_get_all_domains.return_value = [SimpleNamespace(name="good.com")]
@@ -264,9 +264,9 @@ def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
     ]
     mock_plugins.all.return_value = [bad_plugin, good_plugin]
 
-    from lemur.common.celery import _emit_dcv_expiration_metrics
+    from lemur.common.celery import emit_dcv_expiration_metrics
 
-    _emit_dcv_expiration_metrics()
+    emit_dcv_expiration_metrics()
 
     dcv_calls = [
         c
@@ -291,7 +291,7 @@ def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_empty_data_no_metric(
+def testemit_dcv_expiration_metrics_empty_data_no_metric(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     mock_get_all_domains.return_value = []
@@ -300,9 +300,9 @@ def test_emit_dcv_expiration_metrics_empty_data_no_metric(
     no_dcv_plugin.get_dcv_expiration_data.return_value = []
     mock_plugins.all.return_value = [no_dcv_plugin]
 
-    from lemur.common.celery import _emit_dcv_expiration_metrics
+    from lemur.common.celery import emit_dcv_expiration_metrics
 
-    _emit_dcv_expiration_metrics()
+    emit_dcv_expiration_metrics()
 
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
@@ -315,7 +315,7 @@ def test_emit_dcv_expiration_metrics_empty_data_no_metric(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
+def testemit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     # A known domain returned without dcv_expiration should be reported as a
@@ -346,9 +346,9 @@ def test_emit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
-    from lemur.common.celery import _emit_dcv_expiration_metrics
+    from lemur.common.celery import emit_dcv_expiration_metrics
 
-    _emit_dcv_expiration_metrics()
+    emit_dcv_expiration_metrics()
 
     # days_until_expiration gauge only for the domain that has an expiry.
     dcv_calls = [
@@ -369,7 +369,7 @@ def test_emit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
     assert missing_calls[0].kwargs["metric_tags"]["domain"] == "nodcv.com"
 
 
-@patch("lemur.common.celery._emit_dcv_expiration_metrics")
+@patch("lemur.common.celery.emit_dcv_expiration_metrics")
 @patch("lemur.common.celery.certificate_service")
 @patch("lemur.common.celery.cli_certificate")
 @patch("lemur.common.celery.metrics")
@@ -419,7 +419,7 @@ def test_dcv_domain_is_known_suffix_match():
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_filters_unknown_domains(
+def testemit_dcv_expiration_metrics_filters_unknown_domains(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     # Staging knows only its own domains; a prod domain in DigiCert should be skipped.
@@ -443,9 +443,9 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
-    from lemur.common.celery import _emit_dcv_expiration_metrics
+    from lemur.common.celery import emit_dcv_expiration_metrics
 
-    _emit_dcv_expiration_metrics()
+    emit_dcv_expiration_metrics()
 
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
