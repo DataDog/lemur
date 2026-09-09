@@ -1327,13 +1327,13 @@ def _emit_dcv_expiration_metrics():
             dcv_expiration = entry.get("dcv_expiration")
             if not dcv_expiration:
                 current_app.logger.warning(
-                    f"_emit_dcv_expiration_metrics: failed on entry for ca={ca_name}: {e}",
+                    f"_emit_dcv_expiration_metrics: missing DCV data for domain={domain} ca={ca_name}",
                     exc_info=True,
                 )
                 capture_exception()
                 metrics.send(
-                    "dcv.expiration_check.domain.errors",
-                    "counter",
+                    "dcv.expiration_check.domain.missing_dcv",
+                    "gauge",
                     1,
                     metric_tags={"ca": ca_name, "domain": domain},
                 )
