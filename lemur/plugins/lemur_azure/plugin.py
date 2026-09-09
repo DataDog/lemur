@@ -10,6 +10,8 @@
 .. moduleauthor:: sirferl
 """
 
+import re
+
 from flask import current_app
 from sentry_sdk import capture_exception
 from azure.keyvault.certificates import CertificateClient, CertificatePolicy
@@ -292,10 +294,14 @@ class AzureDestinationPlugin(DestinationPlugin):
         ca_certs = parse_certificate(cert_chain)
         ca_vendor = parse_ca_vendor(ca_certs)
         key_type = get_key_type_from_certificate(body)
-        certificate_name = "{common_name}-{ca_vendor}-{key_type}".format(
-            common_name=common_name(cert).replace(".", "-").replace("*", "star"),
-            ca_vendor=ca_vendor,
-            key_type=key_type,
+        certificate_name = re.sub(
+            r"[^0-9A-Za-z-]",
+            "",
+            "{common_name}-{ca_vendor}-{key_type}".format(
+                common_name=common_name(cert).replace(".", "-").replace("*", "star"),
+                ca_vendor=ca_vendor,
+                key_type=key_type,
+            )
         )
 
         certificate_client = CertificateClient(
