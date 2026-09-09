@@ -20,11 +20,25 @@ _SECTIGO_DCV_METHOD_MAP = {
     "PERSISTENT_TXT": "persistent-txt",
 }
 
+# Map Sectigo's DCV status vocabulary to the shared active/pending/expired set
+# used by DigiCert so the dcv_status tag is consistent across CAs.
+_SECTIGO_DCV_STATUS_MAP = {
+    "VALIDATED": "active",
+    "NOT_VALIDATED": "pending",
+    "EXPIRED": "expired",
+}
+
 
 def _normalize_dcv_method(method):
     if not method:
         return "unknown"
     return _SECTIGO_DCV_METHOD_MAP.get(method.upper(), method.lower())
+
+
+def _normalize_dcv_status(status):
+    if not status:
+        return "unknown"
+    return _SECTIGO_DCV_STATUS_MAP.get(status.upper(), status.lower())
 
 
 class SectigoIssuerPlugin(IssuerPlugin):
@@ -131,6 +145,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
           - validation_type: str  -- "dv" (Sectigo)
           - org_id: str
           - dcv_method: str  -- e.g. CNAME, PERSISTENT_TXT
+          - dcv_status: str  -- active / pending / expired (Sectigo)
         """
         url = f"{self.client.base_url}/dcv/v1/validation"
         response = self.client.session.get(url)
@@ -166,11 +181,13 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     "domain": name,
                     # Prod Sectigo does not return expirationDate for its
                     # persistent-txt domains, so dcv_expiration is always None
-                    # (kept as a key so every plugin returns the same schema).
+                    # (kept as a key so every plugin returns the same schema);
+                    # DCV health is signaled via dcv_status below.
                     "dcv_expiration": None,
                     "validation_type": "dv",
                     "org_id": org_id,
                     "dcv_method": _normalize_dcv_method(entry.get("dcvMethod", "unknown")),
+                    "dcv_status": _normalize_dcv_status(entry.get("dcvStatus", "unknown")),
                 }
             )
         return results

@@ -144,6 +144,7 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
             "validation_type": "ov",
             "org_id": "42",
             "dcv_method": "persistent-txt",
+            "dcv_status": "active",
         }
     ]
     mock_plugins.all.return_value = [fake_plugin]
@@ -153,15 +154,69 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
     emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    dcv_calls = [c for c in gauge_calls if "dcv.days_until_expiration" in c.args[0]]
-    assert len(dcv_calls) == 1
-    tags = dcv_calls[0].kwargs["metric_tags"]
+    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    assert len(vs_calls) == 1
+    assert vs_calls[0].args[2] == 1  # active -> healthy
+    tags = vs_calls[0].kwargs["metric_tags"]
     assert tags["domain"] == "example.com"
     assert tags["ca"] == "digicert-issuer"
-    assert tags["validation_type"] == "ov"
-    assert tags["org_id"] == "42"
+    assert tags["dcv_status"] == "active"
     assert tags["dcv_method"] == "persistent-txt"
-    assert dcv_calls[0].args[2] > 0
+    assert tags["validation_type"] == "ov"
+
+
+def test_dcv_status_ok_mapping():
+    from lemur.common.celery import _dcv_status_ok
+
+    # Shared vocabulary (both plugins normalize to active/pending/expired)
+    assert _dcv_status_ok("digicert-issuer", "active") is True
+    assert _dcv_status_ok("digicert-issuer", "pending") is False
+    assert _dcv_status_ok("digicert-issuer", "expired") is False
+
+    # Sectigo statuses are normalized upstream to the shared vocabulary
+    assert _dcv_status_ok("sectigo-issuer", "active") is True
+    assert _dcv_status_ok("sectigo-issuer", "pending") is False
+    assert _dcv_status_ok("sectigo-issuer", "expired") is False
+
+    # unknown / missing -> not healthy (fail closed)
+    assert _dcv_status_ok("digicert-issuer", "unknown") is False
+    assert _dcv_status_ok("sectigo-issuer", "") is False
+
+
+@patch("lemur.common.celery.get_all_domains")
+@patch("lemur.common.celery.plugins")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
+    mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
+):
+    # Sectigo prod does not return expirationDate, so dcv_expiration is absent;
+    # dcv.validation_status must still be emitted from dcv_status.
+    mock_get_all_domains.return_value = [SimpleNamespace(name="datad0g.com")]
+    fake_plugin = MagicMock()
+    fake_plugin.slug = "sectigo-issuer"
+    fake_plugin.get_dcv_expiration_data.return_value = [
+        {
+            "domain": "datad0g.com",
+            "dcv_expiration": None,
+            "validation_type": "dv",
+            "org_id": "35917",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "active",
+        }
+    ]
+    mock_plugins.all.return_value = [fake_plugin]
+
+    from lemur.common.celery import emit_dcv_expiration_metrics
+
+    emit_dcv_expiration_metrics()
+
+    gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
+    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    assert len(vs_calls) == 1
+    assert vs_calls[0].args[2] == 1  # active -> healthy
+    assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "active"
+    assert vs_calls[0].kwargs["metric_tags"]["ca"] == "sectigo-issuer"
 
 
 @patch("lemur.common.celery.get_all_domains")
@@ -197,7 +252,7 @@ def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
         for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2
         and c.args[1] == "gauge"
-        and "dcv.days_until_expiration" in c.args[0]
+        and "dcv.validation_status" in c.args[0]
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "good.com"
@@ -230,67 +285,9 @@ def test_emit_dcv_expiration_metrics_empty_data_no_metric(
 
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
+        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.validation_status" in c.args[0]
     ]
     assert len(dcv_calls) == 0
-
-
-@patch("lemur.common.celery.get_all_domains")
-@patch("lemur.common.celery.plugins")
-@patch("lemur.common.celery.metrics")
-@patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_missing_dcv_emits_error_not_gauge(
-    mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
-):
-    # A known domain returned without dcv_expiration should be reported as a
-    # missing_dcv error metric, not silently skipped and not emitted as a gauge.
-    # The plugin provides expiry for another domain, so this is a per-domain
-    # anomaly (not a CA that returns no expiry at all).
-    mock_get_all_domains.return_value = [
-        SimpleNamespace(name="nodcv.com"),
-        SimpleNamespace(name="good.com"),
-    ]
-    fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
-    fake_plugin.get_dcv_expiration_data.return_value = [
-        {
-            "domain": "nodcv.com",
-            "dcv_expiration": None,
-            "validation_type": "ov",
-            "org_id": "42",
-            "dcv_method": "persistent-txt",
-        },
-        {
-            "domain": "good.com",
-            "dcv_expiration": "2099-01-01T00:00:00+00:00",
-            "validation_type": "ov",
-            "org_id": "42",
-            "dcv_method": "persistent-txt",
-        },
-    ]
-    mock_plugins.all.return_value = [fake_plugin]
-
-    from lemur.common.celery import emit_dcv_expiration_metrics
-
-    emit_dcv_expiration_metrics()
-
-    # days_until_expiration gauge only for the domain that has an expiry.
-    dcv_calls = [
-        c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
-    ]
-    assert len(dcv_calls) == 1
-    assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "good.com"
-
-    # A missing_dcv error gauge is emitted, tagged with ca + domain.
-    missing_calls = [
-        c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 1 and "dcv.expiration_check.domain.missing_dcv" in c.args[0]
-    ]
-    assert len(missing_calls) == 1
-    assert missing_calls[0].args[2] == 1
-    assert missing_calls[0].kwargs["metric_tags"]["ca"] == "digicert-issuer"
-    assert missing_calls[0].kwargs["metric_tags"]["domain"] == "nodcv.com"
 
 
 @patch("lemur.common.celery.emit_dcv_expiration_metrics")
@@ -373,7 +370,7 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
 
     dcv_calls = [
         c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.days_until_expiration" in c.args[0]
+        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.validation_status" in c.args[0]
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "lemur-sandbox.datad0g.com"

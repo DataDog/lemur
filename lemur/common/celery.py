@@ -1283,17 +1283,33 @@ def _dcv_domain_is_known(domain, known_domains):
     return False
 
 
+def _dcv_status_ok(ca_name, dcv_status):
+    """
+    Return True if the CA's DCV validation status indicates a healthy/valid state.
+
+    Both DigiCert and Sectigo plugins normalize dcv_status to the shared
+    active/pending/expired vocabulary (DigiCert complete->active, failed->expired;
+    Sectigo VALIDATED->active, EXPIRED->expired). Only "active" is healthy;
+    pending/reuse-cycle and expired are not.
+
+    The raw status is still tagged on the gauge so a monitor can alert on the
+    specific broken value (dcv_status:expired) without treating a normal
+    pending/reuse-cycle state as a failure.
+    """
+    status = (dcv_status or "").strip().lower()
+    return status == "active"
+
+
 def emit_dcv_expiration_metrics():
     """
     Iterates all registered issuer plugins that implement get_dcv_expiration_data()
-    and emits dcv.days_until_expiration gauge per domain (RDNA-1000).
+    and emits the dcv.validation_status gauge per domain (RDNA-1000).
 
     Folded into certificate_expirations_metrics as part of EVBL-51 so a single
     task owns all certificate/DCV expiry telemetry.
     """
     total_domains = 0
     total_errors = 0
-    now = datetime.now(timezone.utc)
 
     # Scope DCV metrics to the domains Lemur is aware of (from the domains table).
     # This keeps each deployment reporting only its own domains (e.g. staging
@@ -1319,50 +1335,24 @@ def emit_dcv_expiration_metrics():
             )
             continue
 
-        # Some CAs/accounts don't return an expiry at all (e.g. prod Sectigo
-        # persistent-txt has no expirationDate). If a plugin provides no expiry
-        # for any domain, a missing dcv_expiration is expected, not an error.
-        plugin_has_expiry = any(e.get("dcv_expiration") for e in dcv_data)
-
         ca_domains = 0
         for entry in dcv_data:
             domain = entry.get("domain", "unknown")
             if not _dcv_domain_is_known(domain, known_domains):
                 continue
-            dcv_expiration = entry.get("dcv_expiration")
-            if not dcv_expiration:
-                if plugin_has_expiry:
-                    # Per-domain anomaly: this plugin generally provides expiry
-                    # but this domain is missing it.
-                    current_app.logger.warning(
-                        f"emit_dcv_expiration_metrics: missing DCV data for domain={domain} ca={ca_name}",
-                        exc_info=True,
-                    )
-                    capture_exception()
-                    metrics.send(
-                        "dcv.expiration_check.domain.missing_dcv",
-                        "gauge",
-                        1,
-                        metric_tags={"ca": ca_name, "domain": domain},
-                    )
-                    total_errors += 1
-                continue
-            expiry_dt = datetime.fromisoformat(
-                dcv_expiration.replace("Z", "+00:00")
-            )
-            if expiry_dt.tzinfo is None:
-                expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
-            days_remaining = (expiry_dt - now).days
+            # Emit the DCV validation-status gauge for every known domain.
+            # 1 = healthy/valid, 0 = otherwise.
+            dcv_status = entry.get("dcv_status", "unknown")
             metrics.send(
-                "dcv.days_until_expiration",
+                "dcv.validation_status",
                 "gauge",
-                days_remaining,
+                1 if _dcv_status_ok(ca_name, dcv_status) else 0,
                 metric_tags={
                     "domain": domain,
                     "ca": ca_name,
-                    "validation_type": entry.get("validation_type", "unknown"),
-                    "org_id": entry.get("org_id", "unknown"),
+                    "dcv_status": dcv_status,
                     "dcv_method": entry.get("dcv_method", "unknown"),
+                    "validation_type": entry.get("validation_type", "unknown"),
                 },
             )
             ca_domains += 1
