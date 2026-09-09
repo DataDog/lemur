@@ -182,6 +182,7 @@ class TestSectigoIssuerPlugin(TestCase):
                 result = plugin.get_dcv_expiration_data()
             self.assertEqual(len(result), 2)
             self.assertEqual(result[0]["domain"], "datad0g.com")
+            self.assertIsNone(result[0]["dcv_expiration"])
             self.assertEqual(result[0]["dcv_method"], "CNAME")
             self.assertEqual(result[0]["validation_type"], "dv")
             self.assertEqual(result[0]["org_id"], "35917")

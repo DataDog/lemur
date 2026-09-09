@@ -498,7 +498,19 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         return current_app.config.get("DIGICERT_ROOT"), "", [role]
 
     def get_dcv_expiration_data(self):
-        """Queries DigiCert /v2/domain for all active domains and their DCV expiration dates."""
+        """
+        Query DigiCert /v2/domain for all active domains and their DCV state.
+
+        Returns a list of dicts with a schema shared by all issuer plugins that
+        implement this method (see lemur_sectigo):
+          - domain: str
+          - dcv_expiration: str (ISO date) | None  -- DCV expiry date, or None
+            if the CA doesn't provide one
+          - validation_type: str  -- "ov" / "ev" (DigiCert)
+          - org_id: str
+          - dcv_method: str  -- e.g. dns-cname-token, persistent-txt
+          - dcv_status: str  -- complete / pending / failed (DigiCert)
+        """
         base_url = current_app.config.get("DIGICERT_URL")
         if not base_url:
             raise ValueError("DIGICERT_URL is not configured; cannot perform DCV expiration check")

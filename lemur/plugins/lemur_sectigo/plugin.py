@@ -103,11 +103,17 @@ class SectigoIssuerPlugin(IssuerPlugin):
 
     def get_dcv_expiration_data(self):
         """
-        Query Sectigo /api/dcv/v1/validation for domain DCV status + expiration.
+        Query Sectigo /api/dcv/v1/validation for domain DCV status.
 
-        Returns entries shaped like the DigiCert plugin so the consolidated
-        _emit_dcv_expiration_metrics task emits lemur.dcv.days_until_expiration
-        gauges tagged with ca=sectigo-issuer (RDNA-1000).
+        Returns a list of dicts with a schema shared by all issuer plugins that
+        implement this method (see lemur_digicert):
+          - domain: str
+          - dcv_expiration: str (ISO date) | None  -- always None for Sectigo
+            (prod does not return expirationDate)
+          - validation_type: str  -- "dv" (Sectigo)
+          - org_id: str
+          - dcv_method: str  -- e.g. CNAME, PERSISTENT_TXT
+          - dcv_status: str  -- VALIDATED / NOT_VALIDATED / EXPIRED (Sectigo)
         """
         url = f"{self.client.base_url}/dcv/v1/validation"
         response = self.client.session.get(url)
@@ -142,8 +148,10 @@ class SectigoIssuerPlugin(IssuerPlugin):
                 {
                     "domain": name,
                     # Prod Sectigo does not return expirationDate for its
-                    # persistent-txt domains, so there is no dcv_expiration to
-                    # report — DCV health is signaled via dcv_status below.
+                    # persistent-txt domains, so dcv_expiration is always None
+                    # (kept as a key so every plugin returns the same schema);
+                    # DCV health is signaled via dcv_status below.
+                    "dcv_expiration": None,
                     "validation_type": "dv",
                     "org_id": org_id,
                     "dcv_method": entry.get("dcvMethod", "unknown"),
