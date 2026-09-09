@@ -270,6 +270,51 @@ def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_dcv_expiration_metrics_malformed_entry_emits_error(
+    mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
+):
+    mock_get_all_domains.return_value = [SimpleNamespace(name="example.com")]
+    fake_plugin = MagicMock()
+    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.get_dcv_expiration_data.return_value = [
+        {
+            "domain": "example.com",
+            "dcv_expiration": "2099-01-01T00:00:00+00:00",
+            "validation_type": "ov",
+            "org_id": "42",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "active",
+        },
+        {"dcv_status": "active"},  # malformed: no domain
+        "not-a-dict",  # malformed: not a dict
+    ]
+    mock_plugins.all.return_value = [fake_plugin]
+
+    from lemur.common.celery import emit_dcv_expiration_metrics
+
+    emit_dcv_expiration_metrics()
+
+    # The well-formed entry still emits a gauge.
+    gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
+    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    assert len(vs_calls) == 1
+    assert vs_calls[0].kwargs["metric_tags"]["domain"] == "example.com"
+
+    # Each malformed entry surfaces as a plugin error tagged with reason=malformed_entry.
+    malformed_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if "dcv.expiration_check.plugin.errors" in c.args[0]
+        and c.kwargs.get("metric_tags", {}).get("reason") == "malformed_entry"
+    ]
+    assert len(malformed_calls) == 2
+    assert all(c.kwargs["metric_tags"]["ca"] == "digicert-issuer" for c in malformed_calls)
+
+
+@patch("lemur.common.celery.get_all_domains")
+@patch("lemur.common.celery.plugins")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
 def test_emit_dcv_expiration_metrics_empty_data_no_metric(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):

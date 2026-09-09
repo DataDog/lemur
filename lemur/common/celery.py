@@ -1309,7 +1309,7 @@ def emit_dcv_expiration_metrics():
     task owns all certificate/DCV expiry telemetry.
     """
     total_domains = 0
-    total_errors = 0
+    ca_domains_by_ca = {}
 
     # Scope DCV metrics to the domains Lemur is aware of (from the domains table).
     # This keeps each deployment reporting only its own domains (e.g. staging
@@ -1321,8 +1321,6 @@ def emit_dcv_expiration_metrics():
         ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
         try:
             dcv_data = plugin.get_dcv_expiration_data()
-            if not dcv_data:
-                raise ValueError(f"{ca_name} returned no DCV data")
         except SoftTimeLimitExceeded:
             raise
         except Exception as e:
@@ -1335,9 +1333,24 @@ def emit_dcv_expiration_metrics():
             )
             continue
 
+        if not dcv_data:
+            # Issuer doesn't support DCV checking (the base returns []) or has no
+            # rows: a valid no-op, not an error.
+            continue
+
         ca_domains = 0
         for entry in dcv_data:
-            domain = entry.get("domain", "unknown")
+            if not isinstance(entry, dict) or not entry.get("domain"):
+                # Malformed entry: no domain to attribute the status to. Surface
+                # it as a data-quality error rather than silently dropping it.
+                metrics.send(
+                    "dcv.expiration_check.plugin.errors",
+                    "counter",
+                    1,
+                    metric_tags={"ca": ca_name, "reason": "malformed_entry"},
+                )
+                continue
+            domain = entry["domain"]
             if not _dcv_domain_is_known(domain, known_domains):
                 continue
             # Emit the DCV validation-status gauge for every known domain.
@@ -1358,7 +1371,9 @@ def emit_dcv_expiration_metrics():
             ca_domains += 1
         metrics.send("dcv.expiration_check.domains_checked", "gauge", ca_domains, metric_tags={"ca": ca_name})
         total_domains += ca_domains
+        ca_domains_by_ca[ca_name] = ca_domains
 
     current_app.logger.info(
-        f"emit_dcv_expiration_metrics: done. domains={total_domains}, errors={total_errors}"
+        f"emit_dcv_expiration_metrics: done. domains_checked={total_domains}, "
+        f"cas_with_data={ca_domains_by_ca}"
     )
