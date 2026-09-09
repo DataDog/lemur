@@ -526,8 +526,9 @@ class DigiCertIssuerPlugin(IssuerPlugin):
             domain_name = domain.get("name", "unknown")
             org_id = str(domain.get("organization", {}).get("id", "unknown"))
             # DCV method (e.g. dns-cname-token, persistent-txt) — DigiCert is
-            # moving domains to persistent DNS validation; tag it so persistent
-            # domains can be distinguished in the expiry metric.
+            # moving domains to persistent DNS validation; report the raw value
+            # as DigiCert returns it (do NOT normalize a truncated token like
+            # dns-persistent-t — that's a DigiCert data bug we want to surface).
             dcv_method = domain.get("dcv_method") or "unknown"
             # DCV validation status (complete/pending/failed) per validation type.
             # The list endpoint only exposes validations[].status (active/pending);
@@ -556,7 +557,9 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                     "validation_type": val_type,
                     "org_id": org_id,
                     "dcv_method": dcv_method,
-                    "dcv_status": dcv_status_by_type.get(val_type, "unknown"),
+                    # DigiCert reports dcv_status as complete/pending/failed;
+                    # lowercase for a consistent tag vocabulary.
+                    "dcv_status": (dcv_status_by_type.get(val_type) or "unknown").lower(),
                 })
         return results
 

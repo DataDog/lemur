@@ -9,6 +9,38 @@ from lemur.plugins.bases import IssuerPlugin
 from retrying import retry
 
 
+# Map Sectigo's DCV method tokens to the shared lowercase vocabulary used by
+# other issuer plugins (e.g. DigiCert) so the dcv_method tag is consistent
+# across CAs.
+_SECTIGO_DCV_METHOD_MAP = {
+    "CNAME": "dns-cname-token",
+    "TXT": "dns-txt-token",
+    "HTTP": "http-token",
+    "EMAIL": "email",
+    "PERSISTENT_TXT": "persistent-txt",
+}
+
+# Map Sectigo's DCV status vocabulary to the shared complete/pending/failed set
+# used by DigiCert so the dcv_status tag is consistent across CAs.
+_SECTIGO_DCV_STATUS_MAP = {
+    "VALIDATED": "complete",
+    "NOT_VALIDATED": "pending",
+    "EXPIRED": "failed",
+}
+
+
+def _normalize_dcv_method(method):
+    if not method:
+        return "unknown"
+    return _SECTIGO_DCV_METHOD_MAP.get(method.upper(), method.lower())
+
+
+def _normalize_dcv_status(status):
+    if not status:
+        return "unknown"
+    return _SECTIGO_DCV_STATUS_MAP.get(status.upper(), status.lower())
+
+
 class SectigoIssuerPlugin(IssuerPlugin):
     title = "Sectigo"
     slug = "sectigo-issuer"
@@ -154,10 +186,12 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     "dcv_expiration": None,
                     "validation_type": "dv",
                     "org_id": org_id,
-                    "dcv_method": entry.get("dcvMethod", "unknown"),
-                    # Sectigo reports DCV validation state as dcvStatus
-                    # (VALIDATED / NOT_VALIDATED / EXPIRED).
-                    "dcv_status": entry.get("dcvStatus", "unknown"),
+                    # Normalized to the shared lowercase vocabulary (e.g.
+                    # PERSISTENT_TXT -> persistent-txt, CNAME -> dns-cname-token).
+                    "dcv_method": _normalize_dcv_method(entry.get("dcvMethod", "unknown")),
+                    # Normalized to the shared complete/pending/failed vocabulary
+                    # (VALIDATED -> complete, NOT_VALIDATED -> pending, EXPIRED -> failed).
+                    "dcv_status": _normalize_dcv_status(entry.get("dcvStatus", "unknown")),
                 }
             )
         return results

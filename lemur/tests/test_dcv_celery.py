@@ -178,16 +178,16 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
 def test_dcv_status_ok_mapping():
     from lemur.common.celery import _dcv_status_ok
 
-    # DigiCert: complete/active are healthy; pending/failed are not
+    # Shared vocabulary (both plugins normalize to complete/pending/failed)
     assert _dcv_status_ok("digicert-issuer", "complete") is True
-    assert _dcv_status_ok("digicert-issuer", "active") is True
+    assert _dcv_status_ok("digicert-issuer", "active") is True  # list-endpoint fallback
     assert _dcv_status_ok("digicert-issuer", "pending") is False
     assert _dcv_status_ok("digicert-issuer", "failed") is False
 
-    # Sectigo: VALIDATED is healthy; NOT_VALIDATED/EXPIRED are not
-    assert _dcv_status_ok("sectigo-issuer", "VALIDATED") is True
-    assert _dcv_status_ok("sectigo-issuer", "NOT_VALIDATED") is False
-    assert _dcv_status_ok("sectigo-issuer", "EXPIRED") is False
+    # Sectigo statuses are normalized upstream to the shared vocabulary
+    assert _dcv_status_ok("sectigo-issuer", "complete") is True
+    assert _dcv_status_ok("sectigo-issuer", "pending") is False
+    assert _dcv_status_ok("sectigo-issuer", "failed") is False
 
     # unknown / missing -> not healthy (fail closed)
     assert _dcv_status_ok("digicert-issuer", "unknown") is False
@@ -212,8 +212,8 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
             "dcv_expiration": None,
             "validation_type": "dv",
             "org_id": "35917",
-            "dcv_method": "PERSISTENT_TXT",
-            "dcv_status": "VALIDATED",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "complete",
         }
     ]
     mock_plugins.all.return_value = [fake_plugin]
@@ -225,8 +225,8 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
     vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
     assert len(vs_calls) == 1
-    assert vs_calls[0].args[2] == 1  # VALIDATED -> healthy
-    assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "VALIDATED"
+    assert vs_calls[0].args[2] == 1  # complete -> healthy
+    assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "complete"
     assert vs_calls[0].kwargs["metric_tags"]["ca"] == "sectigo-issuer"
 
     # No days_until_expiration gauge (no expiration date); and because this
