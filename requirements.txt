@@ -281,7 +281,7 @@ logmatic-python==0.1.7
     # via -r requirements-datadog.in
 mako==1.3.10
     # via alembic
-markupsafe==2.1.5
+markupsafe==3.0.3
     # via
     #   -r requirements-datadog.in
     #   jinja2
