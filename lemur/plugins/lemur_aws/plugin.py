@@ -457,11 +457,17 @@ class AWSSourcePlugin(SourcePlugin):
         if endpoint.type not in ["elb", "elbv2"]:
             raise NotImplementedError()
 
-        partition = current_app.config.get("LEMUR_AWS_PARTITION", "aws")
         if endpoint.registry_type == "iam":
-            arn = iam.create_arn_from_cert(
-                account_number, partition, certificate.name, endpoint.certificate_path
-            )
+            # Resolve the cert's real IAM ARN rather than assuming endpoint.certificate_path:
+            # a cert with a CloudFront destination lives under /cloudfront/, not /, so rebuilding
+            # the ARN from the endpoint's path 404s with CertificateNotFound. get_certificate
+            # returns wherever the cert actually lives, and ELB listeners accept any IAM path.
+            cert = iam.get_certificate(certificate.name, account_number=account_number)
+            if not cert:
+                raise Exception(
+                    f"Certificate {certificate.name} not found in IAM (account {account_number})"
+                )
+            arn = cert["ServerCertificateMetadata"]["Arn"]
         else:
             raise Exception(
                 f"Lemur doesn't support rotating certificates on {endpoint.registry_type} registry"

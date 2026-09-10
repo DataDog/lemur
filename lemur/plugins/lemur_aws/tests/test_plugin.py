@@ -231,3 +231,47 @@ def test_get_elb_endpoints_v2_skips_gwlb_listeners():
 
     assert not mock_certs.called
     assert endpoints == []
+
+
+def test_update_endpoint_elbv2_uses_resolved_iam_arn(app):
+    """ELB rotation must attach the cert's real IAM ARN (resolved via get_certificate),
+    not one rebuilt from endpoint.certificate_path. A cert that also has a CloudFront
+    destination lives under /cloudfront/, so a rebuilt "/"-path ARN 404s with
+    CertificateNotFound (CLOUDR-2055)."""
+    from lemur.plugins.base import plugins
+    from lemur.plugins.lemur_aws import plugin as aws_plugin
+
+    p = plugins.get("aws-source")
+
+    # cert exists only under /cloudfront/ because it also has a CloudFront destination
+    real_arn = (
+        "arn:aws:iam::123456789012:server-certificate/cloudfront/"
+        "wildcard.example.com-20260721-20270204"
+    )
+    endpoint = mock.Mock()
+    endpoint.type = "elbv2"
+    endpoint.registry_type = "iam"
+    endpoint.certificate_path = "/"  # current cert is at root; the reissue is not
+    endpoint.dnsname = "alb-test-1234567890.us-east-1.elb.amazonaws.com"
+    endpoint.name = "alb-test"
+    endpoint.port = 443
+    certificate = mock.Mock()
+    certificate.name = "wildcard.example.com-20260721-20270204"
+
+    get_option = mock.patch.object(p, "get_option", return_value="123456789012")
+    get_cert = mock.patch.object(
+        aws_plugin.iam,
+        "get_certificate",
+        return_value={"ServerCertificateMetadata": {"Arn": real_arn}},
+    )
+    get_listener = mock.patch.object(
+        aws_plugin.elb, "get_listener_arn_from_endpoint", return_value="listener-arn"
+    )
+    attach = mock.patch.object(aws_plugin.elb, "attach_certificate_v2")
+
+    with get_option, get_cert as m_get, get_listener, attach as m_attach:
+        p.update_endpoint(endpoint, certificate)
+
+    m_get.assert_called_once_with(certificate.name, account_number="123456789012")
+    args, _ = m_attach.call_args
+    assert args[2] == [{"CertificateArn": real_arn}]
