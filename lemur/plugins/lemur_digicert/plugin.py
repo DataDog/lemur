@@ -522,8 +522,6 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         Returns a list of dicts with a schema shared by all issuer plugins that
         implement this method (see lemur_sectigo):
           - domain: str
-          - dcv_expiration: str (ISO date) | None  -- DCV expiry date, or None
-            if the CA doesn't provide one
           - validation_type: str  -- "ov" / "ev" (DigiCert)
           - org_id: str
           - dcv_method: str  -- e.g. dns-cname-token, persistent-txt
@@ -538,14 +536,14 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         for domain in data.get("domains", []):
             if not domain.get("is_active", False):
                 continue
-            dcv_exp_map = domain.get("dcv_expiration")
-            if not dcv_exp_map:
-                continue
             domain_name = domain.get("name")
             if not domain_name:
                 continue
             org_id = str(domain.get("organization", {}).get("id", "unknown"))
             dcv_method = domain.get("dcv_method") or "unknown"
+            # Validation types (ov/ev) and their status come from the per-domain
+            # /validation endpoint; DigiCert's dcv_expiration data is unreliable
+            # and unused, so it is not returned.
             dcv_status_by_type = {}
             domain_id = domain.get("id")
             if domain_id:
@@ -564,10 +562,12 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                     # endpoint already reports active/pending (shared vocabulary).
                     for v in domain.get("validations", []):
                         dcv_status_by_type[v.get("type")] = v.get("status", "unknown")
-            for val_type, dcv_exp in dcv_exp_map.items():
+            if not dcv_status_by_type:
+                # No validation data to report for this domain.
+                continue
+            for val_type in dcv_status_by_type:
                 results.append({
                     "domain": domain_name,
-                    "dcv_expiration": dcv_exp,
                     "validation_type": val_type,
                     "org_id": org_id,
                     "dcv_method": dcv_method,

@@ -182,7 +182,6 @@ class TestSectigoIssuerPlugin(TestCase):
                 result = plugin.get_dcv_expiration_data()
             self.assertEqual(len(result), 2)
             self.assertEqual(result[0]["domain"], "datad0g.com")
-            self.assertIsNone(result[0]["dcv_expiration"])
             # Sectigo tokens are normalized to the shared lowercase vocabulary
             self.assertEqual(result[0]["dcv_method"], "dns-cname-token")
             self.assertEqual(result[0]["validation_type"], "dv")

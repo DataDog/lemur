@@ -387,9 +387,7 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
     by_type = {r["validation_type"]: r for r in result}
     assert set(by_type.keys()) == {"ov", "ev"}
     assert by_type["ov"]["domain"] == "example.com"
-    assert by_type["ov"]["dcv_expiration"] == "2026-09-01T00:00:00+00:00"
     assert by_type["ov"]["org_id"] == "42"
-    assert by_type["ev"]["dcv_expiration"] == "2026-08-01T00:00:00+00:00"
     # dcv_status is populated from the per-domain /validation endpoint
     # (complete -> active in the shared vocabulary)
     assert by_type["ov"]["dcv_status"] == "active"
