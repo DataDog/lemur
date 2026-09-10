@@ -1369,7 +1369,12 @@ def emit_dcv_expiration_metrics():
                 },
             )
             ca_domains += 1
-        metrics.send("dcv.expiration_check.domains_checked", "gauge", ca_domains, metric_tags={"ca": ca_name})
+        metrics.send(
+            "dcv.expiration_check.domains_checked",
+            "gauge",
+            ca_domains,
+            metric_tags={"ca": ca_name},
+        )
         total_domains += ca_domains
         ca_domains_by_ca[ca_name] = ca_domains
 
