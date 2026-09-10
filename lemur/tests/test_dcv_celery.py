@@ -419,3 +419,20 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "lemur-sandbox.datad0g.com"
+
+
+def test_squash_known_domains_deep_nesting_and_wildcards():
+    from lemur.common.celery import _squash_known_domains
+
+    # Deep nesting, wildcard, mixed case, leading/trailing dots all collapse to
+    # the minimal apex set; subdomains are pruned.
+    result = _squash_known_domains([
+        "*.datad0g.com",
+        "a.b.c.datad0g.com",
+        "DATAD0G.com",
+        ".datad0g.com.",
+        "us1.staging.dog",
+        "vault.us1.staging.dog",
+        "other.com",
+    ])
+    assert result == {"datad0g.com", "us1.staging.dog", "other.com"}

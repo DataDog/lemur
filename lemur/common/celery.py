@@ -1253,6 +1253,10 @@ def _squash_known_domains(domains):
     Returns a set of apex domains with subdomains removed: any known domain that
     is itself a subdomain of another known domain is redundant (the apex suffix
     match already covers it), so it's pruned.
+
+    Processed shortest-first so apexes are kept before their (longer) subdomains;
+    each domain is checked only against the small set of already-kept apexes, so
+    this is O(N*A) (A = number of apexes) rather than O(N^2).
     """
     known = set()
     for d in domains:
@@ -1260,8 +1264,8 @@ def _squash_known_domains(domains):
             continue
         known.add(d.lower().lstrip("*.").rstrip("."))
     pruned = set()
-    for d in known:
-        if not any(d != other and d.endswith("." + other) for other in known):
+    for d in sorted(known, key=len):
+        if not any(d.endswith("." + other) for other in pruned):
             pruned.add(d)
     return pruned
 

@@ -434,3 +434,42 @@ def test_get_dcv_expiration_data_fallback_uses_active(mock_current_app):
     assert len(result) == 1
     # list-endpoint fallback status is already in the shared vocabulary
     assert result[0]["dcv_status"] == "active"
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
+def test_get_dcv_expiration_data_reraises_soft_time_limit(mock_current_app):
+    import pytest
+    import requests_mock as rm
+    from celery.exceptions import SoftTimeLimitExceeded
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    mock_current_app.config = {
+        "DIGICERT_API_KEY": "api-key",
+        "DIGICERT_URL": "mock://www.digicert.com",
+        "DIGICERT_ORG_ID": 111111,
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_ROOT": "ROOT",
+    }
+
+    subject = DigiCertIssuerPlugin()
+    adapter = rm.Adapter()
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain",
+        text=json.dumps({
+            "domains": [
+                {"id": 1, "name": "example.com", "is_active": True, "organization": {"id": 42}},
+            ]
+        }),
+    )
+    # The per-domain /validation call hits the celery soft time limit; it must
+    # propagate (re-raise), not be swallowed by the fallback handler.
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain/1/validation",
+        exc=SoftTimeLimitExceeded,
+    )
+    subject.session.mount("mock", adapter)
+
+    with pytest.raises(SoftTimeLimitExceeded):
+        subject.get_dcv_expiration_data()

@@ -20,6 +20,7 @@ import arrow
 import pem
 import requests
 import sys
+from celery.exceptions import SoftTimeLimitExceeded
 from cryptography import x509
 from flask import current_app, g
 from lemur.common.utils import validate_conf, convert_pkcs7_bytes_to_pem
@@ -556,6 +557,8 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                         dcv_status_by_type[v.get("type")] = _normalize_dcv_status(
                             v.get("dcv_status", "unknown")
                         )
+                except SoftTimeLimitExceeded:
+                    raise
                 except Exception:
                     # Fall back to the list endpoint's per-type status rather than
                     # failing the whole run; never block metric emission. The list
