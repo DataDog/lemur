@@ -32,7 +32,6 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.dns_providers import cli as cli_dns_providers
-from lemur.domains.service import get_all as get_all_domains
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
 from lemur import fips
@@ -1246,47 +1245,6 @@ def certificate_expirations_metrics():
     return log_data
 
 
-def _squash_known_domains(domains):
-    """
-    Prune + squash the known-domain set to minimal apex domains.
-
-    Returns a set of apex domains with subdomains removed: any known domain that
-    is itself a subdomain of another known domain is redundant (the apex suffix
-    match already covers it), so it's pruned.
-
-    Processed shortest-first so apexes are kept before their (longer) subdomains;
-    each domain is checked only against the small set of already-kept apexes, so
-    this is O(N*A) (A = number of apexes) rather than O(N^2).
-    """
-    known = set()
-    for d in domains:
-        if not d:
-            continue
-        known.add(d.lower().lstrip("*.").rstrip("."))
-    pruned = set()
-    for d in sorted(known, key=len):
-        if not any(d.endswith("." + other) for other in pruned):
-            pruned.add(d)
-    return pruned
-
-
-def _dcv_domain_is_known(domain, known_domains):
-    """
-    Return True if domain is a known domain or a subdomain of one (suffix match).
-
-    CA's may list a subdomain (e.g. lemur-sandbox.datad0g.com) while the
-    domains table holds the apex/base domain (datad0g.com), so normalize before matching.
-    """
-    if not domain or domain == "unknown":
-        return False
-    domain = domain.lower().rstrip(".")
-    parts = domain.split(".")
-    for i in range(len(parts)):
-        if ".".join(parts[i:]) in known_domains:
-            return True
-    return False
-
-
 def _dcv_status_ok(ca_name, dcv_status):
     """
     Return True if the CA's DCV validation status indicates a healthy/valid state.
@@ -1304,23 +1262,40 @@ def _dcv_status_ok(ca_name, dcv_status):
     return status == "active"
 
 
+def _active_cert_domains_by_ca():
+    """
+    Return {ca_plugin_name: set(domain)} for every domain on an active (not
+    expired, not revoked) certificate, keyed by the issuing authority's plugin
+    name (e.g. "digicert-issuer"). This is the actual in-use domain set, used to
+    scope DCV monitoring so a domain with an active cert is always covered even
+    if the CA's own domain list omits it.
+    """
+    by_ca = {}
+    for cert in certificate_service.get_all_valid_certs(None):
+        ca_name = cert.authority.plugin_name if cert.authority else "unknown"
+        for d in cert.domains:
+            name = (d.name or "").lower().lstrip("*.").rstrip(".")
+            if name:
+                by_ca.setdefault(ca_name, set()).add(name)
+    return by_ca
+
+
 def emit_dcv_expiration_metrics():
     """
-    Iterates all registered issuer plugins that implement get_dcv_expiration_data()
-    and emits the dcv.validation_status gauge per domain (RDNA-1000).
+    Report dcv.validation_status for every domain with an active certificate,
+    driven by the in-use (active-cert) domain set rather than the CA's reported
+    list. This closes the coverage gap where a domain is in use but not reported
+    by a CA: such domains are emitted with dcv_status='uncovered' (0).
 
-    Folded into certificate_expirations_metrics as part of EVBL-51 so a single
-    task owns all certificate/DCV expiry telemetry.
+    Only CAs that implement get_dcv_expiration_data() (DigiCert, Sectigo) are
+    monitored; ACME/unknown authorities are skipped (they handle their own DCV).
+
+    Returns the set of persistent-txt domains (for the DNS-native check).
     """
-    total_domains = 0
-    ca_domains_by_ca = {}
-
-    # Scope DCV metrics to the domains Lemur is aware of (from the domains table).
-    # This keeps each deployment reporting only its own domains (e.g. staging
-    # reports staging domains, not prod), since each deployment's DB holds its
-    # own domains.
-    known_domains = _squash_known_domains(d.name for d in get_all_domains())
-
+    # CA-reported status lookup: {domain: {ca_plugin: entry}}.
+    ca_status_by_domain = {}
+    monitored_cas = set()
+    persist_domains = set()
     for plugin in plugins.all(plugin_type="issuer"):
         ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
         try:
@@ -1336,17 +1311,14 @@ def emit_dcv_expiration_metrics():
                 "dcv.expiration_check.plugin.errors", "counter", 1, metric_tags={"ca": ca_name}
             )
             continue
-
         if not dcv_data:
             # Issuer doesn't support DCV checking (the base returns []) or has no
-            # rows: a valid no-op, not an error.
+            # rows: not a monitored CA.
             continue
-
-        ca_domains = 0
+        monitored_cas.add(ca_name)
         for entry in dcv_data:
             if not isinstance(entry, dict) or not entry.get("domain"):
-                # Malformed entry: no domain to attribute the status to. Surface
-                # it as a data-quality error rather than silently dropping it.
+                # Malformed entry: surface it as a data-quality error.
                 metrics.send(
                     "dcv.expiration_check.plugin.errors",
                     "counter",
@@ -1355,11 +1327,32 @@ def emit_dcv_expiration_metrics():
                 )
                 continue
             domain = entry["domain"]
-            if not _dcv_domain_is_known(domain, known_domains):
-                continue
-            # Emit the DCV validation-status gauge for every known domain.
-            # 1 = healthy/valid, 0 = otherwise.
-            dcv_status = entry.get("dcv_status", "unknown")
+            ca_status_by_domain.setdefault(domain, {})[ca_name] = entry
+            if (entry.get("dcv_method") or "").lower() == "persistent-txt":
+                persist_domains.add(domain)
+
+    # Enumerate active-cert domains (the actual in-use set), keyed by CA plugin.
+    active_by_ca = _active_cert_domains_by_ca()
+    total_domains = 0
+    ca_domains_by_ca = {}
+    for ca_name, domains in active_by_ca.items():
+        if ca_name not in monitored_cas:
+            # Not a monitored CA (e.g. acme-issuer, unknown) — its DCV is handled
+            # by the CA itself, so we don't report a status for it.
+            continue
+        ca_domains = 0
+        for domain in sorted(domains):
+            entry = ca_status_by_domain.get(domain, {}).get(ca_name)
+            if entry:
+                dcv_status = entry.get("dcv_status", "unknown")
+                dcv_method = entry.get("dcv_method", "unknown")
+                validation_type = entry.get("validation_type", "unknown")
+            else:
+                # Active cert for this monitored CA but the CA didn't report the
+                # domain: a coverage gap. Flag it (0) so it's not silently missed.
+                dcv_status = "uncovered"
+                dcv_method = "unknown"
+                validation_type = "unknown"
             metrics.send(
                 "dcv.validation_status",
                 "gauge",
@@ -1368,8 +1361,8 @@ def emit_dcv_expiration_metrics():
                     "domain": domain,
                     "ca": ca_name,
                     "dcv_status": dcv_status,
-                    "dcv_method": entry.get("dcv_method", "unknown"),
-                    "validation_type": entry.get("validation_type", "unknown"),
+                    "dcv_method": dcv_method,
+                    "validation_type": validation_type,
                 },
             )
             ca_domains += 1
@@ -1386,3 +1379,4 @@ def emit_dcv_expiration_metrics():
         f"emit_dcv_expiration_metrics: done. domains_checked={total_domains}, "
         f"cas_with_data={ca_domains_by_ca}"
     )
+    return persist_domains
