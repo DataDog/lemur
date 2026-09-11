@@ -1335,6 +1335,7 @@ def emit_dcv_expiration_metrics():
     active_by_ca = _active_cert_domains_by_ca()
     total_domains = 0
     ca_domains_by_ca = {}
+    broken_by_ca = {}
     for ca_name, domains in active_by_ca.items():
         if ca_name not in monitored_cas:
             # Not a monitored CA (e.g. acme-issuer, unknown) — its DCV is handled
@@ -1353,6 +1354,8 @@ def emit_dcv_expiration_metrics():
                 dcv_status = "uncovered"
                 dcv_method = "unknown"
                 validation_type = "unknown"
+            if dcv_status in ("expired", "uncovered"):
+                broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
             metrics.send(
                 "dcv.validation_status",
                 "gauge",
@@ -1370,6 +1373,14 @@ def emit_dcv_expiration_metrics():
             "dcv.expiration_check.domains_checked",
             "gauge",
             ca_domains,
+            metric_tags={"ca": ca_name},
+        )
+        # Complementary dashboard signal: count of broken (expired/uncovered)
+        # domains per CA.
+        metrics.send(
+            "dcv.broken_domains",
+            "gauge",
+            broken_by_ca.get(ca_name, 0),
             metric_tags={"ca": ca_name},
         )
         total_domains += ca_domains
