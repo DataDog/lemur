@@ -335,7 +335,6 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
         "DIGICERT_ORG_ID": 111111,
         "DIGICERT_ORDER_TYPE": "ssl_plus",
         "DIGICERT_ROOT": "ROOT",
-        "DIGICERT_DCV_CHECK_ENABLED": True,
     }
 
     subject = DigiCertIssuerPlugin()
@@ -346,6 +345,7 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
         text=json.dumps({
             "domains": [
                 {
+                    "id": 1,
                     "name": "example.com",
                     "is_active": True,
                     "dcv_expiration": {"ov": "2026-09-01T00:00:00+00:00", "ev": "2026-08-01T00:00:00+00:00"},
@@ -367,6 +367,17 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
             ]
         }),
     )
+    # Per-domain validation endpoint exposes dcv_status (complete/pending/failed).
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain/1/validation",
+        text=json.dumps({
+            "validations": [
+                {"type": "ov", "status": "active", "dcv_status": "complete"},
+                {"type": "ev", "status": "active", "dcv_status": "complete"},
+            ]
+        }),
+    )
     subject.session.mount("mock", adapter)
 
     result = subject.get_dcv_expiration_data()
@@ -376,13 +387,16 @@ def test_get_dcv_expiration_data_returns_active_domains(mock_current_app):
     by_type = {r["validation_type"]: r for r in result}
     assert set(by_type.keys()) == {"ov", "ev"}
     assert by_type["ov"]["domain"] == "example.com"
-    assert by_type["ov"]["dcv_expiration"] == "2026-09-01T00:00:00+00:00"
     assert by_type["ov"]["org_id"] == "42"
-    assert by_type["ev"]["dcv_expiration"] == "2026-08-01T00:00:00+00:00"
+    # dcv_status is populated from the per-domain /validation endpoint
+    # (complete -> active in the shared vocabulary)
+    assert by_type["ov"]["dcv_status"] == "active"
+    assert by_type["ev"]["dcv_status"] == "active"
 
 
 @patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
-def test_get_dcv_expiration_data_disabled(mock_current_app):
+def test_get_dcv_expiration_data_fallback_uses_active(mock_current_app):
+    import requests_mock as rm
     from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
 
     mock_current_app.config = {
@@ -391,9 +405,71 @@ def test_get_dcv_expiration_data_disabled(mock_current_app):
         "DIGICERT_ORG_ID": 111111,
         "DIGICERT_ORDER_TYPE": "ssl_plus",
         "DIGICERT_ROOT": "ROOT",
-        "DIGICERT_DCV_CHECK_ENABLED": False,
     }
 
     subject = DigiCertIssuerPlugin()
+    adapter = rm.Adapter()
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain",
+        text=json.dumps({
+            "domains": [
+                {
+                    "id": 1,
+                    "name": "example.com",
+                    "is_active": True,
+                    "dcv_expiration": {"ov": "2026-09-01T00:00:00+00:00"},
+                    "organization": {"id": 42},
+                    # list endpoint only exposes validations[].status (active/pending)
+                    "validations": [{"type": "ov", "status": "active"}],
+                },
+            ]
+        }),
+    )
+    # Do NOT register the per-domain /validation endpoint -> it fails -> fallback.
+    subject.session.mount("mock", adapter)
+
     result = subject.get_dcv_expiration_data()
-    assert result == []
+
+    assert len(result) == 1
+    # list-endpoint fallback status is already in the shared vocabulary
+    assert result[0]["dcv_status"] == "active"
+
+
+@patch("lemur.plugins.lemur_digicert.plugin.current_app", new_callable=MagicMock)
+def test_get_dcv_expiration_data_reraises_soft_time_limit(mock_current_app):
+    import pytest
+    import requests_mock as rm
+    from celery.exceptions import SoftTimeLimitExceeded
+    from lemur.plugins.lemur_digicert.plugin import DigiCertIssuerPlugin
+
+    mock_current_app.config = {
+        "DIGICERT_API_KEY": "api-key",
+        "DIGICERT_URL": "mock://www.digicert.com",
+        "DIGICERT_ORG_ID": 111111,
+        "DIGICERT_ORDER_TYPE": "ssl_plus",
+        "DIGICERT_ROOT": "ROOT",
+    }
+
+    subject = DigiCertIssuerPlugin()
+    adapter = rm.Adapter()
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain",
+        text=json.dumps({
+            "domains": [
+                {"id": 1, "name": "example.com", "is_active": True, "organization": {"id": 42}},
+            ]
+        }),
+    )
+    # The per-domain /validation call hits the celery soft time limit; it must
+    # propagate (re-raise), not be swallowed by the fallback handler.
+    adapter.register_uri(
+        "GET",
+        "mock://www.digicert.com/services/v2/domain/1/validation",
+        exc=SoftTimeLimitExceeded,
+    )
+    subject.session.mount("mock", adapter)
+
+    with pytest.raises(SoftTimeLimitExceeded):
+        subject.get_dcv_expiration_data()

@@ -20,6 +20,7 @@ import arrow
 import pem
 import requests
 import sys
+from celery.exceptions import SoftTimeLimitExceeded
 from cryptography import x509
 from flask import current_app, g
 from lemur.common.utils import validate_conf, convert_pkcs7_bytes_to_pem
@@ -46,6 +47,24 @@ def log_status_code(r, *args, **kwargs):
     }
     metrics.send("digicert_status_code_{}".format(r.status_code), "counter", 1)
     current_app.logger.info(log_data)
+
+
+def _normalize_dcv_status(status):
+    """
+    Normalize a DigiCert dcv_status to the shared active/pending/expired vocabulary.
+
+    DigiCert's per-domain /validation endpoint reports complete/pending/failed;
+    map complete -> active and failed -> expired so the tag matches the shared
+    vocabulary (and the list-endpoint fallback's active/pending).
+    """
+    if not status:
+        return "unknown"
+    status = status.lower()
+    if status == "complete":
+        return "active"
+    if status == "failed":
+        return "expired"
+    return status
 
 
 def signature_hash(signing_algorithm):
@@ -498,38 +517,71 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         return current_app.config.get("DIGICERT_ROOT"), "", [role]
 
     def get_dcv_expiration_data(self):
-        """Queries DigiCert /v2/domain for all active domains and their DCV expiration dates."""
-        if not current_app.config.get("DIGICERT_DCV_CHECK_ENABLED", True):
-            return []
+        """
+        Query DigiCert /v2/domain for all active domains and their DCV state.
 
+        Returns a list of dicts with a schema shared by all issuer plugins that
+        implement this method (see lemur_sectigo):
+          - domain: str
+          - validation_type: str  -- "ov" / "ev" (DigiCert)
+          - org_id: str
+          - dcv_method: str  -- e.g. dns-cname-token, persistent-txt
+          - dcv_status: str  -- active / pending / expired (DigiCert)
+        """
         base_url = current_app.config.get("DIGICERT_URL")
         if not base_url:
-            raise ValueError("DIGICERT_URL is not configured; cannot perform DCV expiration check")
+            raise ValueError(
+                "DIGICERT_URL is not configured; cannot perform DCV expiration check"
+            )
         response = self.session.get(f"{base_url}/services/v2/domain")
         data = handle_response(response)
         results = []
         for domain in data.get("domains", []):
             if not domain.get("is_active", False):
                 continue
-            dcv_exp_map = domain.get("dcv_expiration")
-            if not dcv_exp_map:
+            domain_name = domain.get("name")
+            if not domain_name:
                 continue
-            domain_name = domain.get("name", "unknown")
             org_id = str(domain.get("organization", {}).get("id", "unknown"))
-            # DCV method (e.g. dns-cname-token, persistent-txt) — DigiCert is
-            # moving domains to persistent DNS validation; tag it so persistent
-            # domains can be distinguished in the expiry metric.
             dcv_method = domain.get("dcv_method") or "unknown"
-            dcv_approval_method = domain.get("dcv_approval_method") or "unknown"
-            for val_type, dcv_exp in dcv_exp_map.items():
-                results.append({
-                    "domain": domain_name,
-                    "dcv_expiration": dcv_exp,
-                    "validation_type": val_type,
-                    "org_id": org_id,
-                    "dcv_method": dcv_method,
-                    "dcv_approval_method": dcv_approval_method,
-                })
+            # Validation types (ov/ev) and their status come from the per-domain
+            # /validation endpoint; DigiCert's dcv_expiration data is unreliable
+            # and unused, so it is not returned.
+            dcv_status_by_type = {}
+            domain_id = domain.get("id")
+            if domain_id:
+                try:
+                    val_resp = self.session.get(
+                        f"{base_url}/services/v2/domain/{domain_id}/validation"
+                    )
+                    val_data = handle_response(val_resp)
+                    for v in val_data.get("validations", []):
+                        dcv_status_by_type[v.get("type")] = _normalize_dcv_status(
+                            v.get("dcv_status", "unknown")
+                        )
+                except SoftTimeLimitExceeded:
+                    raise
+                except Exception:
+                    # Fall back to the list endpoint's per-type status rather than
+                    # failing the whole run; never block metric emission. The list
+                    # endpoint already reports active/pending (shared vocabulary).
+                    for v in domain.get("validations", []):
+                        dcv_status_by_type[v.get("type")] = v.get("status", "unknown")
+            if not dcv_status_by_type:
+                # No validation data to report for this domain.
+                continue
+            for val_type in dcv_status_by_type:
+                results.append(
+                    {
+                        "domain": domain_name,
+                        "validation_type": val_type,
+                        "org_id": org_id,
+                        "dcv_method": dcv_method,
+                        "dcv_status": (
+                            dcv_status_by_type.get(val_type) or "unknown"
+                        ).lower(),
+                    }
+                )
         return results
 
 
