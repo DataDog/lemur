@@ -1272,13 +1272,17 @@ def _dcv_status_ok(ca_name, dcv_status):
     return status == "active"
 
 
-def _active_cert_domains_by_ca():
+def _active_domains_by_ca():
     """
     Return {ca_plugin_name: set(domain)} for every domain on an active (not
     expired, not revoked) certificate, keyed by the issuing authority's plugin
-    name (e.g. "digicert-issuer"). This is the actual in-use domain set, used to
-    scope DCV monitoring so a domain with an active cert is always covered even
-    if the CA's own domain list omits it.
+    name (e.g. "digicert-issuer"). This is the actual in-use domain set.
+
+    This is the single standard method for the active-domain set, used by both
+    DCV signals: emit_dcv_expiration_metrics (signal 3 / coverage) and
+    emit_persist_record_metrics (DNS-native check). It is computed from the lemur
+    database (active certs), not from the CA return, so a domain with an active
+    cert is always covered even if the CA's own domain list omits it.
     """
     by_ca = {}
     for cert in certificate_service.get_all_valid_certs(None):
@@ -1343,7 +1347,7 @@ def emit_dcv_expiration_metrics():
             ca_status_by_domain.setdefault(domain, {})[ca_name] = entry
 
     # Enumerate active-cert domains (the actual in-use set), keyed by CA plugin.
-    active_by_ca = _active_cert_domains_by_ca()
+    active_by_ca = _active_domains_by_ca()
     total_domains = 0
     ca_domains_by_ca = {}
     broken_by_ca = {}
@@ -1424,7 +1428,7 @@ def emit_persist_record_metrics():
         return 0
     # persist_domains from the lemur DB (active certs), not the CA return.
     persist_domains = set()
-    for domains in _active_cert_domains_by_ca().values():
+    for domains in _active_domains_by_ca().values():
         persist_domains.update(domains)
     if not persist_domains:
         current_app.logger.info(
