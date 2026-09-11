@@ -1270,7 +1270,7 @@ def _dcv_status_ok(ca_name, dcv_status):
     return status == "active"
 
 
-def _active_cert_domains_by_ca():
+def _active_domains_by_ca():
     """
     Return {ca_plugin_name: set(domain)} for every domain on an active (not
     expired, not revoked) certificate, keyed by the issuing authority's plugin
@@ -1341,7 +1341,7 @@ def emit_dcv_expiration_metrics():
             ca_status_by_domain.setdefault(domain, {})[ca_name] = entry
 
     # Enumerate active-cert domains (the actual in-use set), keyed by CA plugin.
-    active_by_ca = _active_cert_domains_by_ca()
+    active_by_ca = _active_domains_by_ca()
     total_domains = 0
     ca_domains_by_ca = {}
     broken_by_ca = {}
