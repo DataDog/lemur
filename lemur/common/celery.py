@@ -1293,17 +1293,17 @@ def emit_dcv_expiration_metrics():
     Report dcv.validation_status for every domain with an active certificate,
     driven by the in-use (active-cert) domain set rather than the CA's reported
     list. This closes the coverage gap where a domain is in use but not reported
-    by a CA: such domains are emitted with dcv_status='uncovered' (0).
+    by a CA: such domains are emitted with dcv_status='missing' (0).
 
     Only CAs that implement get_dcv_expiration_data() (DigiCert, Sectigo) are
     monitored; ACME/unknown authorities are skipped (they handle their own DCV).
 
-    Returns the set of persistent-txt domains (for the DNS-native check).
+    Returns nothing; the DNS-native check computes its own domain set from the
+    lemur database (active certs), not from the CA return.
     """
     # CA-reported status lookup: {domain: {ca_plugin: entry}}.
     ca_status_by_domain = {}
     monitored_cas = set()
-    persist_domains = set()
     for plugin in plugins.all(plugin_type="issuer"):
         ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
         try:
@@ -1339,8 +1339,6 @@ def emit_dcv_expiration_metrics():
                 continue
             domain = entry["domain"]
             ca_status_by_domain.setdefault(domain, {})[ca_name] = entry
-            if (entry.get("dcv_method") or "").lower() == "persistent-txt":
-                persist_domains.add(domain)
 
     # Enumerate active-cert domains (the actual in-use set), keyed by CA plugin.
     active_by_ca = _active_cert_domains_by_ca()
@@ -1353,7 +1351,7 @@ def emit_dcv_expiration_metrics():
             # by the CA itself, so we don't report a status for it.
             continue
         ca_domains = 0
-        for domain in sorted(domains):
+        for domain in domains:
             entry = ca_status_by_domain.get(domain, {}).get(ca_name)
             if entry:
                 dcv_status = entry.get("dcv_status", "unknown")
@@ -1386,7 +1384,7 @@ def emit_dcv_expiration_metrics():
             ca_domains,
             metric_tags={"ca": ca_name},
         )
-        # Complementary dashboard signal: count of broken (expired/uncovered)
+        # Complementary dashboard signal: count of broken (expired/missing)
         # domains per CA.
         metrics.send(
             "dcv.broken_domains",
@@ -1401,4 +1399,3 @@ def emit_dcv_expiration_metrics():
         f"emit_dcv_expiration_metrics: done. domains_checked={total_domains}, "
         f"cas_with_data={ca_domains_by_ca}"
     )
-    return persist_domains
