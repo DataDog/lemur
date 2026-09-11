@@ -87,6 +87,6 @@ def test_configure_logging_closes_replaced_character_device_handler():
 
 def test_json_log_formatter_returns_logmatic_formatter():
     import logmatic
-    from lemur.factory import json_log_formatter
+    from lemur.logging import json_log_formatter
 
     assert isinstance(json_log_formatter(), logmatic.JsonFormatter)

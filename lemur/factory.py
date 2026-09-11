@@ -12,9 +12,7 @@
 
 import os
 import importlib
-import logmatic
 import errno
-import socket
 import stat
 import sys
 
@@ -38,6 +36,7 @@ from sentry_sdk.integrations.flask import FlaskIntegration
 from lemur.certificates.hooks import activate_debug_dump
 from lemur.common.health import mod as health
 from lemur.extensions import db, migrate, principal, smtp_mail, metrics, cors
+from lemur.logging import json_log_formatter
 
 
 DEFAULT_BLUEPRINTS = (health,)
@@ -219,14 +218,6 @@ def configure_blueprints(app, blueprints):
 def configure_database(app):
     if app.config.get("SQLALCHEMY_ENABLE_FLASK_REPLICATED"):
         FlaskReplicated(app)
-
-
-def json_log_formatter():
-    """
-    Builds the JSON log formatter shared by the Flask app and the Celery
-    worker so both emit identically-shaped structured logs.
-    """
-    return logmatic.JsonFormatter(extra={"hostname": socket.gethostname()})
 
 
 def configure_logging(app):
