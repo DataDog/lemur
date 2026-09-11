@@ -186,8 +186,12 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     "domain": name,
                     "validation_type": "dv",
                     "org_id": org_id,
-                    "dcv_method": _normalize_dcv_method(entry.get("dcvMethod", "unknown")),
-                    "dcv_status": _normalize_dcv_status(entry.get("dcvStatus", "unknown")),
+                    "dcv_method": _normalize_dcv_method(
+                        entry.get("dcvMethod", "unknown")
+                    ),
+                    "dcv_status": _normalize_dcv_status(
+                        entry.get("dcvStatus", "unknown")
+                    ),
                 }
             )
         return results

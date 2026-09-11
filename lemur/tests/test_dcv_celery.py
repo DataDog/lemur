@@ -1,6 +1,6 @@
 """Tests for check_dcv_expiration Celery task and IssuerPlugin DCV base (RDNA-1000)."""
+
 import sys
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 # celery.py connects to Redis at module level; pre-import it with Redis mocked so
@@ -14,6 +14,7 @@ if "lemur.common.celery" not in sys.modules:
 # @patch decorators call hasattr() on the Flask LocalProxy to check for async
 # methods, which resolves the proxy and raises RuntimeError outside app context.
 import lemur.common.celery as _celery_module  # noqa: E402
+
 _celery_module.current_app = MagicMock()
 
 
@@ -258,7 +259,8 @@ def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "good.com"
 
     error_calls = [
-        c for c in mock_metrics.send.call_args_list
+        c
+        for c in mock_metrics.send.call_args_list
         if len(c.args) >= 1 and "dcv.expiration_check.plugin.errors" in c.args[0]
     ]
     assert error_calls
@@ -308,7 +310,9 @@ def test_emit_dcv_expiration_metrics_malformed_entry_emits_error(
         and c.kwargs.get("metric_tags", {}).get("reason") == "malformed_entry"
     ]
     assert len(malformed_calls) == 2
-    assert all(c.kwargs["metric_tags"]["ca"] == "digicert-issuer" for c in malformed_calls)
+    assert all(
+        c.kwargs["metric_tags"]["ca"] == "digicert-issuer" for c in malformed_calls
+    )
 
 
 @patch("lemur.common.celery._active_cert_domains_by_ca")
@@ -329,8 +333,11 @@ def test_emit_dcv_expiration_metrics_empty_data_no_metric(
     emit_dcv_expiration_metrics()
 
     dcv_calls = [
-        c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.validation_status" in c.args[0]
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.validation_status" in c.args[0]
     ]
     assert len(dcv_calls) == 0
 
@@ -342,8 +349,12 @@ def test_emit_dcv_expiration_metrics_empty_data_no_metric(
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
 @patch("lemur.common.celery.celery_app")
 def test_certificate_expirations_metrics_invokes_dcv_helper(
-    mock_celery_app, mock_current_app, mock_metrics,
-    mock_cli_certificate, mock_certificate_service, mock_dcv_helper,
+    mock_celery_app,
+    mock_current_app,
+    mock_metrics,
+    mock_cli_certificate,
+    mock_certificate_service,
+    mock_dcv_helper,
 ):
     mock_celery_app.current_task = None
 
@@ -364,7 +375,9 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     # Staging knows only its own domains; a prod domain in DigiCert should be skipped.
-    mock_get_all_domains.return_value = {"digicert-issuer": {"lemur-sandbox.datad0g.com"}}
+    mock_get_all_domains.return_value = {
+        "digicert-issuer": {"lemur-sandbox.datad0g.com"}
+    }
     fake_plugin = MagicMock()
     fake_plugin.slug = "digicert-issuer"
     fake_plugin.get_dcv_expiration_data.return_value = [
@@ -386,12 +399,14 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
     emit_dcv_expiration_metrics()
 
     dcv_calls = [
-        c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.validation_status" in c.args[0]
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.validation_status" in c.args[0]
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "lemur-sandbox.datad0g.com"
-
 
 
 @patch("lemur.common.celery._active_cert_domains_by_ca")
@@ -405,8 +420,12 @@ def test_emit_dcv_expiration_metrics_flags_uncovered_domain(
     fake_plugin = MagicMock()
     fake_plugin.slug = "digicert-issuer"
     fake_plugin.get_dcv_expiration_data.return_value = [
-        {"domain": "reported.com", "dcv_method": "persistent-txt",
-         "dcv_status": "active", "validation_type": "ov"},
+        {
+            "domain": "reported.com",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "active",
+            "validation_type": "ov",
+        },
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
@@ -441,8 +460,11 @@ def test_emit_dcv_expiration_metrics_skips_non_monitored_ca(
     emit_dcv_expiration_metrics()
 
     vs_calls = [
-        c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.validation_status" in c.args[0]
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.validation_status" in c.args[0]
     ]
     assert vs_calls == []
 
@@ -459,10 +481,18 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
     fake_plugin = MagicMock()
     fake_plugin.slug = "digicert-issuer"
     fake_plugin.get_dcv_expiration_data.return_value = [
-        {"domain": "ok.com", "dcv_method": "persistent-txt",
-         "dcv_status": "active", "validation_type": "ov"},
-        {"domain": "expired.com", "dcv_method": "persistent-txt",
-         "dcv_status": "expired", "validation_type": "ov"},
+        {
+            "domain": "ok.com",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "active",
+            "validation_type": "ov",
+        },
+        {
+            "domain": "expired.com",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "expired",
+            "validation_type": "ov",
+        },
     ]
     mock_plugins.all.return_value = [fake_plugin]
 
@@ -471,8 +501,11 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
     emit_dcv_expiration_metrics()
 
     broken_calls = [
-        c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and "dcv.broken_domains" in c.args[0]
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.broken_domains" in c.args[0]
     ]
     assert len(broken_calls) == 1
     assert broken_calls[0].args[2] == 2  # expired + uncovered

@@ -414,7 +414,9 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             error_log["dns_provider_id"] = pending_cert.dns_provider_id
             last_error = cert.get("last_error")
             error_log["last_error"] = (
-                str(last_error) if last_error is not None else "No error message provided by CA"
+                str(last_error)
+                if last_error is not None
+                else "No error message provided by CA"
             )
             # Every failed issuance consumes the CA's ACME rate limit (e.g. Let's
             # Encrypt: 5 duplicate certs / failed validations per week per domain).
@@ -1221,7 +1223,10 @@ def certificate_expirations_metrics():
         current_app.logger.exception("Error sending source/destination pairing metrics")
         capture_exception()
         metrics.send(
-            "source_destination_pairing_metrics.error", "counter", 1, metric_tags={"function": function}
+            "source_destination_pairing_metrics.error",
+            "counter",
+            1,
+            metric_tags={"function": function},
         )
 
     # Folded in from the former standalone check_dcv_expiration task (EVBL-51):
@@ -1238,7 +1243,10 @@ def certificate_expirations_metrics():
         current_app.logger.exception("Error sending DCV expiration metrics")
         capture_exception()
         metrics.send(
-            "dcv_expiration_metrics.error", "counter", 1, metric_tags={"function": function}
+            "dcv_expiration_metrics.error",
+            "counter",
+            1,
+            metric_tags={"function": function},
         )
 
     metrics.send(f"{function}.success", "counter", 1)
@@ -1308,7 +1316,10 @@ def emit_dcv_expiration_metrics():
             )
             capture_exception()
             metrics.send(
-                "dcv.expiration_check.plugin.errors", "counter", 1, metric_tags={"ca": ca_name}
+                "dcv.expiration_check.plugin.errors",
+                "counter",
+                1,
+                metric_tags={"ca": ca_name},
             )
             continue
         if not dcv_data:

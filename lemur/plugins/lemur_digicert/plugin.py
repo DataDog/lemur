@@ -530,7 +530,9 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         """
         base_url = current_app.config.get("DIGICERT_URL")
         if not base_url:
-            raise ValueError("DIGICERT_URL is not configured; cannot perform DCV expiration check")
+            raise ValueError(
+                "DIGICERT_URL is not configured; cannot perform DCV expiration check"
+            )
         response = self.session.get(f"{base_url}/services/v2/domain")
         data = handle_response(response)
         results = []
@@ -569,13 +571,17 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                 # No validation data to report for this domain.
                 continue
             for val_type in dcv_status_by_type:
-                results.append({
-                    "domain": domain_name,
-                    "validation_type": val_type,
-                    "org_id": org_id,
-                    "dcv_method": dcv_method,
-                    "dcv_status": (dcv_status_by_type.get(val_type) or "unknown").lower(),
-                })
+                results.append(
+                    {
+                        "domain": domain_name,
+                        "validation_type": val_type,
+                        "org_id": org_id,
+                        "dcv_method": dcv_method,
+                        "dcv_status": (
+                            dcv_status_by_type.get(val_type) or "unknown"
+                        ).lower(),
+                    }
+                )
         return results
 
 
