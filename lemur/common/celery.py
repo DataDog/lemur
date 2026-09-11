@@ -30,6 +30,7 @@ from sentry_sdk import capture_exception
 from lemur.authorities.service import get as get_authority
 from lemur.certificates import cli as cli_certificate
 from lemur.certificates import service as certificate_service
+from lemur.common.dcv_dns import verify_persist_records
 from lemur.common.redis import RedisHandler
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
@@ -1233,6 +1234,7 @@ def certificate_expirations_metrics():
     # emit DCV token expiry gauges from the same consolidated expiry-metrics task.
     try:
         emit_dcv_expiration_metrics()
+        emit_persist_record_metrics()
     except SoftTimeLimitExceeded:
         log_data["message"] = "Time limit exceeded."
         current_app.logger.error(log_data)
@@ -1399,3 +1401,58 @@ def emit_dcv_expiration_metrics():
         f"emit_dcv_expiration_metrics: done. domains_checked={total_domains}, "
         f"cas_with_data={ca_domains_by_ca}"
     )
+
+
+def emit_persist_record_metrics():
+    """
+    Verify _validation-persist.<domain> records directly from DNS and emit the
+    dcv.persist_record_ok gauge per domain+CA.
+
+    DNS-native complement to emit_dcv_expiration_metrics(): instead of trusting the
+    CA's reported status, look at the persistent record we publish. 1 = the record
+    for that domain+CA is present and exact-matches the expected account URI;
+    0 = missing, wrong, unparseable, or a DNS lookup error.
+
+    The domain set is computed from the lemur database (active certificates), not
+    from the CA return, so it does not depend on the CA reporting the domain.
+    """
+    expected_uris = current_app.config.get("DCV_PERSIST_ACCOUNT_URIS", {})
+    if not expected_uris:
+        current_app.logger.info(
+            "emit_persist_record_metrics: no DCV_PERSIST_ACCOUNT_URIS configured; skipping"
+        )
+        return 0
+    # persist_domains from the lemur DB (active certs), not the CA return.
+    persist_domains = set()
+    for domains in _active_cert_domains_by_ca().values():
+        persist_domains.update(domains)
+    if not persist_domains:
+        current_app.logger.info(
+            "emit_persist_record_metrics: no active-cert domains; skipping"
+        )
+        return 0
+    results = verify_persist_records(sorted(persist_domains), expected_uris)
+    broken_by_ca = {}
+    for r in results:
+        if r["status"] in ("missing", "wrong", "unparseable"):
+            broken_by_ca[r["ca"]] = broken_by_ca.get(r["ca"], 0) + 1
+        metrics.send(
+            "dcv.persist_record_ok",
+            "gauge",
+            1 if r["status"] == "ok" else 0,
+            metric_tags={
+                "domain": r["domain"],
+                "ca": r["ca"],
+                "persist_record_status": r["status"],
+            },
+        )
+    # Complementary dashboard signal: count of broken (missing/wrong/unparseable)
+    # persistent records per CA. Excludes dns_error (transient).
+    for ca_name, count in broken_by_ca.items():
+        metrics.send(
+            "dcv.persist_record_broken",
+            "gauge",
+            count,
+            metric_tags={"ca": ca_name},
+        )
+    return len(results)
