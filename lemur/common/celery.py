@@ -33,8 +33,9 @@ from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
-from lemur.factory import create_app, json_log_formatter
+from lemur.factory import create_app
 from lemur import fips
+from lemur.logging import json_log_formatter
 from lemur.notifications import cli as cli_notification
 
 from lemur.notifications.messaging import (
