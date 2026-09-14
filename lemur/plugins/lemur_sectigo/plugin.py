@@ -5,7 +5,7 @@ import requests
 from celery.exceptions import SoftTimeLimitExceeded
 from cert_manager import Client, Domain, Organization, PendingError, SSL
 from flask import current_app
-from lemur.common.utils import validate_conf
+from lemur.common.utils import validate_conf, normalize_domain_name
 from lemur.plugins.bases import IssuerPlugin
 from retrying import retry
 
@@ -154,7 +154,7 @@ class SectigoIssuerPlugin(IssuerPlugin):
         domain = Domain(client=self.client)
         # Map domain name -> id so we can fetch org_id from the domain detail.
         try:
-            id_by_name = {d["name"]: d["id"] for d in domain.all()}
+            id_by_name = {normalize_domain_name(d["name"]): d["id"] for d in domain.all()}
         except SoftTimeLimitExceeded:
             raise
         except Exception as e:
@@ -165,7 +165,9 @@ class SectigoIssuerPlugin(IssuerPlugin):
             id_by_name = {}
         results = []
         for entry in response.json():
-            name = entry.get("domain", "unknown")
+            # Normalize to the shared domain key (lowercase, wildcard/trailing-dot
+            # stripped) so wildcard domains match the Lemur active-cert set.
+            name = normalize_domain_name(entry.get("domain", "unknown"))
             org_id = "unknown"
             did = id_by_name.get(name)
             if did:
