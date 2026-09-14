@@ -48,6 +48,19 @@ paginated_parser.add_argument("filter", type=str, location="args")
 paginated_parser.add_argument("owner", type=str, location="args")
 
 
+def normalize_domain_name(name):
+    """Normalize a domain/DNS-name into the canonical form used for DCV keys.
+
+    Lowercases, strips a leading wildcard marker ("*.") and a single trailing
+    dot, so names reported by a CA, DNS, and Lemur's certificate domains all use
+    the same key. e.g. "*.Datad0G.com." -> "datad0g.com". Returns "" for
+    falsy input.
+    """
+    if not name:
+        return ""
+    return name.strip().lower().lstrip("*.").rstrip(".")
+
+
 def base64encode(string):
     # Performs Base64 encoding of string to string using the base64.b64encode() function
     # which encodes bytes to bytes.

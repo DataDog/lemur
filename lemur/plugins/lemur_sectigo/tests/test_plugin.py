@@ -187,6 +187,11 @@ class TestSectigoIssuerPlugin(TestCase):
             self.assertEqual(result[0]["validation_type"], "dv")
             self.assertEqual(result[0]["org_id"], "35917")
             self.assertEqual(result[0]["dcv_status"], "expired")
+            # Wildcard domains are normalized to the shared domain key so they
+            # match the Lemur active-cert domain set (not flagged "uncovered").
+            self.assertEqual(result[1]["domain"], "lemur-sandbox.datad0g.com")
+            # The org lookup uses the same normalized key -> resolves 322993.
+            self.assertEqual(result[1]["org_id"], "35917")
 
     def test_determine_certificate_term(self):
         with self.app_context:

@@ -31,6 +31,7 @@ from lemur.authorities.service import get as get_authority
 from lemur.certificates import cli as cli_certificate
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
+from lemur.common.utils import normalize_domain_name
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -1265,10 +1266,22 @@ def _active_domains_by_ca():
     for cert in certificate_service.get_all_valid_certs(None):
         ca_name = cert.authority.plugin_name if cert.authority else "unknown"
         for d in cert.domains:
-            name = (d.name or "").lower().lstrip("*.").rstrip(".")
+            name = normalize_domain_name(d.name)
             if name:
                 by_ca.setdefault(ca_name, set()).add(name)
     return by_ca
+
+
+# Design (DNS-PERSIST monitoring): a domain is healthily DCV-validated when the
+# shared dcv_status is in this set. active is fully validated; pending means a
+# duplicate/reuse cycle is in progress but the domain is still under our control.
+# Only expired / uncovered / unknown require investigation.
+_DCV_HEALTHY_STATUSES = ("active", "pending")
+
+
+def _dcv_signal_is_healthy(dcv_status):
+    """Map the shared dcv_status vocabulary to the healthy/validated gauge signal."""
+    return (dcv_status or "").strip().lower() in _DCV_HEALTHY_STATUSES
 
 
 def emit_dcv_expiration_metrics():
@@ -1276,7 +1289,7 @@ def emit_dcv_expiration_metrics():
     Report dcv.validation_status for every domain with an active certificate,
     driven by the in-use (active-cert) domain set rather than the CA's reported
     list. This closes the coverage gap where a domain is in use but not reported
-    by a CA: such domains are emitted with dcv_status='missing' (0).
+    by a CA: such domains are emitted with dcv_status='uncovered' (0).
 
     Only CAs that implement get_dcv_expiration_data() (DigiCert, Sectigo) are
     monitored; ACME/unknown authorities are skipped (they handle their own DCV).
@@ -1353,16 +1366,17 @@ def emit_dcv_expiration_metrics():
                 dcv_status = "uncovered"
                 dcv_method = "unknown"
                 validation_type = "unknown"
-            if dcv_status in ("expired", "uncovered"):
+            if not _dcv_signal_is_healthy(dcv_status):
                 broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
             metrics.send(
                 "dcv.validation_status",
                 "gauge",
-                # Plugins normalize dcv_status to active/pending/expired; only
-                # "active" is healthy. The raw status is tagged on the gauge so a
-                # monitor can alert on the specific broken value (dcv_status:expired)
-                # without treating a normal pending/reuse-cycle state as a failure.
-                1 if (dcv_status or "").strip().lower() == "active" else 0,
+                # Design (DNS-PERSIST monitoring): active AND pending are healthy
+                # (a duplicate/pending/reuse-cycle is still validly under our
+                # control); expired, uncovered, and unknown require investigation.
+                # The raw status is tagged so a monitor can alert on the specific
+                # broken value (dcv_status:expired) rather than the gauge value.
+                1 if _dcv_signal_is_healthy(dcv_status) else 0,
                 metric_tags={
                     "domain": domain,
                     "ca": ca_name,
