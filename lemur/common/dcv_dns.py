@@ -5,6 +5,10 @@ static TXT record at _validation-persist.<domain> that names the ACME account a
 CA will use to issue certificates. This module verifies that record directly from
 DNS rather than trusting the CA's reported status, so we can detect a missing,
 wrong, or corrupted record at the source.
+
+A persistent record is published once per DNS zone (via the terraform modules),
+so verification resolves the exact label first and falls back up to the zone
+apex to cover subdomain SANs; it never queries a bare public suffix.
 """
 
 import dns.exception
@@ -71,6 +75,45 @@ def _resolve_persist_txt(domain):
     return "ok", values
 
 
+def _domain_candidates(domain):
+    """Yield `<domain>` then its parent labels, closest-first, down to a
+    2-label registrable-looking apex.
+
+    A persistent record is published once per DNS zone (e.g. at
+    `_validation-persist.datad0g.com`), while a certificate's SAN set can include
+    subdomains (`api.datad0g.com`). To avoid flagging a subdomain SAN as
+    "missing" when its zone's record exists, resolve the closest candidate that
+    has a record, then fall back up the labels. Never query a bare public suffix
+    (one label), which is outside our DNS zones and could belong to an unrelated
+    party. e.g. "api.datad0g.com" -> ["api.datad0g.com", "datad0g.com"].
+    """
+    labels = domain.rstrip(".").split(".")
+    while len(labels) >= 2:
+        yield ".".join(labels)
+        labels = labels[1:]
+
+
+def _resolve_persist_walk(domain):
+    """Resolve `_validation-persist.<candidate>` from the closest label down to
+    the apex; return the first that exists.
+
+    Returns (status, values):
+      - ("ok", values) for the closest candidate that exists
+      - ("missing", []) if no candidate exists anywhere on the path
+      - ("dns_error", []) if no candidate exists but at least one was unresolved
+        (we could not confirm its absence, so callers should not treat it as
+        definitively missing).
+    """
+    saw_error = False
+    for candidate in _domain_candidates(domain):
+        status, values = _resolve_persist_txt(candidate)
+        if status == "ok":
+            return status, values
+        if status == "dns_error":
+            saw_error = True
+    return ("dns_error" if saw_error else "missing"), []
+
+
 def verify_persist_records(domains, expected_uris):
     """Verify _validation-persist records for each domain against expected URIs.
 
@@ -83,7 +126,10 @@ def verify_persist_records(domains, expected_uris):
     """
     results = []
     for domain in domains:
-        status, values = _resolve_persist_txt(domain)
+        # Resolve at the exact label first, then fall back to ancestor (zone)
+        # labels, so a subdomain SAN covered by the zone's persistent record is
+        # not falsely flagged missing.
+        status, values = _resolve_persist_walk(domain)
         if status == "dns_error":
             results.append(
                 {
