@@ -23,7 +23,7 @@ import sys
 from celery.exceptions import SoftTimeLimitExceeded
 from cryptography import x509
 from flask import current_app, g
-from lemur.common.utils import validate_conf, convert_pkcs7_bytes_to_pem
+from lemur.common.utils import validate_conf, convert_pkcs7_bytes_to_pem, normalize_domain_name
 from lemur.extensions import metrics
 from lemur.plugins import lemur_digicert as digicert
 from lemur.plugins.bases import IssuerPlugin, SourcePlugin
@@ -539,7 +539,7 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         for domain in data.get("domains", []):
             if not domain.get("is_active", False):
                 continue
-            domain_name = domain.get("name")
+            domain_name = normalize_domain_name(domain.get("name"))
             if not domain_name:
                 continue
             org_id = str(domain.get("organization", {}).get("id", "unknown"))

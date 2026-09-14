@@ -158,6 +158,18 @@ def test_is_json():
     assert is_json('{"range":[5,6.8],"name":"something"}') is True
 
 
+def test_normalize_domain_name():
+    from lemur.common.utils import normalize_domain_name
+
+    # Lowercases, strips a leading wildcard and a trailing dot.
+    assert normalize_domain_name("Datad0g.com") == "datad0g.com"
+    assert normalize_domain_name("*.Datad0g.COM.") == "datad0g.com"
+    assert normalize_domain_name(".datad0g.com.") == "datad0g.com"
+    assert normalize_domain_name("example.com") == "example.com"
+    assert normalize_domain_name("") == ""
+    assert normalize_domain_name(None) == ""
+
+
 def drop_last_cert_from_chain(self):
     from lemur.common.utils import drop_last_cert_from_chain
 

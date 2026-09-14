@@ -173,10 +173,9 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
 def test_emit_dcv_expiration_metrics_validation_status_mapping(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
-    # Plugins normalize dcv_status to the shared active/pending/expired
-    # vocabulary, so only "active" maps to a healthy gauge (1); everything else
-    # (pending, expired, unknown, missing) is 0. Asserts the inlined comparison
-    # through the actual emit path (the _dcv_status_ok helper was removed).
+    # Design (DNS-PERSIST monitoring): the shared dcv_status maps to the healthy
+    # gauge in the set {active, pending}; expired/unknown/empty are 0. Asserts the
+    # _dcv_signal_is_healthy mapping through the actual emit path.
     status_by_domain = {
         "active.com": "active",
         "pending.com": "pending",
@@ -208,15 +207,55 @@ def test_emit_dcv_expiration_metrics_validation_status_mapping(
     vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
     assert len(vs_calls) == len(status_by_domain)
     by_domain = {c.kwargs["metric_tags"]["domain"]: c for c in vs_calls}
+    # active and pending are healthy; expired/unknown/empty are not.
     expected = {
         "active.com": 1,
-        "pending.com": 0,
+        "pending.com": 1,
         "expired.com": 0,
         "unknown.com": 0,
         "empty.com": 0,
     }
     for domain, value in expected.items():
         assert by_domain[domain].args[2] == value, domain
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.plugins")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_dcv_expiration_metrics_matches_wildcard_domain(
+    mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
+):
+    # Finding 2: a wildcard certificate domain normalizes to its base name on both
+    # sides (the plugin's normalization is covered in the Sectigo plugin test).
+    # Here the plugin reports the normalized domain key, which must match the
+    # active-cert set and be healthy rather than flagged "uncovered".
+    mock_get_all_domains.return_value = {"sectigo-issuer": {"lemur-sandbox.datad0g.com"}}
+    fake_plugin = MagicMock()
+    fake_plugin.slug = "sectigo-issuer"
+    fake_plugin.get_dcv_expiration_data.return_value = [
+        {
+            # Sectigo's get_dcv_expiration_data() normalizes "*.foo.com" -> "foo.com"
+            "domain": "lemur-sandbox.datad0g.com",
+            "dcv_expiration": None,
+            "validation_type": "dv",
+            "org_id": "35917",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "active",
+        }
+    ]
+    mock_plugins.all.return_value = [fake_plugin]
+
+    from lemur.common.celery import emit_dcv_expiration_metrics
+
+    emit_dcv_expiration_metrics()
+
+    gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
+    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    assert len(vs_calls) == 1
+    assert vs_calls[0].kwargs["metric_tags"]["domain"] == "lemur-sandbox.datad0g.com"
+    assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "active"
+    assert vs_calls[0].args[2] == 1  # matched -> healthy, not uncovered
 
 
 @patch("lemur.common.celery._active_domains_by_ca")
