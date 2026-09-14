@@ -2,11 +2,44 @@ import arrow
 import pem
 import requests
 
-from cert_manager import Client, Organization, PendingError, SSL
+from celery.exceptions import SoftTimeLimitExceeded
+from cert_manager import Client, Domain, Organization, PendingError, SSL
 from flask import current_app
 from lemur.common.utils import validate_conf
 from lemur.plugins.bases import IssuerPlugin
 from retrying import retry
+
+
+# Map Sectigo's DCV method tokens to the shared lowercase vocabulary used by
+# other issuer plugins (e.g. DigiCert) so the dcv_method tag is consistent
+# across CAs.
+_SECTIGO_DCV_METHOD_MAP = {
+    "CNAME": "dns-cname-token",
+    "TXT": "dns-txt-token",
+    "HTTP": "http-token",
+    "EMAIL": "email",
+    "PERSISTENT_TXT": "persistent-txt",
+}
+
+# Map Sectigo's DCV status vocabulary to the shared active/pending/expired set
+# used by DigiCert so the dcv_status tag is consistent across CAs.
+_SECTIGO_DCV_STATUS_MAP = {
+    "VALIDATED": "active",
+    "NOT_VALIDATED": "pending",
+    "EXPIRED": "expired",
+}
+
+
+def _normalize_dcv_method(method):
+    if not method:
+        return "unknown"
+    return _SECTIGO_DCV_METHOD_MAP.get(method.upper(), method.lower())
+
+
+def _normalize_dcv_status(status):
+    if not status:
+        return "unknown"
+    return _SECTIGO_DCV_STATUS_MAP.get(status.upper(), status.lower())
 
 
 class SectigoIssuerPlugin(IssuerPlugin):
@@ -100,6 +133,68 @@ class SectigoIssuerPlugin(IssuerPlugin):
 
     def cancel_ordered_certificate(self, pending_cert, **kwargs):
         raise NotImplementedError
+
+    def get_dcv_expiration_data(self):
+        """
+        Query Sectigo /api/dcv/v1/validation for domain DCV status.
+
+        Returns a list of dicts with a schema shared by all issuer plugins that
+        implement this method (see lemur_digicert):
+          - domain: str
+          - dcv_expiration: str (ISO date) | None  -- always None for Sectigo
+            (prod does not return expirationDate)
+          - validation_type: str  -- "dv" (Sectigo)
+          - org_id: str
+          - dcv_method: str  -- e.g. CNAME, PERSISTENT_TXT
+          - dcv_status: str  -- active / pending / expired (Sectigo)
+        """
+        url = f"{self.client.base_url}/dcv/v1/validation"
+        response = self.client.session.get(url)
+        response.raise_for_status()
+        domain = Domain(client=self.client)
+        # Map domain name -> id so we can fetch org_id from the domain detail.
+        try:
+            id_by_name = {d["name"]: d["id"] for d in domain.all()}
+        except SoftTimeLimitExceeded:
+            raise
+        except Exception as e:
+            current_app.logger.warning(
+                f"get_dcv_expiration_data: failed to map Sectigo domains to ids: {e}",
+                exc_info=True,
+            )
+            id_by_name = {}
+        results = []
+        for entry in response.json():
+            name = entry.get("domain", "unknown")
+            org_id = "unknown"
+            did = id_by_name.get(name)
+            if did:
+                try:
+                    detail = domain.get(did)
+                    delegations = detail.get("delegations") or []
+                    if delegations:
+                        org_id = str(delegations[0].get("orgId", "unknown"))
+                except SoftTimeLimitExceeded:
+                    raise
+                except Exception as e:
+                    current_app.logger.warning(
+                        f"get_dcv_expiration_data: failed to fetch org_id for {name}: {e}",
+                        exc_info=True,
+                    )
+            results.append(
+                {
+                    "domain": name,
+                    "validation_type": "dv",
+                    "org_id": org_id,
+                    "dcv_method": _normalize_dcv_method(
+                        entry.get("dcvMethod", "unknown")
+                    ),
+                    "dcv_status": _normalize_dcv_status(
+                        entry.get("dcvStatus", "unknown")
+                    ),
+                }
+            )
+        return results
 
 
 def _retry_if_certificate_pending(exception):
