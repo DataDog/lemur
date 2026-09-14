@@ -398,8 +398,6 @@ def rotate(
                             f"{len(certificate.replaced)}"
                         )
                     new_cert = certificate.replaced[0]
-                    while new_cert.replaced:
-                        new_cert = new_cert.replaced[0]
                     old_cert = certificate
                     log_data["endpoint"] = endpoint.dnsname
                     log_data["new_certificate"] = new_cert.name

@@ -249,34 +249,6 @@ def test_rotate_cli_bulk(session, source_plugin):
     assert ep3.sni_certificates == [new_cert2]
 
 
-def test_rotate_cli_bulk_uses_latest_replacement(session, source_plugin):
-    from lemur.certificates.cli import rotate
-
-    old_cert = CertificateFactory()
-    intermediate_cert = CertificateFactory()
-    latest_cert = CertificateFactory()
-    endpoint = EndpointFactory()
-
-    old_cert.replaced = [intermediate_cert]
-    intermediate_cert.replaced = [latest_cert]
-    endpoint.sni_certificates = [intermediate_cert, old_cert]
-    session.commit()
-
-    rotate(
-        endpoint_name=None,
-        source=None,
-        old_certificate_name=None,
-        new_certificate_name=None,
-        message=None,
-        commit=True,
-        region=None,
-    )
-
-    assert old_cert not in endpoint.sni_certificates
-    assert intermediate_cert not in endpoint.sni_certificates
-    assert set(endpoint.sni_certificates) == {latest_cert}
-
-
 def test_rotate_cli_bulk_in_region(session, source_plugin):
     """
     Ensure that the CLI command 'lemur certificate rotate --region <region>' correctly rotates

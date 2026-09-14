@@ -509,8 +509,16 @@ class AWSSourcePlugin(SourcePlugin):
         new_cert_arn = iam.create_arn_from_cert(
             account_number, partition, new_cert.name, ""
         )
+        old_cert_path = next(
+            (
+                assoc.path
+                for assoc in endpoint.certificates_assoc
+                if not assoc.primary and assoc.certificate == old_cert
+            ),
+            "",
+        )
         old_cert_arn = iam.create_arn_from_cert(
-            account_number, partition, old_cert.name, ""
+            account_number, partition, old_cert.name, old_cert_path
         )
         region = get_region_from_dns(endpoint.dnsname)
 

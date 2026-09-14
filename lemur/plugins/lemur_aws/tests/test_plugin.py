@@ -231,3 +231,64 @@ def test_get_elb_endpoints_v2_skips_gwlb_listeners():
 
     assert not mock_certs.called
     assert endpoints == []
+
+
+def test_replace_sni_certificate_uses_old_certificate_path(app):
+    from copy import deepcopy
+
+    from lemur.plugins.base import plugins
+    from lemur.plugins.lemur_aws import elb as lemur_elb
+    from lemur.plugins.utils import set_plugin_option
+
+    aws_source = plugins.get("aws-source")
+    options = deepcopy(aws_source.options)
+    set_plugin_option("accountNumber", "123456789012", options)
+
+    old_cert = mock.Mock(name="old_cert")
+    old_cert.name = "old-cert"
+    new_cert = mock.Mock(name="new_cert")
+    new_cert.name = "new-cert"
+    endpoint = mock.Mock(
+        name="endpoint",
+        type="elbv2",
+        registry_type="iam",
+        port=443,
+        dnsname="example.us-east-1.elb.amazonaws.com",
+        source=mock.Mock(options=options),
+        certificates_assoc=[
+            mock.Mock(certificate=old_cert, primary=False, path="cloudfront")
+        ],
+    )
+    endpoint.name = "example"
+
+    with mock.patch.object(
+        lemur_elb,
+        "get_listener_arn_from_endpoint",
+        return_value="listener-arn",
+    ), mock.patch.object(
+        lemur_elb, "add_listener_certificates_v2"
+    ) as add_cert, mock.patch.object(
+        lemur_elb, "remove_listener_certificates_v2"
+    ) as remove_cert:
+        aws_source.replace_sni_certificate(endpoint, old_cert, new_cert)
+
+    add_cert.assert_called_once_with(
+        account_number="123456789012",
+        region="us-east-1",
+        listener_arn="listener-arn",
+        certificates=[
+            {
+                "CertificateArn": "arn:aws:iam::123456789012:server-certificate/new-cert"
+            }
+        ],
+    )
+    remove_cert.assert_called_once_with(
+        account_number="123456789012",
+        region="us-east-1",
+        listener_arn="listener-arn",
+        certificates=[
+            {
+                "CertificateArn": "arn:aws:iam::123456789012:server-certificate/cloudfront/old-cert"
+            }
+        ],
+    )
