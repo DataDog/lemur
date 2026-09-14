@@ -3,7 +3,9 @@
 from unittest.mock import patch
 
 from lemur.common.dcv_dns import (
+    _domain_candidates,
     _parse_persist_txt,
+    _resolve_persist_walk,
     _resolve_persist_txt,
     verify_persist_records,
 )
@@ -151,3 +153,79 @@ def test_verify_persist_records_multiple_txt_records_in_one_response():
         results = verify_persist_records(["example.com"], expected)
     assert {r["status"] for r in results} == {"ok"}
     assert len(results) == 2
+
+
+def test_domain_candidates_bounded_to_registrable_apex():
+    # Walks from the exact label down to a 2-label apex; never a bare public suffix.
+    assert list(_domain_candidates("api.datad0g.com")) == [
+        "api.datad0g.com",
+        "datad0g.com",
+    ]
+    assert list(_domain_candidates("a.b.datad0g.com")) == [
+        "a.b.datad0g.com",
+        "b.datad0g.com",
+        "datad0g.com",
+    ]
+    assert list(_domain_candidates("datad0g.com.")) == ["datad0g.com"]
+
+
+def test_verify_persist_records_subdomain_covers_from_ancestor_record():
+    # Finding 3: a subdomain SAN is covered by the persistent record published at
+    # the zone apex, so it must resolve "ok" (not "missing").
+    expected = {"digicert.com": "https://digicert.com/account/abc"}
+    calls = []
+
+    def fake_resolve(candidate):
+        calls.append(candidate)
+        if candidate == "api.datad0g.com":
+            return ("missing", [])
+        if candidate == "datad0g.com":
+            return (
+                "ok",
+                [
+                    "digicert.com;accounturi=https://digicert.com/account/abc",
+                    "sectigo.com;accounturi=acct:1@sectigo.com",
+                ],
+            )
+        return ("dns_error", [])  # never reached for public suffix
+
+    with patch("lemur.common.dcv_dns._resolve_persist_txt", side_effect=fake_resolve):
+        results = verify_persist_records(["api.datad0g.com"], expected)
+    assert calls == ["api.datad0g.com", "datad0g.com"]
+    assert results[0]["status"] == "ok"
+    assert results[0]["ca"] == "digicert.com"
+
+
+def test_verify_persist_records_subdomain_truly_missing():
+    # A subdomain with no record at any level is a real gap -> "missing".
+    expected = {"digicert.com": "https://digicert.com/account/abc"}
+    with patch(
+        "lemur.common.dcv_dns._resolve_persist_txt", return_value=("missing", [])
+    ):
+        results = verify_persist_records(["api.datad0g.com"], expected)
+    assert len(results) == 1
+    assert results[0]["status"] == "missing"
+
+
+def test_resolve_persist_walk_falls_back_to_ancestor():
+    def fake_resolve(candidate):
+        if candidate == "b.datad0g.com":
+            return ("ok", ["digicert.com;accounturi=x"])
+        return ("missing", [])
+
+    with patch("lemur.common.dcv_dns._resolve_persist_txt", side_effect=fake_resolve):
+        status, values = _resolve_persist_walk("a.b.datad0g.com")
+    assert status == "ok"
+    assert values == ["digicert.com;accounturi=x"]
+
+
+def test_resolve_persist_walk_dns_error_when_any_candidate_unresolved():
+    def fake_resolve(candidate):
+        if candidate == "datad0g.com":
+            return ("dns_error", [])
+        return ("missing", [])
+
+    with patch("lemur.common.dcv_dns._resolve_persist_txt", side_effect=fake_resolve):
+        status, values = _resolve_persist_walk("api.datad0g.com")
+    assert status == "dns_error"
+    assert values == []
