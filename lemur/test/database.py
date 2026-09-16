@@ -2,6 +2,7 @@
 
 import secrets
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from flask import current_app
 from flask_migrate import upgrade
@@ -15,6 +16,8 @@ from lemur.plugins.base import plugins
 from lemur.policies import service as policy_service
 from lemur.roles import service as role_service
 from lemur.users import service as user_service
+
+MIGRATIONS_DIRECTORY = str(Path(__file__).resolve().parents[1] / "migrations")
 
 
 def validate_database_identity():
@@ -40,7 +43,7 @@ def reset_schema():
     db.engine.execute(text("DROP SCHEMA public CASCADE"))
     db.engine.execute(text("CREATE SCHEMA public AUTHORIZATION CURRENT_USER"))
     db.engine.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-    upgrade()
+    upgrade(directory=MIGRATIONS_DIRECTORY)
 
 
 def _create_roles_and_users():

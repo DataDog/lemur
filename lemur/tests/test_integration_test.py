@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, call
 
 import pytest
@@ -83,6 +84,21 @@ def test_validate_isolation_rejects_normal_database(app, monkeypatch):
 
     with pytest.raises(RuntimeError, match="Refusing to run"):
         runner.validate_isolation()
+
+
+def test_reset_schema_uses_absolute_migrations_directory(app, monkeypatch):
+    from lemur.test import database
+
+    monkeypatch.setattr(database, "validate_database_identity", Mock())
+    monkeypatch.setattr(database.db.session, "remove", Mock())
+    monkeypatch.setattr(database.db.engine, "execute", Mock())
+    monkeypatch.setattr(database, "upgrade", Mock())
+
+    database.reset_schema()
+
+    assert Path(database.MIGRATIONS_DIRECTORY).is_absolute()
+    assert Path(database.MIGRATIONS_DIRECTORY).name == "migrations"
+    database.upgrade.assert_called_once_with(directory=database.MIGRATIONS_DIRECTORY)
 
 
 def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
