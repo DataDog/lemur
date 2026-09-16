@@ -2,6 +2,7 @@
 
 import os
 
+import psycopg2
 from flask import current_app
 from psycopg2 import sql
 from sqlalchemy.sql import text
@@ -73,6 +74,20 @@ def bootstrap():
             )
     finally:
         connection.close()
+
+    target_connection_args = db.engine.url.translate_connect_args(username="user")
+    target_connection_args["database"] = database_name
+    target_connection = psycopg2.connect(**target_connection_args)
+    try:
+        target_connection.set_session(autocommit=True)
+        with target_connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("ALTER SCHEMA public OWNER TO {}").format(
+                    sql.Identifier(database_user)
+                )
+            )
+    finally:
+        target_connection.close()
 
     return {"database": database_name, "user": database_user}
 

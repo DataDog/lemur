@@ -176,6 +176,32 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
     runner.fixtures.cleanup.assert_called_once_with({"fixture": True})
 
 
+def test_run_skips_cleanup_when_database_reset_fails(app, monkeypatch):
+    from lemur.test import runner
+
+    monkeypatch.setattr(runner, "validate_isolation", Mock())
+    monkeypatch.setattr(runner, "validate_task_catalog", Mock())
+    monkeypatch.setattr(runner, "_selected_scenarios", Mock(return_value={}))
+    monkeypatch.setattr(runner.metrics, "send", Mock())
+    monkeypatch.setattr(
+        runner, "reset_and_seed", Mock(side_effect=RuntimeError("reset failed"))
+    )
+    monkeypatch.setattr(runner.fixtures, "cleanup", Mock())
+
+    @contextmanager
+    def unlocked(_run_id):
+        yield
+
+    monkeypatch.setattr(runner, "run_lock", unlocked)
+
+    report = runner.run(reset_database=True)
+
+    assert report["status"] == "failed"
+    assert report["phases"][0]["phase"] == "prepare"
+    assert [phase["phase"] for phase in report["phases"]] == ["prepare"]
+    runner.fixtures.cleanup.assert_not_called()
+
+
 def test_run_certificates_includes_replacements_and_excludes_persistent_fixtures(
     app, monkeypatch
 ):
@@ -271,9 +297,21 @@ def test_bootstrap_database_clears_transaction_before_autocommit(app, monkeypatc
     connection.cursor.return_value.__enter__.return_value = cursor
     engine = Mock()
     engine.url.password = "password"
+    engine.url.translate_connect_args.return_value = {
+        "host": "postgres",
+        "database": "lemur",
+        "user": "lemur",
+        "password": "password",
+    }
     engine.execute.return_value = row
     engine.raw_connection.return_value = connection
     monkeypatch.setattr(bootstrap_database, "db", Mock(engine=engine))
+    target_connection = MagicMock()
+    monkeypatch.setattr(
+        bootstrap_database.psycopg2,
+        "connect",
+        Mock(return_value=target_connection),
+    )
 
     result = bootstrap_database.bootstrap()
 
@@ -282,3 +320,11 @@ def test_bootstrap_database_clears_transaction_before_autocommit(app, monkeypatc
         call.rollback(),
         call.set_session(autocommit=True),
     ]
+    bootstrap_database.psycopg2.connect.assert_called_once_with(
+        host="postgres",
+        database="test",
+        user="lemur",
+        password="password",
+    )
+    target_cursor = target_connection.cursor.return_value.__enter__.return_value
+    assert target_cursor.execute.call_count == 1

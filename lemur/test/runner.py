@@ -80,12 +80,14 @@ def run(task_names=None, timeout=None, reset_database=False):
 
     with run_lock(run_id):
         fixture_state = None
+        database_ready = not reset_database
         setup_succeeded = not reset_database
         if reset_database:
             phase_started = time.time()
             phase = {"phase": "prepare", "status": "failed"}
             try:
                 reset_and_seed()
+                database_ready = True
                 fixture_state = fixtures.prepare(run_id)
                 phase["status"] = "passed"
                 setup_succeeded = True
@@ -140,7 +142,7 @@ def run(task_names=None, timeout=None, reset_database=False):
                     phase["duration_seconds"] = round(time.time() - phase_started, 3)
                     phases.append(phase)
         finally:
-            if reset_database:
+            if reset_database and database_ready:
                 phase_started = time.time()
                 phase = {"phase": "cleanup", "status": "failed"}
                 try:
