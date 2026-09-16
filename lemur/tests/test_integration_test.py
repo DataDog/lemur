@@ -41,7 +41,7 @@ def test_scenarios_apply_configured_arguments():
 
 
 def test_validate_isolation_requires_test_database_and_redis(app, monkeypatch):
-    from lemur.test import runner
+    from lemur.test import database, runner
 
     current_app.config.update(
         LEMUR_TEST_ENABLED=True,
@@ -54,13 +54,13 @@ def test_validate_isolation_requires_test_database_and_redis(app, monkeypatch):
     )
     row = Mock()
     row.fetchone.return_value = ("test", "lemur_test")
-    monkeypatch.setattr(runner.db.engine, "execute", Mock(return_value=row))
+    monkeypatch.setattr(database.db.engine, "execute", Mock(return_value=row))
 
     runner.validate_isolation()
 
 
 def test_validate_isolation_rejects_normal_database(app, monkeypatch):
-    from lemur.test import runner
+    from lemur.test import database, runner
 
     current_app.config.update(
         LEMUR_TEST_ENABLED=True,
@@ -73,7 +73,7 @@ def test_validate_isolation_rejects_normal_database(app, monkeypatch):
     )
     row = Mock()
     row.fetchone.return_value = ("lemur", "lemur")
-    monkeypatch.setattr(runner.db.engine, "execute", Mock(return_value=row))
+    monkeypatch.setattr(database.db.engine, "execute", Mock(return_value=row))
 
     with pytest.raises(RuntimeError, match="Refusing to run"):
         runner.validate_isolation()
@@ -120,3 +120,50 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
     assert runner.celery_app.send_task.call_args_list[0].kwargs["queue"] == "lemur-test"
     assert runner.celery_app.send_task.call_args_list[1].kwargs["args"] == [2]
 
+
+def test_run_resets_database_inside_lock(app, monkeypatch):
+    from lemur.test import runner
+
+    events = []
+    monkeypatch.setattr(runner, "validate_isolation", Mock())
+    monkeypatch.setattr(runner, "validate_task_catalog", Mock())
+    monkeypatch.setattr(runner, "_selected_scenarios", Mock(return_value={}))
+    monkeypatch.setattr(runner.metrics, "send", Mock())
+    monkeypatch.setattr(
+        runner, "reset_and_seed", Mock(side_effect=lambda: events.append("reset"))
+    )
+    monkeypatch.setattr(
+        runner.fixtures,
+        "prepare",
+        Mock(side_effect=lambda _run_id: events.append("prepare") or {"fixture": True}),
+    )
+    monkeypatch.setattr(
+        runner.fixtures,
+        "verify",
+        Mock(side_effect=lambda _state: events.append("verify") or {}),
+    )
+    monkeypatch.setattr(
+        runner.fixtures,
+        "cleanup",
+        Mock(side_effect=lambda: events.append("cleanup")),
+    )
+
+    @contextmanager
+    def locked(_run_id):
+        events.append("lock")
+        yield
+        events.append("unlock")
+
+    monkeypatch.setattr(runner, "run_lock", locked)
+
+    report = runner.run(reset_database=True)
+
+    assert report["status"] == "passed"
+    assert events == [
+        "lock",
+        "reset",
+        "prepare",
+        "verify",
+        "cleanup",
+        "unlock",
+    ]

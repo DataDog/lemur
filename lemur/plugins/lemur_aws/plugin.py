@@ -375,7 +375,9 @@ class AWSSourcePlugin(SourcePlugin):
 
             # fetch advanced ELBs
             try:
-                elbs_v2 = elb.get_all_elbs_v2(account_number=account_number, region=region)
+                elbs_v2 = elb.get_all_elbs_v2(
+                    account_number=account_number, region=region
+                )
             except Exception:  # noqa
                 current_app.logger.warning(
                     {
@@ -763,6 +765,13 @@ class ACMDestinationPlugin(DestinationPlugin):
             body,
             private_key,
             cert_chain=cert_chain,
+            account_number=self.get_option("accountNumber", options),
+            region=self.get_option("region", options),
+        )
+
+    def clean(self, certificate, options, **kwargs):
+        return acm.delete_imported_cert(
+            certificate.body,
             account_number=self.get_option("accountNumber", options),
             region=self.get_option("region", options),
         )

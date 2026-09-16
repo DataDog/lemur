@@ -63,7 +63,9 @@ def validate_task_catalog(celery_app):
             details.append("missing scenarios: {}".format(", ".join(missing)))
         if stale:
             details.append("unregistered tasks: {}".format(", ".join(stale)))
-        raise RuntimeError("Celery task catalog is incomplete ({})".format("; ".join(details)))
+        raise RuntimeError(
+            "Celery task catalog is incomplete ({})".format("; ".join(details))
+        )
 
 
 def scenarios(configured=None):
@@ -83,4 +85,3 @@ def scenarios(configured=None):
             kwargs=dict(override.get("kwargs", default.kwargs)),
         )
     return resolved
-
