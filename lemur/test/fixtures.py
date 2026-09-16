@@ -19,8 +19,7 @@ from lemur.sources import service as source_service
 from lemur.users import service as user_service
 from lemur.authorities import service as authority_service
 
-TEST_CERTIFICATE_PREFIX = "lemur-test-"
-SYNC_SOURCE_TASK = "lemur.common.celery.sync_source"
+TEST_CERTIFICATE_PREFIX = "lemur-test-run-"
 
 
 def _options(plugin_name, configured):
@@ -198,27 +197,6 @@ def prepare(run_id):
     }
 
 
-def after_task(task_name, state):
-    """Prepare task-specific state after prerequisite tasks have completed."""
-    rotation = current_app.config.get("LEMUR_TEST_CLOUDFRONT_ROTATION")
-    if task_name != SYNC_SOURCE_TASK or not rotation:
-        return
-
-    old_certificate = certificate_service.get_by_name(rotation["old_certificate"])
-    new_certificate = certificate_service.get_by_name(rotation["new_certificate"])
-    if not old_certificate or not new_certificate:
-        raise RuntimeError(
-            "CloudFront certificates were not discovered from {}".format(
-                rotation["source"]
-            )
-        )
-    if old_certificate not in new_certificate.replaces:
-        new_certificate.replaces.append(old_certificate)
-        database.commit()
-    state["cloudfront_old_certificate_id"] = old_certificate.id
-    state["cloudfront_new_certificate_id"] = new_certificate.id
-
-
 def verify(state):
     """Verify that task execution produced real discovery and rotation state."""
     failures = []
@@ -232,6 +210,7 @@ def verify(state):
         failures.append("test certificate was not reissued")
 
     expected_endpoints = current_app.config.get("LEMUR_TEST_EXPECTED_ENDPOINTS", [])
+    replacement_ids = {item.id for item in certificate.replaced}
     for expected in expected_endpoints:
         endpoint = endpoint_service.get_by_name_and_source(
             expected["name"], expected["source"]
@@ -240,6 +219,15 @@ def verify(state):
             failures.append(
                 "endpoint {} was not discovered from {}".format(
                     expected["name"], expected["source"]
+                )
+            )
+        elif expected.get("rotated") and (
+            not endpoint.primary_certificate
+            or endpoint.primary_certificate.id not in replacement_ids
+        ):
+            failures.append(
+                "endpoint {} was not rotated to the replacement certificate".format(
+                    expected["name"]
                 )
             )
 
@@ -255,17 +243,6 @@ def verify(state):
                 )
             )
 
-    rotation = current_app.config.get("LEMUR_TEST_CLOUDFRONT_ROTATION")
-    if rotation:
-        rotated = [
-            endpoint
-            for endpoint in endpoint_service.get_by_source(rotation["source"])
-            if endpoint.primary_certificate
-            and endpoint.primary_certificate.name == rotation["new_certificate"]
-        ]
-        if not rotated:
-            failures.append("CloudFront fixture was not rotated")
-
     if failures:
         raise RuntimeError("; ".join(failures))
     return {
@@ -275,32 +252,34 @@ def verify(state):
     }
 
 
-def cleanup():
+def _run_certificates(state):
+    roots = []
+    if state and state.get("certificate_id"):
+        certificate = certificate_service.get(state["certificate_id"])
+        if certificate:
+            roots.append(certificate)
+    roots.extend(
+        Certificate.query.filter(
+            Certificate.name.startswith(TEST_CERTIFICATE_PREFIX)
+        ).all()
+    )
+
+    certificates = []
+    pending = list(roots)
+    seen = set()
+    while pending:
+        certificate = pending.pop()
+        if certificate.id in seen:
+            continue
+        seen.add(certificate.id)
+        certificates.append(certificate)
+        pending.extend(certificate.replaced)
+    return certificates
+
+
+def cleanup(state=None):
     """Restore persistent endpoints and remove certificates created by the suite."""
     cleanup_errors = []
-
-    rotation = current_app.config.get("LEMUR_TEST_CLOUDFRONT_ROTATION")
-    if rotation:
-        source = source_service.get_by_label(rotation["source"])
-        old_certificate = certificate_service.get_by_name(rotation["old_certificate"])
-        if source and old_certificate:
-            plugin = plugins.get(source.plugin_name)
-            for endpoint in endpoint_service.get_by_source(source.label):
-                if (
-                    not endpoint.primary_certificate
-                    or endpoint.primary_certificate.name
-                    not in {
-                        rotation["old_certificate"],
-                        rotation["new_certificate"],
-                    }
-                ):
-                    continue
-                try:
-                    plugin.update_endpoint(endpoint, old_certificate)
-                except Exception as error:
-                    cleanup_errors.append(
-                        "restore CloudFront {}: {!r}".format(endpoint.name, error)
-                    )
 
     for fixture in current_app.config.get("LEMUR_TEST_AWS_ENDPOINTS", []):
         try:
@@ -308,10 +287,7 @@ def cleanup():
         except Exception as error:
             cleanup_errors.append("restore {}: {!r}".format(fixture["name"], error))
 
-    certificates = Certificate.query.filter(
-        Certificate.name.startswith(TEST_CERTIFICATE_PREFIX)
-    ).all()
-    for certificate in certificates:
+    for certificate in _run_certificates(state):
         for destination in certificate.destinations:
             plugin = plugins.get(destination.plugin_name)
             if not hasattr(plugin, "clean"):

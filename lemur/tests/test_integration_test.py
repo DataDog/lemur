@@ -118,7 +118,6 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
         Mock(side_effect=[passed, failed]),
     )
     monkeypatch.setattr(runner.metrics, "send", Mock())
-    monkeypatch.setattr(runner.fixtures, "after_task", Mock())
 
     report = runner.run(timeout=10)
 
@@ -152,7 +151,7 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
     monkeypatch.setattr(
         runner.fixtures,
         "cleanup",
-        Mock(side_effect=lambda: events.append("cleanup")),
+        Mock(side_effect=lambda _state: events.append("cleanup")),
     )
 
     @contextmanager
@@ -174,34 +173,59 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
         "cleanup",
         "unlock",
     ]
+    runner.fixtures.cleanup.assert_called_once_with({"fixture": True})
 
 
-def test_after_sync_source_links_cloudfront_replacement(app, monkeypatch):
+def test_run_certificates_includes_replacements_and_excludes_persistent_fixtures(
+    app, monkeypatch
+):
     from lemur.test import fixtures
 
-    current_app.config["LEMUR_TEST_CLOUDFRONT_ROTATION"] = {
-        "source": "lemur-test-cloudfront",
-        "old_certificate": "lemur-test-cloudfront-primary",
-        "new_certificate": "lemur-test-cloudfront-backup",
-    }
-    old_certificate = Mock(id=1, name="lemur-test-cloudfront-primary")
-    new_certificate = Mock(id=2, name="lemur-test-cloudfront-backup", replaces=[])
+    replacement = Mock(id=3, name="generated-replacement", replaced=[])
+    run_certificate = Mock(
+        id=2, name="lemur-test-run-123", replaced=[replacement]
+    )
+    persistent_certificate = Mock(
+        id=1, name="lemur-test-baseline", replaced=[]
+    )
+    query = MagicMock()
+    query.filter.return_value.all.return_value = [run_certificate]
+    monkeypatch.setattr(fixtures.Certificate, "query", query)
     monkeypatch.setattr(
         fixtures.certificate_service,
-        "get_by_name",
-        Mock(side_effect=[old_certificate, new_certificate]),
+        "get",
+        Mock(return_value=run_certificate),
     )
-    monkeypatch.setattr(fixtures.database, "commit", Mock())
-    state = {}
 
-    fixtures.after_task(fixtures.SYNC_SOURCE_TASK, state)
+    certificates = fixtures._run_certificates({"certificate_id": 2})
 
-    assert new_certificate.replaces == [old_certificate]
-    assert state == {
-        "cloudfront_old_certificate_id": 1,
-        "cloudfront_new_certificate_id": 2,
-    }
-    fixtures.database.commit.assert_called_once_with()
+    assert certificates == [run_certificate, replacement]
+    assert persistent_certificate not in certificates
+
+
+def test_verify_requires_expected_endpoint_to_use_replacement(app, monkeypatch):
+    from lemur.test import fixtures
+
+    replacement = Mock(id=2)
+    certificate = Mock(id=1, replaced=[replacement])
+    endpoint = Mock(primary_certificate=Mock(id=1))
+    current_app.config.update(
+        LEMUR_TEST_EXPECTED_ENDPOINTS=[
+            {"name": "lemur-test-alb", "source": "lemur-test-aws", "rotated": True}
+        ],
+        LEMUR_TEST_MIN_ENDPOINTS_BY_SOURCE={},
+    )
+    monkeypatch.setattr(
+        fixtures.certificate_service, "get", Mock(return_value=certificate)
+    )
+    monkeypatch.setattr(
+        fixtures.endpoint_service,
+        "get_by_name_and_source",
+        Mock(return_value=endpoint),
+    )
+
+    with pytest.raises(RuntimeError, match="was not rotated"):
+        fixtures.verify({"certificate_id": 1, "source_labels": []})
 
 
 def test_bootstrap_database_rejects_normal_configuration(app):

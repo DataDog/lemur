@@ -109,8 +109,6 @@ def run(task_names=None, timeout=None, reset_database=False):
                         )
                         entry["task_id"] = result.id
                         entry["result"] = result.get(timeout=timeout, propagate=True)
-                        if fixture_state:
-                            fixtures.after_task(task_name, fixture_state)
                         entry["status"] = "passed"
                         metrics.send(
                             "test.task.success",
@@ -146,7 +144,7 @@ def run(task_names=None, timeout=None, reset_database=False):
                 phase_started = time.time()
                 phase = {"phase": "cleanup", "status": "failed"}
                 try:
-                    fixtures.cleanup()
+                    fixtures.cleanup(fixture_state)
                     phase["status"] = "passed"
                 except Exception as error:
                     phase["error"] = repr(error)
