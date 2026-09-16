@@ -576,6 +576,14 @@ class AcmeDnsHandler(AcmeHandler):
                     elif len(name) == match_length:
                         self.dns_providers_for_domain[domain].append(dns_provider)
 
+        dns_providers = self.dns_providers_for_domain[domain]
+        if len(dns_providers) > 1:
+            provider_names = ", ".join(sorted(x.name for x in dns_providers))
+            raise InvalidConfiguration(
+                "Multiple DNS providers match domain {}: {}. "
+                "Select a DNS provider explicitly.".format(domain, provider_names)
+            )
+
         return self.dns_providers_for_domain
 
     def finalize_authorizations(self, acme_client, authorizations):
