@@ -35,7 +35,15 @@ from lemur.common.utils import generate_private_key, key_to_alg
 from lemur.dns_providers import service as dns_provider_service
 from lemur.exceptions import InvalidAuthority, UnknownProvider, InvalidConfiguration
 from lemur.extensions import metrics
-from lemur.plugins.lemur_acme import cloudflare, dyn, route53, ultradns, powerdns, nsone
+from lemur.plugins.lemur_acme import (
+    azure,
+    cloudflare,
+    dyn,
+    route53,
+    ultradns,
+    powerdns,
+    nsone,
+)
 
 
 class AuthorizationRecord:
@@ -344,9 +352,17 @@ class AcmeDnsHandler(AcmeHandler):
             current_app.logger.error(f"Unable to fetch DNS Providers: {e}")
             self.all_dns_providers = []
 
+    @staticmethod
+    def get_dns_provider_context(dns_provider, options):
+        if dns_provider.provider_type == "azure":
+            return options
+        return options.get("account_id")
+
     def get_all_zones(self, dns_provider):
         dns_provider_options = json.loads(dns_provider.credentials)
-        account_number = dns_provider_options.get("account_id")
+        account_number = self.get_dns_provider_context(
+            dns_provider, dns_provider_options
+        )
         dns_provider_plugin = self.get_dns_provider(dns_provider.provider_type)
         return dns_provider_plugin.get_zones(account_number=account_number)
 
@@ -382,6 +398,7 @@ class AcmeDnsHandler(AcmeHandler):
 
     def get_dns_provider(self, type):
         provider_types = {
+            "azure": azure,
             "cloudflare": cloudflare,
             "dyn": dyn,
             "route53": route53,
@@ -467,7 +484,9 @@ class AcmeDnsHandler(AcmeHandler):
         for dns_provider in dns_providers:
             # Grab account number (For Route53)
             dns_provider_options = json.loads(dns_provider.credentials)
-            account_number = dns_provider_options.get("account_id")
+            account_number = self.get_dns_provider_context(
+                dns_provider, dns_provider_options
+            )
             dns_provider_plugin = self.get_dns_provider(dns_provider.provider_type)
             for change_id in authz_record.change_id:
                 try:
@@ -478,8 +497,8 @@ class AcmeDnsHandler(AcmeHandler):
                     metrics.send("complete_dns_challenge_error", "counter", 1)
                     capture_exception()
                     current_app.logger.debug(
-                        f"Unable to resolve DNS challenge for change_id: {change_id}, account_id: "
-                        f"{account_number}",
+                        f"Unable to resolve DNS challenge for change_id: {change_id}, "
+                        f"provider: {dns_provider.name}",
                         exc_info=True,
                     )
                     raise
@@ -542,7 +561,9 @@ class AcmeDnsHandler(AcmeHandler):
             for dns_provider in self.dns_providers_for_domain[target_domain]:
                 dns_provider_plugin = self.get_dns_provider(dns_provider.provider_type)
                 dns_provider_options = json.loads(dns_provider.credentials)
-                account_number = dns_provider_options.get("account_id")
+                account_number = self.get_dns_provider_context(
+                    dns_provider, dns_provider_options
+                )
                 authz_record = self.start_dns_challenge(
                     acme_client,
                     account_number,
@@ -593,7 +614,9 @@ class AcmeDnsHandler(AcmeHandler):
                         dns_provider.provider_type
                     )
                     dns_provider_options = json.loads(dns_provider.credentials)
-                    account_number = dns_provider_options.get("account_id")
+                    account_number = self.get_dns_provider_context(
+                        dns_provider, dns_provider_options
+                    )
                     host_to_validate, _ = self.strip_wildcard(
                         authz_record.target_domain
                     )
@@ -632,7 +655,9 @@ class AcmeDnsHandler(AcmeHandler):
             for dns_provider in dns_providers:
                 # Grab account number (For Route53)
                 dns_provider_options = json.loads(dns_provider.credentials)
-                account_number = dns_provider_options.get("account_id")
+                account_number = self.get_dns_provider_context(
+                    dns_provider, dns_provider_options
+                )
                 dns_challenges = authz_record.dns_challenge
                 host_to_validate, _ = self.strip_wildcard(authz_record.target_domain)
                 host_to_validate = self.maybe_add_extension(

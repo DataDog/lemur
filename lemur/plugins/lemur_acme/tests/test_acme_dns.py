@@ -356,6 +356,8 @@ class TestAcmeDns(unittest.TestCase):
         assert cloudflare
         dyn = provider.get_dns_provider("dyn")
         assert dyn
+        azure = provider.get_dns_provider("azure")
+        assert azure
 
     @patch("lemur.plugins.lemur_acme.plugin.AcmeHandler.setup_acme_client")
     @patch("lemur.plugins.lemur_acme.acme_handlers.dns_provider_service")

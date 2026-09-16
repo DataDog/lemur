@@ -45,7 +45,9 @@ def dnstest(domain, token):
     for dns_provider in acme_handler.dns_providers_for_domain[domain]:
         dns_provider_plugin = acme_handler.get_dns_provider(dns_provider.provider_type)
         dns_provider_options = json.loads(dns_provider.credentials)
-        account_number = dns_provider_options.get("account_id")
+        account_number = acme_handler.get_dns_provider_context(
+            dns_provider, dns_provider_options
+        )
 
         print(f"[+] Creating TXT Record in `{dns_provider.name}` provider")
         change_id = dns_provider_plugin.create_txt_record(domain, token, account_number)
@@ -58,7 +60,9 @@ def dnstest(domain, token):
     for dns_provider in acme_handler.dns_providers_for_domain[domain]:
         dns_provider_plugin = acme_handler.get_dns_provider(dns_provider.provider_type)
         dns_provider_options = json.loads(dns_provider.credentials)
-        account_number = dns_provider_options.get("account_id")
+        account_number = acme_handler.get_dns_provider_context(
+            dns_provider, dns_provider_options
+        )
 
         try:
             dns_provider_plugin.wait_for_dns_change(change_id, account_number)
@@ -66,8 +70,8 @@ def dnstest(domain, token):
         except Exception:
             capture_exception()
             current_app.logger.debug(
-                f"Unable to resolve DNS challenge for change_id: {change_id}, account_id: "
-                f"{account_number}",
+                f"Unable to resolve DNS challenge for change_id: {change_id}, "
+                f"provider: {dns_provider.name}",
                 exc_info=True,
             )
             print(f"[+] Unable to Verify TXT Record in `{dns_provider.name}` provider")
@@ -78,7 +82,9 @@ def dnstest(domain, token):
     for dns_provider in acme_handler.dns_providers_for_domain[domain]:
         dns_provider_plugin = acme_handler.get_dns_provider(dns_provider.provider_type)
         dns_provider_options = json.loads(dns_provider.credentials)
-        account_number = dns_provider_options.get("account_id")
+        account_number = acme_handler.get_dns_provider_context(
+            dns_provider, dns_provider_options
+        )
 
         # TODO(csine@: Add Exception Handling
         dns_provider_plugin.delete_txt_record(change_id, account_number, domain, token)
