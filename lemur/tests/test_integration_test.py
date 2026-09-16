@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock, call
 
 import pytest
 from flask import current_app
@@ -227,3 +227,34 @@ def test_bootstrap_database_rejects_wrong_identity(app, monkeypatch):
 
     with pytest.raises(RuntimeError, match="Refusing to bootstrap"):
         bootstrap_database.bootstrap()
+
+
+def test_bootstrap_database_clears_transaction_before_autocommit(app, monkeypatch):
+    from lemur.test import bootstrap_database
+
+    current_app.config.update(
+        LEMUR_TEST_BOOTSTRAP_ENABLED=True,
+        LEMUR_TEST_BOOTSTRAP_DATABASE="lemur",
+        LEMUR_TEST_BOOTSTRAP_USER="lemur",
+        LEMUR_TEST_DATABASE="test",
+        LEMUR_TEST_DATABASE_USER="lemur_test",
+    )
+    row = Mock()
+    row.fetchone.return_value = ("lemur", "lemur")
+    cursor = Mock()
+    cursor.fetchone.side_effect = [None, None]
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    engine = Mock()
+    engine.url.password = "password"
+    engine.execute.return_value = row
+    engine.raw_connection.return_value = connection
+    monkeypatch.setattr(bootstrap_database, "db", Mock(engine=engine))
+
+    result = bootstrap_database.bootstrap()
+
+    assert result == {"database": "test", "user": "lemur_test"}
+    assert connection.method_calls[:2] == [
+        call.rollback(),
+        call.set_session(autocommit=True),
+    ]

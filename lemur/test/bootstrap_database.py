@@ -36,6 +36,7 @@ def bootstrap():
 
     connection = db.engine.raw_connection()
     try:
+        connection.rollback()
         connection.set_session(autocommit=True)
         with connection.cursor() as cursor:
             cursor.execute(
