@@ -14,7 +14,6 @@ from lemur.test.catalog import scenarios, validate_task_catalog
 from lemur.test.database import reset_and_seed, validate_database_identity
 from lemur.test import fixtures
 
-
 LOCK_KEY = "lemur-test:run-lock"
 
 
@@ -110,6 +109,8 @@ def run(task_names=None, timeout=None, reset_database=False):
                         )
                         entry["task_id"] = result.id
                         entry["result"] = result.get(timeout=timeout, propagate=True)
+                        if fixture_state:
+                            fixtures.after_task(task_name, fixture_state)
                         entry["status"] = "passed"
                         metrics.send(
                             "test.task.success",

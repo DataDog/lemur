@@ -14,6 +14,12 @@ def test_validate_task_catalog_accepts_complete_catalog():
     catalog.validate_task_catalog(app)
 
 
+def test_task_catalog_matches_registered_lemur_tasks(app):
+    from lemur.common.celery import celery_app
+
+    catalog.validate_task_catalog(celery_app)
+
+
 def test_validate_task_catalog_reports_missing_and_stale_tasks():
     app = Mock()
     app.tasks = {
@@ -112,6 +118,7 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
         Mock(side_effect=[passed, failed]),
     )
     monkeypatch.setattr(runner.metrics, "send", Mock())
+    monkeypatch.setattr(runner.fixtures, "after_task", Mock())
 
     report = runner.run(timeout=10)
 
@@ -167,3 +174,56 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
         "cleanup",
         "unlock",
     ]
+
+
+def test_after_sync_source_links_cloudfront_replacement(app, monkeypatch):
+    from lemur.test import fixtures
+
+    current_app.config["LEMUR_TEST_CLOUDFRONT_ROTATION"] = {
+        "source": "lemur-test-cloudfront",
+        "old_certificate": "lemur-test-cloudfront-primary",
+        "new_certificate": "lemur-test-cloudfront-backup",
+    }
+    old_certificate = Mock(id=1, name="lemur-test-cloudfront-primary")
+    new_certificate = Mock(id=2, name="lemur-test-cloudfront-backup", replaces=[])
+    monkeypatch.setattr(
+        fixtures.certificate_service,
+        "get_by_name",
+        Mock(side_effect=[old_certificate, new_certificate]),
+    )
+    monkeypatch.setattr(fixtures.database, "commit", Mock())
+    state = {}
+
+    fixtures.after_task(fixtures.SYNC_SOURCE_TASK, state)
+
+    assert new_certificate.replaces == [old_certificate]
+    assert state == {
+        "cloudfront_old_certificate_id": 1,
+        "cloudfront_new_certificate_id": 2,
+    }
+    fixtures.database.commit.assert_called_once_with()
+
+
+def test_bootstrap_database_rejects_normal_configuration(app):
+    from lemur.test import bootstrap_database
+
+    current_app.config.update(LEMUR_TEST_BOOTSTRAP_ENABLED=False)
+
+    with pytest.raises(RuntimeError, match="LEMUR_TEST_BOOTSTRAP_ENABLED"):
+        bootstrap_database.bootstrap()
+
+
+def test_bootstrap_database_rejects_wrong_identity(app, monkeypatch):
+    from lemur.test import bootstrap_database
+
+    current_app.config.update(
+        LEMUR_TEST_BOOTSTRAP_ENABLED=True,
+        LEMUR_TEST_BOOTSTRAP_DATABASE="lemur",
+        LEMUR_TEST_BOOTSTRAP_USER="lemur",
+    )
+    row = Mock()
+    row.fetchone.return_value = ("test", "lemur_test")
+    monkeypatch.setattr(bootstrap_database.db.engine, "execute", Mock(return_value=row))
+
+    with pytest.raises(RuntimeError, match="Refusing to bootstrap"):
+        bootstrap_database.bootstrap()

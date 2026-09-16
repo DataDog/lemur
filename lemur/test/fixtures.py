@@ -11,6 +11,7 @@ from lemur.certificates.models import Certificate
 from lemur.certificates.schemas import CertificateInputSchema
 from lemur.destinations import service as destination_service
 from lemur.endpoints import service as endpoint_service
+from lemur.endpoints.models import Endpoint
 from lemur.plugins.base import plugins
 from lemur.plugins.lemur_aws import elb, iam
 from lemur.plugins.utils import get_plugin_option, set_plugin_option
@@ -18,8 +19,8 @@ from lemur.sources import service as source_service
 from lemur.users import service as user_service
 from lemur.authorities import service as authority_service
 
-
 TEST_CERTIFICATE_PREFIX = "lemur-test-"
+SYNC_SOURCE_TASK = "lemur.common.celery.sync_source"
 
 
 def _options(plugin_name, configured):
@@ -168,6 +169,18 @@ def _set_endpoint_certificate(fixture, certificate_arn):
     raise RuntimeError("Unknown AWS endpoint fixture type: {}".format(fixture["type"]))
 
 
+def _baseline_certificate_arn(fixture):
+    configured_arn = fixture.get("baseline_certificate_arn")
+    if configured_arn:
+        return configured_arn
+    return iam.create_arn_from_cert(
+        current_app.config["LEMUR_TEST_AWS_ACCOUNT"],
+        current_app.config.get("LEMUR_AWS_PARTITION", "aws"),
+        fixture.get("baseline_certificate_name", "lemur-test-baseline"),
+        fixture.get("baseline_certificate_path", "/lemur-test/").strip("/"),
+    )
+
+
 def prepare(run_id):
     """Create DB fixtures and attach the run certificate to persistent AWS fixtures."""
     destinations = _create_destinations()
@@ -183,6 +196,27 @@ def prepare(run_id):
         "certificate_id": certificate.id,
         "source_labels": [source.label for source in sources],
     }
+
+
+def after_task(task_name, state):
+    """Prepare task-specific state after prerequisite tasks have completed."""
+    rotation = current_app.config.get("LEMUR_TEST_CLOUDFRONT_ROTATION")
+    if task_name != SYNC_SOURCE_TASK or not rotation:
+        return
+
+    old_certificate = certificate_service.get_by_name(rotation["old_certificate"])
+    new_certificate = certificate_service.get_by_name(rotation["new_certificate"])
+    if not old_certificate or not new_certificate:
+        raise RuntimeError(
+            "CloudFront certificates were not discovered from {}".format(
+                rotation["source"]
+            )
+        )
+    if old_certificate not in new_certificate.replaces:
+        new_certificate.replaces.append(old_certificate)
+        database.commit()
+    state["cloudfront_old_certificate_id"] = old_certificate.id
+    state["cloudfront_new_certificate_id"] = new_certificate.id
 
 
 def verify(state):
@@ -209,11 +243,34 @@ def verify(state):
                 )
             )
 
+    minimum_endpoints = current_app.config.get("LEMUR_TEST_MIN_ENDPOINTS_BY_SOURCE", {})
+    for source_label, minimum in minimum_endpoints.items():
+        discovered = Endpoint.query.filter(
+            Endpoint.source.has(label=source_label)
+        ).count()
+        if discovered < minimum:
+            failures.append(
+                "source {} discovered {} endpoints, expected at least {}".format(
+                    source_label, discovered, minimum
+                )
+            )
+
+    rotation = current_app.config.get("LEMUR_TEST_CLOUDFRONT_ROTATION")
+    if rotation:
+        rotated = [
+            endpoint
+            for endpoint in endpoint_service.get_by_source(rotation["source"])
+            if endpoint.primary_certificate
+            and endpoint.primary_certificate.name == rotation["new_certificate"]
+        ]
+        if not rotated:
+            failures.append("CloudFront fixture was not rotated")
+
     if failures:
         raise RuntimeError("; ".join(failures))
     return {
         "sources_synced": len(state["source_labels"]),
-        "endpoints_verified": len(expected_endpoints),
+        "endpoints_verified": len(expected_endpoints) + sum(minimum_endpoints.values()),
         "replacement_ids": [item.id for item in certificate.replaced],
     }
 
@@ -221,9 +278,33 @@ def verify(state):
 def cleanup():
     """Restore persistent endpoints and remove certificates created by the suite."""
     cleanup_errors = []
+
+    rotation = current_app.config.get("LEMUR_TEST_CLOUDFRONT_ROTATION")
+    if rotation:
+        source = source_service.get_by_label(rotation["source"])
+        old_certificate = certificate_service.get_by_name(rotation["old_certificate"])
+        if source and old_certificate:
+            plugin = plugins.get(source.plugin_name)
+            for endpoint in endpoint_service.get_by_source(source.label):
+                if (
+                    not endpoint.primary_certificate
+                    or endpoint.primary_certificate.name
+                    not in {
+                        rotation["old_certificate"],
+                        rotation["new_certificate"],
+                    }
+                ):
+                    continue
+                try:
+                    plugin.update_endpoint(endpoint, old_certificate)
+                except Exception as error:
+                    cleanup_errors.append(
+                        "restore CloudFront {}: {!r}".format(endpoint.name, error)
+                    )
+
     for fixture in current_app.config.get("LEMUR_TEST_AWS_ENDPOINTS", []):
         try:
-            _set_endpoint_certificate(fixture, fixture["baseline_certificate_arn"])
+            _set_endpoint_certificate(fixture, _baseline_certificate_arn(fixture))
         except Exception as error:
             cleanup_errors.append("restore {}: {!r}".format(fixture["name"], error))
 
