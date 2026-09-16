@@ -581,7 +581,10 @@ class AcmeDnsHandler(AcmeHandler):
             provider_names = ", ".join(sorted(x.name for x in dns_providers))
             raise InvalidConfiguration(
                 "Multiple DNS providers match domain {}: {}. "
-                "Select a DNS provider explicitly.".format(domain, provider_names)
+                "Select a provider explicitly for direct validation, or remove "
+                "overlapping provider configuration for a delegated CNAME target.".format(
+                    domain, provider_names
+                )
             )
 
         return self.dns_providers_for_domain

@@ -518,6 +518,13 @@ possible. To enable this functionality, periodically (or through Cron/Celery) ru
 This command will traverse all DNS providers, determine which zones they control, and upload this list of zones to
 Lemur's database (in the dns_providers table). Alternatively, you can manually input this data.
 
+Each zone should resolve to one DNS provider. If multiple providers claim the same most-specific zone, Lemur rejects
+automatic selection rather than writing the challenge through an arbitrary provider. For direct validation, select the
+authoritative provider explicitly on the certificate request. For delegated CNAME validation, Lemur selects a provider
+for the CNAME target instead of reusing the provider selected for the original domain. If that target is ambiguous, an
+administrator must remove the overlapping zone from the incorrect DNS provider, or otherwise deduplicate the provider
+configuration, and then retry the request.
+
 ACME HTTP Challenge
 -------------------
 
@@ -647,4 +654,3 @@ The ACME protocol enables setting up a new ACME account linked to an existing ex
 For this, your CA needs to issue you an hmac_key and kid, which you need while setting up a new ACME issuer in Lemur.
 hmac_key and kid are usually short-lived and are used to create a new account.
 When `store_account` is set in the options of a new issuer, Lemur will use the EAB credentials to set up a new account.
-

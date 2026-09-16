@@ -373,7 +373,8 @@ class TestAcmeDns(unittest.TestCase):
         self.assertEqual(
             str(error.exception),
             "Multiple DNS providers match domain registry.us3.staging.dog: "
-            "first, second. Select a DNS provider explicitly.",
+            "first, second. Select a provider explicitly for direct validation, "
+            "or remove overlapping provider configuration for a delegated CNAME target.",
         )
 
     @patch("lemur.plugins.lemur_acme.plugin.AcmeHandler.setup_acme_client")
