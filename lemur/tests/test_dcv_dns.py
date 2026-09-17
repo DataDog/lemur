@@ -169,6 +169,21 @@ def test_domain_candidates_bounded_to_registrable_apex():
     assert list(_domain_candidates("datad0g.com.")) == ["datad0g.com"]
 
 
+def test_domain_candidates_never_query_bare_multilabel_public_suffix():
+    # Finding (review): len(labels) >= 2 does not reliably identify a registrable
+    # domain. api.example.co.uk would otherwise walk all the way to the bare
+    # public suffix co.uk. It must stop at the registrable domain example.co.uk.
+    assert list(_domain_candidates("api.example.co.uk")) == [
+        "api.example.co.uk",
+        "example.co.uk",
+    ]
+    assert list(_domain_candidates("example.co.uk")) == ["example.co.uk"]
+    # A bare public suffix yields no candidates at all.
+    assert list(_domain_candidates("co.uk")) == []
+    # A multi-label public-suffix candidate like com.au also never walked.
+    assert list(_domain_candidates("x.com.au")) == ["x.com.au"]
+
+
 def test_verify_persist_records_subdomain_covers_from_ancestor_record():
     # Finding 3: a subdomain SAN is covered by the persistent record published at
     # the zone apex, so it must resolve "ok" (not "missing").

@@ -1461,11 +1461,17 @@ def emit_persist_record_metrics():
         )
     # Complementary dashboard signal: count of broken (missing/wrong/unparseable)
     # persistent records per CA. Excludes dns_error (transient).
-    for ca_name, count in broken_by_ca.items():
+    #
+    # Emitted for EVERY monitored CA - including a healthy 0 - so a resolved
+    # failure reports a clear 0 (recovered) instead of the gauge going stale /
+    # no-data. Previously the gauge was only submitted when the count was
+    # nonzero, which hid recovery behind missing datapoints.
+    monitored_cas = {r["ca"] for r in results if r["ca"] != "unknown"}
+    for ca_name in sorted(monitored_cas):
         metrics.send(
             "dcv.persist_record_broken",
             "gauge",
-            count,
+            broken_by_ca.get(ca_name, 0),
             metric_tags={"ca": ca_name},
         )
     return len(results)

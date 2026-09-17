@@ -786,3 +786,37 @@ def test_emit_persist_record_metrics_emits_broken_count(
     assert len(broken_calls) == 1
     assert broken_calls[0].args[2] == 2  # missing + wrong
     assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert.com"
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_emits_zero_broken_when_recovered(
+    mock_current_app, mock_metrics, mock_verify, mock_active
+):
+    # Review finding: the broken gauge was only submitted when nonzero, so a
+    # resolved failure went stale / no-data instead of clearly recovering. A
+    # healthy CA must still emit dcv.persist_record_broken = 0.
+    mock_active.return_value = {"digicert-issuer": {"a.com"}}
+    mock_current_app.config.get.return_value = {
+        "digicert.com": "https://digicert.com/account/abc",
+    }
+    mock_verify.return_value = [
+        {"domain": "a.com", "ca": "digicert.com", "status": "ok", "account_uri": "x"},
+    ]
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    emit_persist_record_metrics()
+
+    broken_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.persist_record_broken" in c.args[0]
+    ]
+    assert len(broken_calls) == 1
+    assert broken_calls[0].args[2] == 0
+    assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert.com"

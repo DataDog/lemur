@@ -76,21 +76,65 @@ def _resolve_persist_txt(domain):
 
 
 def _domain_candidates(domain):
-    """Yield `<domain>` then its parent labels, closest-first, down to a
-    2-label registrable-looking apex.
+    """Yield `<domain>` then its parent labels, closest-first, down to the
+    registrable domain (public suffix + one label).
 
     A persistent record is published once per DNS zone (e.g. at
     `_validation-persist.datad0g.com`), while a certificate's SAN set can include
     subdomains (`api.datad0g.com`). To avoid flagging a subdomain SAN as
     "missing" when its zone's record exists, resolve the closest candidate that
-    has a record, then fall back up the labels. Never query a bare public suffix
-    (one label), which is outside our DNS zones and could belong to an unrelated
-    party. e.g. "api.datad0g.com" -> ["api.datad0g.com", "datad0g.com"].
+    has a record, then fall back up the labels. Never query a bare public suffix:
+    a single-label TLD (".com") is excluded by the label guard, and a
+    multi-label registry suffix ("co.uk") by the
+    _MULTI_LABEL_PUBLIC_SUFFIXES set, so a walk always stops at the registrable
+    domain, which is inside our own DNS zones.
+    e.g. "api.datad0g.com" -> ["api.datad0g.com", "datad0g.com"],
+         "api.example.co.uk" -> ["api.example.co.uk", "example.co.uk"].
     """
     labels = domain.rstrip(".").split(".")
-    while len(labels) >= 2:
-        yield ".".join(labels)
+    while labels:
+        candidate = ".".join(labels)
+        # A single label is a bare TLD; a known multi-label registry suffix is a
+        # bare public suffix. Both are outside our zones - stop the walk before
+        # querying them (the registrable domain was already yielded).
+        if len(labels) == 1 or candidate in _MULTI_LABEL_PUBLIC_SUFFIXES:
+            break
+        yield candidate
         labels = labels[1:]
+
+
+# Multi-label public suffixes that must never be queried directly. The original
+# 2-label guard already stops a walk at a bare single-label TLD (e.g. ".com");
+# this set closes the gap for registry-suffix TLDs such as "co.uk", where
+# "example.co.uk" is the registrable domain but "co.uk" alone is a bare public
+# suffix outside our DNS zones. Kept intentionally small and auditable (not the
+# full Public Suffix List); it covers the realistic cases a Domain Control
+# Validation name might hit.
+_MULTI_LABEL_PUBLIC_SUFFIXES = frozenset(
+    {
+        # UK
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk", "nhs.uk",
+        "plc.uk", "sch.uk",
+        # AU
+        "com.au", "net.au", "org.au", "edu.au", "gov.au", "asn.au", "id.au",
+        # JP
+        "co.jp", "or.jp", "ne.jp", "ac.jp", "ad.jp",
+        # NZ
+        "co.nz", "net.nz", "org.nz", "govt.nz", "school.nz", "geek.nz",
+        # IN
+        "co.in", "net.in", "org.in", "gen.in", "firm.in",
+        # BR / CN / KR / MX / SG / HK / MY / ZA / TR / TW / TH / AR / CL / CO
+        "com.br", "net.br", "org.br",
+        "com.cn", "net.cn", "org.cn",
+        "co.kr", "or.kr", "net.kr", "go.kr", "ac.kr", "re.kr",
+        "com.mx", "com.sg", "com.hk", "com.my",
+        "co.za", "org.za", "net.za", "web.za",
+        "com.tr", "net.tr", "org.tr",
+        "com.tw", "org.tw", "idv.tw", "gov.tw",
+        "co.th", "in.th", "ac.th", "go.th",
+        "com.ar", "com.cl", "com.co",
+    }
+)
 
 
 def _resolve_persist_walk(domain):
