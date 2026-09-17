@@ -1272,11 +1272,14 @@ def _active_domains_by_ca():
     return by_ca
 
 
-# Design (DNS-PERSIST monitoring): a domain is healthily DCV-validated when the
-# shared dcv_status is in this set. active is fully validated; pending means a
-# duplicate/reuse cycle is in progress but the domain is still under our control.
-# Only expired / uncovered / unknown require investigation.
-_DCV_HEALTHY_STATUSES = ("active", "pending")
+# Design (DNS-PERSIST monitoring): a domain is healthily DCV-validated only when
+# the shared dcv_status is "active" (the CA has completed validation). We do NOT
+# treat "pending" as healthy: pending means the CA has not finished validation,
+# and mapping it to the same healthy gauge value as active would hide a validation
+# that remains stuck. pending is emitted with the gauge at 0 so it is surfaced,
+# and the raw dcv_status:pending tag lets the monitor handle it as a warning
+# (distinct from expired/uncovered/unknown, which are investigation-worthy).
+_DCV_HEALTHY_STATUSES = ("active",)
 
 
 def _dcv_signal_is_healthy(dcv_status):
@@ -1366,16 +1369,22 @@ def emit_dcv_expiration_metrics():
                 dcv_status = "uncovered"
                 dcv_method = "unknown"
                 validation_type = "unknown"
-            if not _dcv_signal_is_healthy(dcv_status):
+            if not _dcv_signal_is_healthy(dcv_status) and dcv_status != "pending":
+                # pending is a warning (gauge 0 + dcv_status:pending tag), not a
+                # break; only investigation-worthy statuses (expired/uncovered/
+                # unknown/empty) count toward the broken_domains signal.
                 broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
             metrics.send(
                 "dcv.validation_status",
                 "gauge",
-                # Design (DNS-PERSIST monitoring): active AND pending are healthy
-                # (a duplicate/pending/reuse-cycle is still validly under our
-                # control); expired, uncovered, and unknown require investigation.
-                # The raw status is tagged so a monitor can alert on the specific
-                # broken value (dcv_status:expired) rather than the gauge value.
+                # Design (DNS-PERSIST monitoring): only "active" is a healthy gauge
+                # (1); pending is emitted as 0 because the CA has not completed
+                # validation, and the raw dcv_status:pending tag lets the monitor
+                # treat it as a warning rather than hiding a stuck validation.
+                # expired, uncovered, and unknown are also 0 and remain
+                # investigation-worthy. The raw status is tagged so a monitor can
+                # alert on the specific non-active value (dcv_status:expired /
+                # dcv_status:pending) rather than just the gauge value.
                 1 if _dcv_signal_is_healthy(dcv_status) else 0,
                 metric_tags={
                     "domain": domain,

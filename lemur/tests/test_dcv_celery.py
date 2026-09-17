@@ -174,7 +174,10 @@ def test_emit_dcv_expiration_metrics_validation_status_mapping(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     # Design (DNS-PERSIST monitoring): the shared dcv_status maps to the healthy
-    # gauge in the set {active, pending}; expired/unknown/empty are 0. Asserts the
+    # gauge only for active; pending is NOT healthy (the CA has not completed
+    # validation), so we would hide a stuck validation if it mapped to 1.
+    # expired/unknown/empty are also 0. pending is distinguished via the
+    # dcv_status:pending tag (the monitor treats it as a warning). Asserts the
     # _dcv_signal_is_healthy mapping through the actual emit path.
     status_by_domain = {
         "active.com": "active",
@@ -207,10 +210,10 @@ def test_emit_dcv_expiration_metrics_validation_status_mapping(
     vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
     assert len(vs_calls) == len(status_by_domain)
     by_domain = {c.kwargs["metric_tags"]["domain"]: c for c in vs_calls}
-    # active and pending are healthy; expired/unknown/empty are not.
+    # only active is healthy; pending/expired/unknown/empty are not.
     expected = {
         "active.com": 1,
-        "pending.com": 1,
+        "pending.com": 0,
         "expired.com": 0,
         "unknown.com": 0,
         "empty.com": 0,
