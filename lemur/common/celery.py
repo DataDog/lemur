@@ -249,7 +249,11 @@ def _emit_task_duration(status, tags):
         "celery.task_duration",
         "TIMER",
         duration_ms,
-        metric_tags={"task_name": tags["task_name"], "status": status},
+        metric_tags={
+            "task_name": tags["task_name"],
+            "status": status,
+            "queue": tags["queue"],
+        },
     )
 
 
