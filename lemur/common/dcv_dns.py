@@ -11,19 +11,26 @@ so verification resolves the exact label first and falls back up to the zone
 apex to cover subdomain SANs; it never queries a bare public suffix.
 """
 
+import time
+
 import dns.exception
 import dns.flags
 import dns.resolver
 
 
 def _parse_persist_txt(txt):
-    """Parse a single _validation-persist TXT value into {issuer: account_uri}.
+    """Parse a single _validation-persist TXT value.
 
     Format (draft-ietf-acme-dns-persist): "issuer-domain-name; key=value; key=value"
-    e.g. "digicert.com;accounturi=https://digicert.com/account/abc"
+    e.g. "digicert.com;accounturi=https://digicert.com/account/abc; policy=wildcard"
          "sectigo.com;accounturi=acct:1234@sectigo.com"
-    Returns {issuer_domain.lower(): account_uri} or None if unparseable (no issuer
-    or no accounturi).
+         "digicert.com;accounturi=https://...; persistUntil=253402300799"
+
+    Returns {issuer_domain.lower(): {"account_uri": str, "persist_until": int|None}}
+    where persist_until is a UNIX timestamp (base-10 seconds per the draft), or
+    None if the record carries no persistUntil. Returns None if unparseable
+    (no issuer, no accounturi, or a malformed persistUntil timestamp -- per the
+    draft, a record whose persistUntil is not a valid timestamp is malformed).
     """
     parts = [p.strip() for p in txt.split(";")]
     if not parts or not parts[0]:
@@ -37,7 +44,15 @@ def _parse_persist_txt(txt):
     account_uri = params.get("accounturi")
     if not account_uri:
         return None
-    return {issuer: account_uri}
+    persist_until = None
+    pu = params.get("persistuntil")
+    if pu is not None:
+        # persistUntil is a base-10 UNIX timestamp. A non-integer value makes the
+        # whole record malformed (draft: CAs must reject a malformed timestamp).
+        if not pu.isdigit():
+            return None
+        persist_until = int(pu)
+    return {issuer: {"account_uri": account_uri, "persist_until": persist_until}}
 
 
 def _resolve_persist_txt(domain):
@@ -165,10 +180,13 @@ def verify_persist_records(domains, expected_uris):
       {"digicert.com": "https://...", "sectigo.com": "acct:...@sectigo.com"}
 
     Returns a list of dicts, one per (domain, issuer) pair:
-      {"domain", "ca", "status", "account_uri"}
-      status in {"ok", "missing", "wrong", "unparseable", "dns_error"}
+      {"domain", "ca", "status", "account_uri", "persist_until"}
+      status in {"ok", "missing", "wrong", "expired", "unparseable", "dns_error"}
+      -- expired: the record matches the expected account URI but carries a
+         persistUntil that has already passed (must not be accepted per the draft).
     """
     results = []
+    now = int(time.time())
     for domain in domains:
         # Resolve at the exact label first, then fall back to ancestor (zone)
         # labels, so a subdomain SAN covered by the zone's persistent record is
@@ -181,6 +199,7 @@ def verify_persist_records(domains, expected_uris):
                     "ca": "unknown",
                     "status": "dns_error",
                     "account_uri": None,
+                    "persist_until": None,
                 }
             )
             continue
@@ -204,14 +223,23 @@ def verify_persist_records(domains, expected_uris):
                     "ca": "unknown",
                     "status": "unparseable",
                     "account_uri": None,
+                    "persist_until": None,
                 }
             )
         for issuer, expected in expected_uris.items():
-            actual = found.get(issuer)
+            entry = found.get(issuer)
+            actual = entry["account_uri"] if entry else None
+            persist_until = entry["persist_until"] if entry else None
             if actual is None:
                 result_status = "missing"
             elif actual != expected:
                 result_status = "wrong"
+            elif persist_until is not None and persist_until <= now:
+                # The record is correct but its persistUntil has passed; per the
+                # draft an expired persistUntil must not be accepted. Report a
+                # distinct status so the monitor can distinguish "expired" from
+                # a healthy, active record.
+                result_status = "expired"
             else:
                 result_status = "ok"
             results.append(
@@ -220,6 +248,7 @@ def verify_persist_records(domains, expected_uris):
                     "ca": issuer,
                     "status": result_status,
                     "account_uri": actual,
+                    "persist_until": persist_until,
                 }
             )
     return results

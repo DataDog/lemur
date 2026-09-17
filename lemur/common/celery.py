@@ -1447,7 +1447,7 @@ def emit_persist_record_metrics():
     results = verify_persist_records(sorted(persist_domains), expected_uris)
     broken_by_ca = {}
     for r in results:
-        if r["status"] in ("missing", "wrong", "unparseable"):
+        if r["status"] in ("missing", "wrong", "unparseable", "expired"):
             broken_by_ca[r["ca"]] = broken_by_ca.get(r["ca"], 0) + 1
         metrics.send(
             "dcv.persist_record_ok",
@@ -1457,6 +1457,7 @@ def emit_persist_record_metrics():
                 "domain": r["domain"],
                 "ca": r["ca"],
                 "persist_record_status": r["status"],
+                "persist_until": str(r.get("persist_until") or ""),
             },
         )
     # Complementary dashboard signal: count of broken (missing/wrong/unparseable)

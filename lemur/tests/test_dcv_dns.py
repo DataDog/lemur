@@ -14,13 +14,37 @@ from lemur.common.dcv_dns import (
 def test_parse_persist_txt_digicert():
     assert _parse_persist_txt(
         "digicert.com;accounturi=https://digicert.com/account/abc"
-    ) == {"digicert.com": "https://digicert.com/account/abc"}
+    ) == {
+        "digicert.com": {"account_uri": "https://digicert.com/account/abc", "persist_until": None}
+    }
 
 
 def test_parse_persist_txt_sectigo():
     assert _parse_persist_txt("sectigo.com;accounturi=acct:1234@sectigo.com") == {
-        "sectigo.com": "acct:1234@sectigo.com"
+        "sectigo.com": {"account_uri": "acct:1234@sectigo.com", "persist_until": None}
     }
+
+
+def test_parse_persist_txt_with_persist_until():
+    parsed = _parse_persist_txt(
+        "digicert.com;accounturi=https://digicert.com/account/abc; persistUntil=253402300799"
+    )
+    assert parsed == {
+        "digicert.com": {
+            "account_uri": "https://digicert.com/account/abc",
+            "persist_until": 253402300799,
+        }
+    }
+
+
+def test_parse_persist_txt_malformed_persist_until_is_unparseable():
+    # Per the draft a malformed persistUntil timestamp makes the record malformed.
+    assert (
+        _parse_persist_txt(
+            "digicert.com;accounturi=https://digicert.com/account/abc; persistUntil=not-a-ts"
+        )
+        is None
+    )
 
 
 def test_parse_persist_txt_unparseable():
@@ -107,6 +131,42 @@ def test_verify_persist_records_unparseable_surfaced():
     statuses = {r["status"] for r in results}
     assert "unparseable" in statuses
     assert "missing" in statuses  # digicert.com never found
+
+
+def test_verify_persist_records_expired_persist_until():
+    # The record matches the expected URI but its persistUntil has passed: per the
+    # draft an expired persistUntil must not be accepted -> a distinct "expired"
+    # status, and persist_until is surfaced.
+    expected = {"digicert.com": "https://digicert.com/account/abc"}
+    with patch(
+        "lemur.common.dcv_dns._resolve_persist_txt",
+        return_value=(
+            "ok",
+            [
+                "digicert.com;accounturi=https://digicert.com/account/abc; persistUntil=1",
+            ],
+        ),
+    ):
+        results = verify_persist_records(["example.com"], expected)
+    assert results[0]["status"] == "expired"
+    assert results[0]["persist_until"] == 1
+
+
+def test_verify_persist_records_future_persist_until_ok():
+    # A persistUntil in the future does not make the record unhealthy.
+    expected = {"digicert.com": "https://digicert.com/account/abc"}
+    with patch(
+        "lemur.common.dcv_dns._resolve_persist_txt",
+        return_value=(
+            "ok",
+            [
+                "digicert.com;accounturi=https://digicert.com/account/abc; persistUntil=4102444800",
+            ],
+        ),
+    ):
+        results = verify_persist_records(["example.com"], expected)
+    assert results[0]["status"] == "ok"
+    assert results[0]["persist_until"] == 4102444800
 
 
 def test_resolve_persist_txt_dns_error_on_timeout():

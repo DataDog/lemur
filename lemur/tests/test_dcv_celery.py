@@ -820,3 +820,52 @@ def test_emit_persist_record_metrics_emits_zero_broken_when_recovered(
     assert len(broken_calls) == 1
     assert broken_calls[0].args[2] == 0
     assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert.com"
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_expired_counts_broken_and_tags_persist_until(
+    mock_current_app, mock_metrics, mock_verify, mock_active
+):
+    # An "expired" status (persistUntil passed) is not healthy: it increments the
+    # broken count, emits the gauge as 0, and surfaces persist_until as a tag.
+    mock_active.return_value = {"digicert-issuer": {"a.com"}}
+    mock_current_app.config.get.return_value = {
+        "digicert.com": "https://digicert.com/account/abc",
+    }
+    mock_verify.return_value = [
+        {
+            "domain": "a.com",
+            "ca": "digicert.com",
+            "status": "expired",
+            "account_uri": "x",
+            "persist_until": 1,
+        },
+    ]
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    emit_persist_record_metrics()
+
+    broken_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.persist_record_broken" in c.args[0]
+    ]
+    assert len(broken_calls) == 1
+    assert broken_calls[0].args[2] == 1  # expired counts as broken
+
+    ok_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.persist_record_ok" in c.args[0]
+    ]
+    assert ok_calls[0].args[2] == 0
+    assert ok_calls[0].kwargs["metric_tags"]["persist_record_status"] == "expired"
+    assert ok_calls[0].kwargs["metric_tags"]["persist_until"] == "1"
