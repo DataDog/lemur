@@ -3,9 +3,8 @@ import time
 from azure.core.exceptions import ResourceNotFoundError
 from azure.mgmt.dns import DnsManagementClient
 from azure.mgmt.dns.models import RecordSet, TxtRecord
-import dns.exception
-import dns.resolver
 
+import lemur.dns_providers.util as dnsutil
 from lemur.plugins.lemur_azure.auth import get_azure_credential_from_options
 
 AZURE_MANAGEMENT_AUDIENCE = "https://management.azure.com/"
@@ -22,16 +21,17 @@ def _resource_group(resource_id):
 
 
 def _find_zone(host, client):
-    matching_zones = [
-        zone
-        for zone in client.zones.list()
-        if host == zone.name or host.endswith("." + zone.name)
-    ]
+    matching_zones = []
+    for zone in client.zones.list():
+        zone_name = zone.name.rstrip(".")
+        if host == zone_name or host.endswith("." + zone_name):
+            matching_zones.append((zone, zone_name))
+
     if not matching_zones:
         raise ValueError(f"Unable to find an Azure DNS zone for {host}")
 
-    zone = max(matching_zones, key=lambda candidate: len(candidate.name))
-    return _resource_group(zone.id), zone.name
+    zone, zone_name = max(matching_zones, key=lambda candidate: len(candidate[1]))
+    return _resource_group(zone.id), zone_name
 
 
 def _relative_name(host, zone):
@@ -69,19 +69,11 @@ def create_txt_record(host, value, account_number):
 
 
 def wait_for_dns_change(change_id, account_number=None):
-    _, _, _, host, value = change_id
-    resolver = dns.resolver.Resolver()
-    resolver.lifetime = 5
+    _, zone, _, host, value = change_id
+    nameserver = dnsutil.get_authoritative_nameserver(zone)
     for _ in range(12):
-        try:
-            records = resolver.resolve(host, "TXT")
-            if any(
-                value == "".join(part.decode("utf-8") for part in record.strings)
-                for record in records
-            ):
-                return
-        except dns.exception.DNSException:
-            pass
+        if value in dnsutil.get_dns_records(host, "TXT", nameserver):
+            return
         time.sleep(5)
     raise RuntimeError(f"Azure DNS TXT record did not propagate for {host}")
 
