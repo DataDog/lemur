@@ -226,6 +226,57 @@ def test_emit_dcv_expiration_metrics_validation_status_mapping(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_dcv_expiration_metrics_does_not_hide_expired_behind_active(
+    mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
+):
+    # DigiCert returns separate OV and EV entries for the same domain. The
+    # lookup must keep BOTH (not last-write-collapse), so an expired EV is NOT
+    # hidden behind an active OV: it emits its own gauge (0) and the domain is
+    # counted as broken.
+    mock_get_all_domains.return_value = {"digicert-issuer": {"example.com"}}
+    fake_plugin = MagicMock()
+    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.get_dcv_expiration_data.return_value = [
+        {
+            "domain": "example.com",
+            "dcv_expiration": "2099-01-01T00:00:00+00:00",
+            "validation_type": "ov",
+            "org_id": "42",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "active",
+        },
+        {
+            "domain": "example.com",
+            "dcv_expiration": "2020-01-01T00:00:00+00:00",
+            "validation_type": "ev",
+            "org_id": "42",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "expired",
+        },
+    ]
+    mock_plugins.all.return_value = [fake_plugin]
+
+    from lemur.common.celery import emit_dcv_expiration_metrics
+
+    emit_dcv_expiration_metrics()
+
+    gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
+    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    # one gauge per validation type (OV and EV), not collapsed to a single row.
+    assert len(vs_calls) == 2
+    by_type = {c.kwargs["metric_tags"]["validation_type"]: c for c in vs_calls}
+    assert by_type["ov"].args[2] == 1  # active OV -> healthy
+    assert by_type["ev"].args[2] == 0  # expired EV -> NOT healthy (not hidden)
+    assert by_type["ev"].kwargs["metric_tags"]["dcv_status"] == "expired"
+    # broken_domains counts the domain once because one validation is expired.
+    broken = [c for c in gauge_calls if "dcv.broken_domains" in c.args[0]]
+    assert broken and broken[0].args[2] == 1
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.plugins")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
 def test_emit_dcv_expiration_metrics_matches_wildcard_domain(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):

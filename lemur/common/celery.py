@@ -1300,7 +1300,10 @@ def emit_dcv_expiration_metrics():
     Returns nothing; the DNS-native check computes its own domain set from the
     lemur database (active certs), not from the CA return.
     """
-    # CA-reported status lookup: {domain: {ca_plugin: entry}}.
+    # CA-reported status lookup: {domain: {ca_plugin: [entry, ...]}}.
+    # A CA (e.g. DigiCert) can report MULTIPLE validations for a single domain
+    # (separate OV and EV entries). Keep them all so an expired validation isn't
+    # hidden by the last-write of an active one.
     ca_status_by_domain = {}
     monitored_cas = set()
     for plugin in plugins.all(plugin_type="issuer"):
@@ -1344,7 +1347,7 @@ def emit_dcv_expiration_metrics():
                 )
                 continue
             domain = entry["domain"]
-            ca_status_by_domain.setdefault(domain, {})[ca_name] = entry
+            ca_status_by_domain.setdefault(domain, {}).setdefault(ca_name, []).append(entry)
 
     # Enumerate active-cert domains (the actual in-use set), keyed by CA plugin.
     active_by_ca = _active_domains_by_ca()
@@ -1358,42 +1361,61 @@ def emit_dcv_expiration_metrics():
             continue
         ca_domains = 0
         for domain in domains:
-            entry = ca_status_by_domain.get(domain, {}).get(ca_name)
-            if entry:
-                dcv_status = entry.get("dcv_status", "unknown")
-                dcv_method = entry.get("dcv_method", "unknown")
-                validation_type = entry.get("validation_type", "unknown")
+            entries = ca_status_by_domain.get(domain, {}).get(ca_name, [])
+            if entries:
+                # A CA (e.g. DigiCert) can report MULTIPLE validations for the
+                # same domain (separate OV and EV entries). Emit one gauge per
+                # validation so an expired one is never hidden by an active
+                # sibling (e.g. EV expired behind OV active).
+                domain_broken = False
+                for entry in entries:
+                    dcv_status = entry.get("dcv_status", "unknown")
+                    dcv_method = entry.get("dcv_method", "unknown")
+                    validation_type = entry.get("validation_type", "unknown")
+                    if not _dcv_signal_is_healthy(dcv_status) and dcv_status != "pending":
+                        # pending is a warning (gauge 0 + dcv_status:pending tag),
+                        # not a break; only investigation-worthy statuses
+                        # (expired/uncovered/unknown/empty) count toward the
+                        # broken_domains signal.
+                        domain_broken = True
+                    metrics.send(
+                        "dcv.validation_status",
+                        "gauge",
+                        # Design (DNS-PERSIST monitoring): only "active" is a healthy gauge
+                        # (1); pending is emitted as 0 because the CA has not completed
+                        # validation, and the raw dcv_status:pending tag lets the monitor
+                        # treat it as a warning rather than hiding a stuck validation.
+                        # expired, uncovered, and unknown are also 0 and remain
+                        # investigation-worthy. The raw status is tagged so a monitor can
+                        # alert on the specific non-active value (dcv_status:expired /
+                        # dcv_status:pending) rather than just the gauge value.
+                        1 if _dcv_signal_is_healthy(dcv_status) else 0,
+                        metric_tags={
+                            "domain": domain,
+                            "ca": ca_name,
+                            "dcv_status": dcv_status,
+                            "dcv_method": dcv_method,
+                            "validation_type": validation_type,
+                        },
+                    )
+                if domain_broken:
+                    broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
             else:
                 # Active cert for this monitored CA but the CA didn't report the
                 # domain: a coverage gap. Flag it (0) so it's not silently missed.
-                dcv_status = "uncovered"
-                dcv_method = "unknown"
-                validation_type = "unknown"
-            if not _dcv_signal_is_healthy(dcv_status) and dcv_status != "pending":
-                # pending is a warning (gauge 0 + dcv_status:pending tag), not a
-                # break; only investigation-worthy statuses (expired/uncovered/
-                # unknown/empty) count toward the broken_domains signal.
+                metrics.send(
+                    "dcv.validation_status",
+                    "gauge",
+                    0,
+                    metric_tags={
+                        "domain": domain,
+                        "ca": ca_name,
+                        "dcv_status": "uncovered",
+                        "dcv_method": "unknown",
+                        "validation_type": "unknown",
+                    },
+                )
                 broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
-            metrics.send(
-                "dcv.validation_status",
-                "gauge",
-                # Design (DNS-PERSIST monitoring): only "active" is a healthy gauge
-                # (1); pending is emitted as 0 because the CA has not completed
-                # validation, and the raw dcv_status:pending tag lets the monitor
-                # treat it as a warning rather than hiding a stuck validation.
-                # expired, uncovered, and unknown are also 0 and remain
-                # investigation-worthy. The raw status is tagged so a monitor can
-                # alert on the specific non-active value (dcv_status:expired /
-                # dcv_status:pending) rather than just the gauge value.
-                1 if _dcv_signal_is_healthy(dcv_status) else 0,
-                metric_tags={
-                    "domain": domain,
-                    "ca": ca_name,
-                    "dcv_status": dcv_status,
-                    "dcv_method": dcv_method,
-                    "validation_type": validation_type,
-                },
-            )
             ca_domains += 1
         metrics.send(
             "dcv.expiration_check.domains_checked",
