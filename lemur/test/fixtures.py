@@ -1,9 +1,13 @@
 """Real external fixtures used by the Lemur sandbox task suite."""
 
 import copy
+import time
+from types import SimpleNamespace
 
 import arrow
-from flask import current_app
+import botocore
+from flask import current_app, g
+from flask_principal import Identity, identity_changed
 
 from lemur import database
 from lemur.certificates import service as certificate_service
@@ -20,6 +24,8 @@ from lemur.users import service as user_service
 from lemur.authorities import service as authority_service
 
 TEST_CERTIFICATE_PREFIX = "lemur-test-run-"
+AWS_CERTIFICATE_PROPAGATION_ATTEMPTS = 12
+AWS_CERTIFICATE_PROPAGATION_DELAY_SECONDS = 5
 
 
 def _options(plugin_name, configured):
@@ -90,6 +96,8 @@ def _create_sources():
 def _issue_test_certificate(run_id, destinations):
     authority = authority_service.get_by_name("TestCA")
     user = user_service.get_by_username("lemur-test")
+    g.current_user = user
+    identity_changed.send(current_app._get_current_object(), identity=Identity(user.id))
     common_name = current_app.config.get(
         "LEMUR_TEST_COMMON_NAME", "lemur-test.sandbox.staging.dog"
     )
@@ -140,7 +148,7 @@ def _iam_certificate_arn(certificate):
     )
 
 
-def _set_endpoint_certificate(fixture, certificate_arn):
+def _set_endpoint_certificate_once(fixture, certificate_arn):
     account = current_app.config["LEMUR_TEST_AWS_ACCOUNT"]
     region = current_app.config.get("LEMUR_TEST_AWS_REGION", "us-east-1")
     if fixture["type"] == "elb":
@@ -168,6 +176,20 @@ def _set_endpoint_certificate(fixture, certificate_arn):
     raise RuntimeError("Unknown AWS endpoint fixture type: {}".format(fixture["type"]))
 
 
+def _set_endpoint_certificate(fixture, certificate_arn):
+    for attempt in range(AWS_CERTIFICATE_PROPAGATION_ATTEMPTS):
+        try:
+            return _set_endpoint_certificate_once(fixture, certificate_arn)
+        except botocore.exceptions.ClientError as error:
+            is_propagating = error.response["Error"]["Code"] == "CertificateNotFound"
+            if (
+                not is_propagating
+                or attempt == AWS_CERTIFICATE_PROPAGATION_ATTEMPTS - 1
+            ):
+                raise
+            time.sleep(AWS_CERTIFICATE_PROPAGATION_DELAY_SECONDS)
+
+
 def _baseline_certificate_arn(fixture):
     configured_arn = fixture.get("baseline_certificate_arn")
     if configured_arn:
@@ -186,15 +208,17 @@ def prepare(run_id):
     sources = _create_sources()
     certificate = _issue_test_certificate(run_id, destinations)
     certificate_arn = _iam_certificate_arn(certificate)
+    state = {
+        "certificate_id": certificate.id,
+        "source_labels": [source.label for source in sources],
+    }
+    database.db.session.remove()
     endpoints = current_app.config.get("LEMUR_TEST_AWS_ENDPOINTS", [])
     if not endpoints:
         raise RuntimeError("LEMUR_TEST_AWS_ENDPOINTS must not be empty")
     for fixture in endpoints:
         _set_endpoint_certificate(fixture, certificate_arn)
-    return {
-        "certificate_id": certificate.id,
-        "source_labels": [source.label for source in sources],
-    }
+    return state
 
 
 def verify(state):
@@ -287,18 +311,45 @@ def cleanup(state=None):
         except Exception as error:
             cleanup_errors.append("restore {}: {!r}".format(fixture["name"], error))
 
+    cleanup_targets = []
     for certificate in _run_certificates(state):
-        for destination in certificate.destinations:
+        cleanable_certificate = SimpleNamespace(
+            name=certificate.name,
+            body=certificate.body,
+        )
+        for destination in list(certificate.destinations):
             plugin = plugins.get(destination.plugin_name)
             if not hasattr(plugin, "clean"):
                 continue
-            try:
-                plugin.clean(certificate=certificate, options=destination.options)
-            except Exception as error:
-                cleanup_errors.append(
-                    "clean {} from {}: {!r}".format(
-                        certificate.name, destination.label, error
-                    )
+            cleanup_targets.append(
+                (
+                    cleanable_certificate,
+                    plugin,
+                    copy.deepcopy(destination.options),
+                    destination.label,
                 )
+            )
+
+    database.db.session.remove()
+    for certificate, plugin, options, destination_label in cleanup_targets:
+        try:
+            for attempt in range(AWS_CERTIFICATE_PROPAGATION_ATTEMPTS):
+                try:
+                    plugin.clean(certificate=certificate, options=options)
+                    break
+                except botocore.exceptions.ClientError as error:
+                    is_propagating = error.response["Error"]["Code"] == "DeleteConflict"
+                    if (
+                        not is_propagating
+                        or attempt == AWS_CERTIFICATE_PROPAGATION_ATTEMPTS - 1
+                    ):
+                        raise
+                    time.sleep(AWS_CERTIFICATE_PROPAGATION_DELAY_SECONDS)
+        except Exception as error:
+            cleanup_errors.append(
+                "clean {} from {}: {!r}".format(
+                    certificate.name, destination_label, error
+                )
+            )
     if cleanup_errors:
         raise RuntimeError("; ".join(cleanup_errors))

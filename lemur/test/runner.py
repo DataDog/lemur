@@ -7,6 +7,7 @@ from contextlib import contextmanager
 
 from flask import current_app
 
+from lemur.extensions import db
 from lemur.common.celery import celery_app
 from lemur.common.redis import RedisHandler
 from lemur.extensions import metrics
@@ -94,6 +95,7 @@ def run(task_names=None, timeout=None, reset_database=False):
             except Exception as error:
                 phase["error"] = repr(error)
             finally:
+                db.session.remove()
                 phase["duration_seconds"] = round(time.time() - phase_started, 3)
                 phases.append(phase)
 
@@ -143,6 +145,7 @@ def run(task_names=None, timeout=None, reset_database=False):
                     phases.append(phase)
         finally:
             if reset_database and database_ready:
+                db.session.remove()
                 phase_started = time.time()
                 phase = {"phase": "cleanup", "status": "failed"}
                 try:

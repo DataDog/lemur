@@ -53,7 +53,7 @@ def _create_roles_and_users():
     )
     role_service.create("operator", description="Lemur sandbox test operator role.")
     role_service.create("read-only", description="Lemur sandbox test read only role.")
-    return user_service.create(
+    test_user = user_service.create(
         username="lemur-test",
         password=secrets.token_urlsafe(32),
         email="lemur-test@datadoghq.com",
@@ -61,6 +61,15 @@ def _create_roles_and_users():
         profile_picture=None,
         roles=[admin],
     )
+    user_service.create(
+        username="lemur",
+        password=secrets.token_urlsafe(32),
+        email="lemur@nobody.com",
+        active=True,
+        profile_picture=None,
+        roles=[admin],
+    )
+    return test_user
 
 
 def _create_test_authority(user):

@@ -2,8 +2,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call
 
+import botocore
 import pytest
-from flask import current_app
+from flask import current_app, g
 
 from lemur.test import catalog
 
@@ -105,6 +106,21 @@ def test_reset_schema_creates_current_schema_and_stamps_head(app, monkeypatch):
     )
 
 
+def test_seed_creates_source_sync_user(app, monkeypatch):
+    from lemur.test import database
+
+    admin = Mock()
+    monkeypatch.setattr(database.role_service, "create", Mock(return_value=admin))
+    monkeypatch.setattr(database.user_service, "create", Mock())
+
+    database._create_roles_and_users()
+
+    usernames = [
+        item.kwargs["username"] for item in database.user_service.create.call_args_list
+    ]
+    assert usernames == ["lemur-test", "lemur"]
+
+
 def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
     from lemur.test import runner
 
@@ -156,6 +172,11 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
     monkeypatch.setattr(runner, "_selected_scenarios", Mock(return_value={}))
     monkeypatch.setattr(runner.metrics, "send", Mock())
     monkeypatch.setattr(
+        runner.db.session,
+        "remove",
+        Mock(side_effect=lambda: events.append("release")),
+    )
+    monkeypatch.setattr(
         runner, "reset_and_seed", Mock(side_effect=lambda: events.append("reset"))
     )
     monkeypatch.setattr(
@@ -189,7 +210,9 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
         "lock",
         "reset",
         "prepare",
+        "release",
         "verify",
+        "release",
         "cleanup",
         "unlock",
     ]
@@ -228,12 +251,8 @@ def test_run_certificates_includes_replacements_and_excludes_persistent_fixtures
     from lemur.test import fixtures
 
     replacement = Mock(id=3, name="generated-replacement", replaced=[])
-    run_certificate = Mock(
-        id=2, name="lemur-test-run-123", replaced=[replacement]
-    )
-    persistent_certificate = Mock(
-        id=1, name="lemur-test-baseline", replaced=[]
-    )
+    run_certificate = Mock(id=2, name="lemur-test-run-123", replaced=[replacement])
+    persistent_certificate = Mock(id=1, name="lemur-test-baseline", replaced=[])
     query = MagicMock()
     query.filter.return_value.all.return_value = [run_certificate]
     monkeypatch.setattr(fixtures.Certificate, "query", query)
@@ -247,6 +266,164 @@ def test_run_certificates_includes_replacements_and_excludes_persistent_fixtures
 
     assert certificates == [run_certificate, replacement]
     assert persistent_certificate not in certificates
+
+
+def test_issue_test_certificate_sets_admin_identity(app, monkeypatch):
+    from lemur.test import fixtures
+
+    user = Mock(id=42, email="lemur-test@datadoghq.com")
+    authority = Mock(id=7)
+    schema = Mock()
+    schema.load.return_value = ({}, {})
+    monkeypatch.setattr(
+        fixtures.user_service, "get_by_username", Mock(return_value=user)
+    )
+    monkeypatch.setattr(
+        fixtures.authority_service, "get_by_name", Mock(return_value=authority)
+    )
+    monkeypatch.setattr(fixtures, "CertificateInputSchema", Mock(return_value=schema))
+    monkeypatch.setattr(fixtures.certificate_service, "create", Mock())
+    monkeypatch.setattr(fixtures.identity_changed, "send", Mock())
+
+    fixtures._issue_test_certificate("run-id", [])
+
+    assert g.current_user is user
+    identity = fixtures.identity_changed.send.call_args.kwargs["identity"]
+    assert identity.id == user.id
+    fixtures.certificate_service.create.assert_called_once_with(creator=user)
+    g.pop("current_user", None)
+
+
+def test_set_endpoint_certificate_waits_for_iam_propagation(app, monkeypatch):
+    from lemur.test import fixtures
+
+    current_app.config.update(
+        LEMUR_TEST_AWS_ACCOUNT="123456789012",
+        LEMUR_TEST_AWS_REGION="us-east-1",
+    )
+    error = botocore.exceptions.ClientError(
+        {"Error": {"Code": "CertificateNotFound"}}, "ModifyListener"
+    )
+    monkeypatch.setattr(
+        fixtures.elb,
+        "get_listener_arn_from_endpoint",
+        Mock(return_value="listener-arn"),
+    )
+    monkeypatch.setattr(
+        fixtures.elb,
+        "attach_certificate_v2",
+        Mock(side_effect=[error, {"ok": True}]),
+    )
+    monkeypatch.setattr(fixtures.time, "sleep", Mock())
+
+    result = fixtures._set_endpoint_certificate(
+        {"type": "alb", "name": "lemur-test-alb", "port": 443},
+        "certificate-arn",
+    )
+
+    assert result == {"ok": True}
+    assert fixtures.elb.attach_certificate_v2.call_count == 2
+    fixtures.time.sleep.assert_called_once_with(
+        fixtures.AWS_CERTIFICATE_PROPAGATION_DELAY_SECONDS
+    )
+
+
+def test_prepare_releases_database_session_before_aws_attachment(app, monkeypatch):
+    from lemur.test import fixtures
+
+    events = []
+    certificate = Mock(id=17)
+    source = Mock(label="lemur-test-aws")
+    current_app.config.update(
+        LEMUR_TEST_AWS_ENDPOINTS=[
+            {"type": "alb", "name": "lemur-test-alb", "port": 443}
+        ]
+    )
+    monkeypatch.setattr(fixtures, "_create_destinations", Mock(return_value=[]))
+    monkeypatch.setattr(fixtures, "_create_sources", Mock(return_value=[source]))
+    monkeypatch.setattr(
+        fixtures, "_issue_test_certificate", Mock(return_value=certificate)
+    )
+    monkeypatch.setattr(
+        fixtures, "_iam_certificate_arn", Mock(return_value="certificate-arn")
+    )
+    monkeypatch.setattr(
+        fixtures.database.db.session,
+        "remove",
+        Mock(side_effect=lambda: events.append("release")),
+    )
+    monkeypatch.setattr(
+        fixtures,
+        "_set_endpoint_certificate",
+        Mock(side_effect=lambda *_args: events.append("attach")),
+    )
+
+    state = fixtures.prepare("run-id")
+
+    assert state == {"certificate_id": 17, "source_labels": ["lemur-test-aws"]}
+    assert events == ["release", "attach"]
+
+
+def test_cleanup_waits_for_listener_detachment(app, monkeypatch):
+    from lemur.test import fixtures
+
+    error = botocore.exceptions.ClientError(
+        {"Error": {"Code": "DeleteConflict"}}, "DeleteServerCertificate"
+    )
+    plugin = Mock()
+    plugin.clean.side_effect = [error, None]
+    destination = Mock(plugin_name="aws-destination", options=[], label="test-aws")
+    certificate = Mock(name="lemur-test-run-123", destinations=[destination])
+    current_app.config.update(LEMUR_TEST_AWS_ENDPOINTS=[])
+    monkeypatch.setattr(fixtures, "_run_certificates", Mock(return_value=[certificate]))
+    monkeypatch.setattr(fixtures.plugins, "get", Mock(return_value=plugin))
+    monkeypatch.setattr(fixtures.time, "sleep", Mock())
+
+    fixtures.cleanup()
+
+    assert plugin.clean.call_count == 2
+    assert plugin.clean.call_args.kwargs["certificate"].name == certificate.name
+    assert plugin.clean.call_args.kwargs["certificate"].body == certificate.body
+    fixtures.time.sleep.assert_called_once_with(
+        fixtures.AWS_CERTIFICATE_PROPAGATION_DELAY_SECONDS
+    )
+
+
+def test_cleanup_releases_database_session_before_external_cleanup(app, monkeypatch):
+    from lemur.test import fixtures
+
+    events = []
+    plugin = Mock()
+    plugin.clean.side_effect = lambda **_kwargs: events.append("clean")
+    destination = Mock(plugin_name="aws-destination", options=[], label="test-aws")
+    certificate = Mock(
+        name="lemur-test-run-123", body="certificate", destinations=[destination]
+    )
+    current_app.config.update(LEMUR_TEST_AWS_ENDPOINTS=[])
+    monkeypatch.setattr(fixtures, "_run_certificates", Mock(return_value=[certificate]))
+    monkeypatch.setattr(fixtures.plugins, "get", Mock(return_value=plugin))
+    monkeypatch.setattr(
+        fixtures.database.db.session,
+        "remove",
+        Mock(side_effect=lambda: events.append("release")),
+    )
+
+    fixtures.cleanup()
+
+    assert events == ["release", "clean"]
+
+
+def test_deactivate_entrust_certificates_without_certificates_is_a_noop(
+    app, monkeypatch
+):
+    from lemur.certificates import cli
+
+    monkeypatch.setattr(cli, "get_all_valid_certs", Mock(return_value=[]))
+    monkeypatch.setattr(cli.plugins, "get", Mock())
+
+    cli.deactivate_entrust_certificates()
+
+    cli.plugins.get.assert_not_called()
 
 
 def test_verify_requires_expected_endpoint_to_use_replacement(app, monkeypatch):

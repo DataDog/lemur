@@ -847,6 +847,8 @@ def deactivate_entrust_certificates():
     }
 
     certificates = get_all_valid_certs(["entrust-issuer"])
+    if not certificates:
+        return
     entrust_plugin = plugins.get("entrust-issuer")
     for index, cert in enumerate(certificates):
         if (index % 10) == 0:
