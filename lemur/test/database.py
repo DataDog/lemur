@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import current_app
-from flask_migrate import upgrade
+from flask_migrate import stamp
 from sqlalchemy.sql import text
 
 from lemur import database
@@ -43,7 +43,8 @@ def reset_schema():
     db.engine.execute(text("DROP SCHEMA public CASCADE"))
     db.engine.execute(text("CREATE SCHEMA public AUTHORIZATION CURRENT_USER"))
     db.engine.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-    upgrade(directory=MIGRATIONS_DIRECTORY)
+    db.create_all()
+    stamp(directory=MIGRATIONS_DIRECTORY, revision="head")
 
 
 def _create_roles_and_users():
