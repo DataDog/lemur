@@ -140,11 +140,13 @@ def test_delete_txt_record_deletes_empty_record_set(mock_get_client):
 
 
 @patch("lemur.plugins.lemur_acme.azure.time.sleep")
-@patch("lemur.plugins.lemur_acme.azure.dnsutil.get_dns_records")
-@patch("lemur.plugins.lemur_acme.azure.dnsutil.get_authoritative_nameserver")
-def test_wait_for_dns_change(mock_get_nameserver, mock_get_dns_records, mock_sleep):
-    mock_get_nameserver.return_value = "ns1.example.com"
-    mock_get_dns_records.side_effect = [[], ["new-token"]]
+@patch("lemur.plugins.lemur_acme.azure.dns.resolver.Resolver")
+def test_wait_for_dns_change(mock_resolver, mock_sleep):
+    resolver = mock_resolver.return_value
+    resolver.resolve.side_effect = [
+        [],
+        [Mock(strings=[b"new-", b"token"])],
+    ]
     change_id = (
         "sub",
         "sub.example.com",
@@ -155,5 +157,7 @@ def test_wait_for_dns_change(mock_get_nameserver, mock_get_dns_records, mock_sle
 
     azure.wait_for_dns_change(change_id, OPTIONS)
 
-    assert mock_get_dns_records.call_count == 2
+    assert resolver.lifetime == 5
+    assert resolver.resolve.call_count == 2
+    resolver.resolve.assert_called_with("_acme-challenge.test.sub.example.com", "TXT")
     mock_sleep.assert_called_once_with(5)
