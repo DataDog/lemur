@@ -114,6 +114,8 @@ def run(task_names=None, timeout=None, reset_database=False):
                         entry["task_id"] = result.id
                         entry["result"] = result.get(timeout=timeout, propagate=True)
                         entry["status"] = "passed"
+                        if scenario.wait_after_seconds:
+                            time.sleep(scenario.wait_after_seconds)
                         metrics.send(
                             "test.task.success",
                             "counter",

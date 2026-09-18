@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-
 TASK_PREFIX = "lemur.common.celery."
 
 
@@ -13,6 +12,7 @@ class TaskScenario:
 
     args: List[Any] = field(default_factory=list)
     kwargs: Dict[str, Any] = field(default_factory=dict)
+    wait_after_seconds: int = 0
 
 
 # Keep this list explicit. A new application task must have a deliberate test
@@ -26,7 +26,9 @@ TASK_CATALOG = {
     "lemur.common.celery.clean_source": TaskScenario(args=["lemur-test-aws"]),
     "lemur.common.celery.sync_all_sources": TaskScenario(),
     "lemur.common.celery.sync_source": TaskScenario(args=["lemur-test-aws"]),
-    "lemur.common.celery.certificate_reissue": TaskScenario(),
+    # Production schedules rotation an hour after reissue. Keep the sandbox run
+    # shorter while still allowing the IAM certificate to propagate to ELB.
+    "lemur.common.celery.certificate_reissue": TaskScenario(wait_after_seconds=60),
     "lemur.common.celery.certificate_rotate": TaskScenario(),
     "lemur.common.celery.get_all_zones": TaskScenario(),
     "lemur.common.celery.check_revoked": TaskScenario(),
@@ -83,5 +85,8 @@ def scenarios(configured=None):
         resolved[task_name] = TaskScenario(
             args=list(override.get("args", default.args)),
             kwargs=dict(override.get("kwargs", default.kwargs)),
+            wait_after_seconds=override.get(
+                "wait_after_seconds", default.wait_after_seconds
+            ),
         )
     return resolved

@@ -41,11 +41,18 @@ def test_validate_task_catalog_reports_missing_and_stale_tasks():
 def test_scenarios_apply_configured_arguments():
     task_name = "lemur.common.celery.sync_source"
     resolved = catalog.scenarios(
-        {task_name: {"args": ["configured-source"], "kwargs": {"force": True}}}
+        {
+            task_name: {
+                "args": ["configured-source"],
+                "kwargs": {"force": True},
+                "wait_after_seconds": 3,
+            }
+        }
     )
 
     assert resolved[task_name].args == ["configured-source"]
     assert resolved[task_name].kwargs == {"force": True}
+    assert resolved[task_name].wait_after_seconds == 3
 
 
 def test_validate_isolation_requires_test_database_and_redis(app, monkeypatch):
@@ -138,7 +145,7 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
         "_selected_scenarios",
         Mock(
             return_value={
-                "lemur.common.celery.one": catalog.TaskScenario(),
+                "lemur.common.celery.one": catalog.TaskScenario(wait_after_seconds=3),
                 "lemur.common.celery.two": catalog.TaskScenario(args=[2]),
             }
         ),
@@ -154,6 +161,7 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
         Mock(side_effect=[passed, failed]),
     )
     monkeypatch.setattr(runner.metrics, "send", Mock())
+    monkeypatch.setattr(runner.time, "sleep", Mock())
 
     report = runner.run(timeout=10)
 
@@ -161,6 +169,7 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
     assert [entry["status"] for entry in report["tasks"]] == ["passed", "failed"]
     assert runner.celery_app.send_task.call_args_list[0].kwargs["queue"] == "lemur-test"
     assert runner.celery_app.send_task.call_args_list[1].kwargs["args"] == [2]
+    runner.time.sleep.assert_called_once_with(3)
 
 
 def test_run_resets_database_inside_lock(app, monkeypatch):
