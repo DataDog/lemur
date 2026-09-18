@@ -375,7 +375,9 @@ class AWSSourcePlugin(SourcePlugin):
 
             # fetch advanced ELBs
             try:
-                elbs_v2 = elb.get_all_elbs_v2(account_number=account_number, region=region)
+                elbs_v2 = elb.get_all_elbs_v2(
+                    account_number=account_number, region=region
+                )
             except Exception:  # noqa
                 current_app.logger.warning(
                     {
@@ -506,9 +508,6 @@ class AWSSourcePlugin(SourcePlugin):
             )
 
         partition = current_app.config.get("LEMUR_AWS_PARTITION", "aws")
-        new_cert_arn = iam.create_arn_from_cert(
-            account_number, partition, new_cert.name, ""
-        )
         old_cert_path = next(
             (
                 assoc.path
@@ -516,6 +515,9 @@ class AWSSourcePlugin(SourcePlugin):
                 if not assoc.primary and assoc.certificate == old_cert
             ),
             "",
+        )
+        new_cert_arn = iam.create_arn_from_cert(
+            account_number, partition, new_cert.name, old_cert_path
         )
         old_cert_arn = iam.create_arn_from_cert(
             account_number, partition, old_cert.name, old_cert_path
@@ -763,6 +765,13 @@ class ACMDestinationPlugin(DestinationPlugin):
             body,
             private_key,
             cert_chain=cert_chain,
+            account_number=self.get_option("accountNumber", options),
+            region=self.get_option("region", options),
+        )
+
+    def clean(self, certificate, options, **kwargs):
+        return acm.delete_imported_cert(
+            certificate.body,
             account_number=self.get_option("accountNumber", options),
             region=self.get_option("region", options),
         )
