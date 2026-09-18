@@ -1272,21 +1272,6 @@ def _active_domains_by_ca():
     return by_ca
 
 
-# Design (DNS-PERSIST monitoring): a domain is healthily DCV-validated only when
-# the shared dcv_status is "active" (the CA has completed validation). We do NOT
-# treat "pending" as healthy: pending means the CA has not finished validation,
-# and mapping it to the same healthy gauge value as active would hide a validation
-# that remains stuck. pending is emitted with the gauge at 0 so it is surfaced,
-# and the raw dcv_status:pending tag lets the monitor handle it as a warning
-# (distinct from expired/uncovered/unknown, which are investigation-worthy).
-_DCV_HEALTHY_STATUSES = ("active",)
-
-
-def _dcv_signal_is_healthy(dcv_status):
-    """Map the shared dcv_status vocabulary to the healthy/validated gauge signal."""
-    return (dcv_status or "").strip().lower() in _DCV_HEALTHY_STATUSES
-
-
 def emit_dcv_expiration_metrics():
     """
     Report dcv.validation_status for every domain with an active certificate,
@@ -1301,9 +1286,6 @@ def emit_dcv_expiration_metrics():
     lemur database (active certs), not from the CA return.
     """
     # CA-reported status lookup: {domain: {ca_plugin: [entry, ...]}}.
-    # A CA (e.g. DigiCert) can report MULTIPLE validations for a single domain
-    # (separate OV and EV entries). Keep them all so an expired validation isn't
-    # hidden by the last-write of an active one.
     ca_status_by_domain = {}
     monitored_cas = set()
     for plugin in plugins.all(plugin_type="issuer"):
@@ -1356,40 +1338,28 @@ def emit_dcv_expiration_metrics():
     broken_by_ca = {}
     for ca_name, domains in active_by_ca.items():
         if ca_name not in monitored_cas:
-            # Not a monitored CA (e.g. acme-issuer, unknown) — its DCV is handled
-            # by the CA itself, so we don't report a status for it.
+            # Not a monitored CA / DCV is unimplemented.
             continue
         ca_domains = 0
         for domain in domains:
             entries = ca_status_by_domain.get(domain, {}).get(ca_name, [])
             if entries:
-                # A CA (e.g. DigiCert) can report MULTIPLE validations for the
-                # same domain (separate OV and EV entries). Emit one gauge per
-                # validation so an expired one is never hidden by an active
-                # sibling (e.g. EV expired behind OV active).
                 domain_broken = False
                 for entry in entries:
                     dcv_status = entry.get("dcv_status", "unknown")
                     dcv_method = entry.get("dcv_method", "unknown")
                     validation_type = entry.get("validation_type", "unknown")
-                    if not _dcv_signal_is_healthy(dcv_status) and dcv_status != "pending":
-                        # pending is a warning (gauge 0 + dcv_status:pending tag),
-                        # not a break; only investigation-worthy statuses
-                        # (expired/uncovered/unknown/empty) count toward the
-                        # broken_domains signal.
+                    # Don't hide an expired validation behind an active one (e.g.
+                    # EV expired behind OV active): a domain is counted broken if
+                    # ANY validation is non-active. pending is a warning (gauge 0
+                    # + status tag), not a break.
+                    status_norm = dcv_status.strip().lower()
+                    if status_norm != "active" and status_norm != "pending":
                         domain_broken = True
                     metrics.send(
                         "dcv.validation_status",
                         "gauge",
-                        # Design (DNS-PERSIST monitoring): only "active" is a healthy gauge
-                        # (1); pending is emitted as 0 because the CA has not completed
-                        # validation, and the raw dcv_status:pending tag lets the monitor
-                        # treat it as a warning rather than hiding a stuck validation.
-                        # expired, uncovered, and unknown are also 0 and remain
-                        # investigation-worthy. The raw status is tagged so a monitor can
-                        # alert on the specific non-active value (dcv_status:expired /
-                        # dcv_status:pending) rather than just the gauge value.
-                        1 if _dcv_signal_is_healthy(dcv_status) else 0,
+                        1 if status_norm == "active" else 0,
                         metric_tags={
                             "domain": domain,
                             "ca": ca_name,
