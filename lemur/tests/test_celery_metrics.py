@@ -86,12 +86,16 @@ def test_task_duration_emitted_on_success_and_clears_start_time(mock_metrics):
     with patch.object(_celery_module, "current_app", MagicMock()), patch(
         "lemur.common.celery.time.monotonic", return_value=101.234
     ), patch("lemur.common.celery.time.time", return_value=2000):
-        fake_task = FakeTask()
+        fake_task = FakeTask(delivery_info={"routing_key": "celery"})
         _celery_module.report_successful_task(sender=fake_task, request=fake_task.request)
 
     duration_calls = [c for c in mock_metrics.send.call_args_list if c.args[0] == "celery.task_duration"]
     assert len(duration_calls) == 1
-    assert duration_calls[0].kwargs["metric_tags"] == {"task_name": "lemur.common.celery.fake_task", "status": "success"}
+    assert duration_calls[0].kwargs["metric_tags"] == {
+        "task_name": "lemur.common.celery.fake_task",
+        "status": "success",
+        "queue": "celery",
+    }
     assert duration_calls[0].args[2] == 1233
     assert "task-1" not in _celery_module._task_started_at
 
