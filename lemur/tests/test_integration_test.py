@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call
 
@@ -66,12 +65,72 @@ def test_validate_isolation_requires_test_database_and_redis(app, monkeypatch):
         LEMUR_TEST_QUEUE="lemur-test",
         CELERY_DEFAULT_QUEUE="lemur-test",
         REDIS_DB=1,
+        LEMUR_TEST_AWS_ACCOUNT="145023129460",
+        LEMUR_TEST_ALLOWED_AWS_ACCOUNT="145023129460",
+        LEMUR_TEST_ALLOWED_COA_PATH_PREFIX="/kv/data/lemur-test",
+        LEMUR_TEST_DESTINATIONS=[],
+        LEMUR_TEST_SOURCES=[],
     )
     row = Mock()
     row.fetchone.return_value = ("test", "lemur_test")
     monkeypatch.setattr(database.db.engine, "execute", Mock(return_value=row))
 
     runner.validate_isolation()
+
+
+def test_validate_isolation_rejects_non_rdna_aws_account(app, monkeypatch):
+    from lemur.test import database, runner
+
+    current_app.config.update(
+        LEMUR_TEST_ENABLED=True,
+        LEMUR_TEST_DATABASE="test",
+        LEMUR_TEST_DATABASE_USER="lemur_test",
+        LEMUR_TEST_REDIS_DB=1,
+        LEMUR_TEST_QUEUE="lemur-test",
+        CELERY_DEFAULT_QUEUE="lemur-test",
+        REDIS_DB=1,
+        LEMUR_TEST_AWS_ACCOUNT="123456789012",
+        LEMUR_TEST_ALLOWED_AWS_ACCOUNT="145023129460",
+        LEMUR_TEST_ALLOWED_COA_PATH_PREFIX="/kv/data/lemur-test",
+        LEMUR_TEST_DESTINATIONS=[],
+        LEMUR_TEST_SOURCES=[],
+    )
+    row = Mock()
+    row.fetchone.return_value = ("test", "lemur_test")
+    monkeypatch.setattr(database.db.engine, "execute", Mock(return_value=row))
+
+    with pytest.raises(RuntimeError, match="expected RDNA account"):
+        runner.validate_isolation()
+
+
+def test_validate_isolation_rejects_coa_path_outside_test_prefix(app, monkeypatch):
+    from lemur.test import database, runner
+
+    current_app.config.update(
+        LEMUR_TEST_ENABLED=True,
+        LEMUR_TEST_DATABASE="test",
+        LEMUR_TEST_DATABASE_USER="lemur_test",
+        LEMUR_TEST_REDIS_DB=1,
+        LEMUR_TEST_QUEUE="lemur-test",
+        CELERY_DEFAULT_QUEUE="lemur-test",
+        REDIS_DB=1,
+        LEMUR_TEST_AWS_ACCOUNT="145023129460",
+        LEMUR_TEST_ALLOWED_AWS_ACCOUNT="145023129460",
+        LEMUR_TEST_ALLOWED_COA_PATH_PREFIX="/kv/data/lemur-test",
+        LEMUR_TEST_DESTINATIONS=[
+            {
+                "plugin_name": "cert-orchestration-adapter-dest",
+                "options": {"paths": "/kv/data/not-the-test-path"},
+            }
+        ],
+        LEMUR_TEST_SOURCES=[],
+    )
+    row = Mock()
+    row.fetchone.return_value = ("test", "lemur_test")
+    monkeypatch.setattr(database.db.engine, "execute", Mock(return_value=row))
+
+    with pytest.raises(RuntimeError, match="Refusing COA test access"):
+        runner.validate_isolation()
 
 
 def test_validate_isolation_rejects_normal_database(app, monkeypatch):
@@ -135,11 +194,6 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
     monkeypatch.setattr(runner, "validate_isolation", Mock())
     monkeypatch.setattr(runner, "validate_task_catalog", Mock())
 
-    @contextmanager
-    def unlocked(_run_id):
-        yield
-
-    monkeypatch.setattr(runner, "run_lock", unlocked)
     monkeypatch.setattr(
         runner,
         "_selected_scenarios",
@@ -172,13 +226,14 @@ def test_run_dispatches_to_test_queue_and_reports_failures(app, monkeypatch):
     runner.time.sleep.assert_called_once_with(3)
 
 
-def test_run_resets_database_inside_lock(app, monkeypatch):
+def test_run_resets_database_and_cleans_up(app, monkeypatch):
     from lemur.test import runner
 
     events = []
     monkeypatch.setattr(runner, "validate_isolation", Mock())
     monkeypatch.setattr(runner, "validate_task_catalog", Mock())
     monkeypatch.setattr(runner, "_selected_scenarios", Mock(return_value={}))
+    current_app.config.update(LEMUR_TEST_ROTATION_GENERATIONS=1)
     monkeypatch.setattr(runner.metrics, "send", Mock())
     monkeypatch.setattr(
         runner.db.session,
@@ -191,12 +246,20 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
     monkeypatch.setattr(
         runner.fixtures,
         "prepare",
-        Mock(side_effect=lambda _run_id: events.append("prepare") or {"fixture": True}),
+        Mock(
+            side_effect=lambda _run_id: events.append("prepare")
+            or {"fixture": True, "source_labels": []}
+        ),
     )
     monkeypatch.setattr(
-        runner.fixtures,
-        "verify",
-        Mock(side_effect=lambda _state: events.append("verify") or {}),
+        runner,
+        "_sync_test_sources",
+        Mock(side_effect=lambda *_args: events.append("sync")),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_verify_generation",
+        Mock(side_effect=lambda *_args: events.append("verify")),
     )
     monkeypatch.setattr(
         runner.fixtures,
@@ -204,28 +267,21 @@ def test_run_resets_database_inside_lock(app, monkeypatch):
         Mock(side_effect=lambda _state: events.append("cleanup")),
     )
 
-    @contextmanager
-    def locked(_run_id):
-        events.append("lock")
-        yield
-        events.append("unlock")
-
-    monkeypatch.setattr(runner, "run_lock", locked)
-
     report = runner.run(reset_database=True)
 
     assert report["status"] == "passed"
     assert events == [
-        "lock",
         "reset",
         "prepare",
         "release",
+        "sync",
         "verify",
         "release",
         "cleanup",
-        "unlock",
     ]
-    runner.fixtures.cleanup.assert_called_once_with({"fixture": True})
+    runner.fixtures.cleanup.assert_called_once_with(
+        {"fixture": True, "source_labels": []}
+    )
 
 
 def test_run_skips_cleanup_when_database_reset_fails(app, monkeypatch):
@@ -239,12 +295,6 @@ def test_run_skips_cleanup_when_database_reset_fails(app, monkeypatch):
         runner, "reset_and_seed", Mock(side_effect=RuntimeError("reset failed"))
     )
     monkeypatch.setattr(runner.fixtures, "cleanup", Mock())
-
-    @contextmanager
-    def unlocked(_run_id):
-        yield
-
-    monkeypatch.setattr(runner, "run_lock", unlocked)
 
     report = runner.run(reset_database=True)
 
@@ -271,7 +321,7 @@ def test_run_certificates_includes_replacements_and_excludes_persistent_fixtures
         Mock(return_value=run_certificate),
     )
 
-    certificates = fixtures._run_certificates({"certificate_id": 2})
+    certificates = fixtures._run_certificates({"certificate_ids": {"primary": 2}})
 
     assert certificates == [run_certificate, replacement]
     assert persistent_certificate not in certificates
@@ -341,7 +391,8 @@ def test_prepare_releases_database_session_before_aws_attachment(app, monkeypatc
     from lemur.test import fixtures
 
     events = []
-    certificate = Mock(id=17)
+    primary_certificate = Mock(id=17)
+    sni_certificate = Mock(id=18)
     source = Mock(label="lemur-test-aws")
     current_app.config.update(
         LEMUR_TEST_AWS_ENDPOINTS=[
@@ -351,7 +402,9 @@ def test_prepare_releases_database_session_before_aws_attachment(app, monkeypatc
     monkeypatch.setattr(fixtures, "_create_destinations", Mock(return_value=[]))
     monkeypatch.setattr(fixtures, "_create_sources", Mock(return_value=[source]))
     monkeypatch.setattr(
-        fixtures, "_issue_test_certificate", Mock(return_value=certificate)
+        fixtures,
+        "_issue_test_certificate",
+        Mock(side_effect=[primary_certificate, sni_certificate]),
     )
     monkeypatch.setattr(
         fixtures, "_iam_certificate_arn", Mock(return_value="certificate-arn")
@@ -366,11 +419,20 @@ def test_prepare_releases_database_session_before_aws_attachment(app, monkeypatc
         "_set_endpoint_certificate",
         Mock(side_effect=lambda *_args: events.append("attach")),
     )
+    monkeypatch.setattr(
+        fixtures,
+        "_add_endpoint_sni_certificate",
+        Mock(side_effect=lambda *_args: events.append("attach-sni")),
+    )
 
     state = fixtures.prepare("run-id")
 
-    assert state == {"certificate_id": 17, "source_labels": ["lemur-test-aws"]}
-    assert events == ["release", "attach"]
+    assert state == {
+        "certificate_ids": {"primary": 17, "sni": 18},
+        "source_labels": ["lemur-test-aws"],
+        "coa_paths": {},
+    }
+    assert events == ["release", "attach", "attach-sni"]
 
 
 def test_cleanup_waits_for_listener_detachment(app, monkeypatch):
@@ -382,10 +444,13 @@ def test_cleanup_waits_for_listener_detachment(app, monkeypatch):
     plugin = Mock()
     plugin.clean.side_effect = [error, None]
     destination = Mock(plugin_name="aws-destination", options=[], label="test-aws")
-    certificate = Mock(name="lemur-test-run-123", destinations=[destination])
+    certificate = Mock(
+        name="lemur-test-run-123", body="certificate", destinations=[destination]
+    )
     current_app.config.update(LEMUR_TEST_AWS_ENDPOINTS=[])
     monkeypatch.setattr(fixtures, "_run_certificates", Mock(return_value=[certificate]))
     monkeypatch.setattr(fixtures.plugins, "get", Mock(return_value=plugin))
+    monkeypatch.setattr(fixtures, "_remote_cleanup_failures", Mock(return_value=[]))
     monkeypatch.setattr(fixtures.time, "sleep", Mock())
 
     fixtures.cleanup()
@@ -411,6 +476,7 @@ def test_cleanup_releases_database_session_before_external_cleanup(app, monkeypa
     current_app.config.update(LEMUR_TEST_AWS_ENDPOINTS=[])
     monkeypatch.setattr(fixtures, "_run_certificates", Mock(return_value=[certificate]))
     monkeypatch.setattr(fixtures.plugins, "get", Mock(return_value=plugin))
+    monkeypatch.setattr(fixtures, "_remote_cleanup_failures", Mock(return_value=[]))
     monkeypatch.setattr(
         fixtures.database.db.session,
         "remove",
@@ -438,9 +504,15 @@ def test_deactivate_entrust_certificates_without_certificates_is_a_noop(
 def test_verify_requires_expected_endpoint_to_use_replacement(app, monkeypatch):
     from lemur.test import fixtures
 
-    replacement = Mock(id=2)
-    certificate = Mock(id=1, replaced=[replacement])
-    endpoint = Mock(primary_certificate=Mock(id=1))
+    primary_replacement = Mock(id=2, replaced=[])
+    sni_replacement = Mock(id=4, replaced=[])
+    primary = Mock(id=1, replaced=[primary_replacement])
+    sni = Mock(id=3, replaced=[sni_replacement])
+    endpoint = Mock(
+        primary_certificate=primary,
+        sni_certificates=[sni_replacement],
+        certificates=[primary, sni_replacement],
+    )
     current_app.config.update(
         LEMUR_TEST_EXPECTED_ENDPOINTS=[
             {"name": "lemur-test-alb", "source": "lemur-test-aws", "rotated": True}
@@ -448,16 +520,36 @@ def test_verify_requires_expected_endpoint_to_use_replacement(app, monkeypatch):
         LEMUR_TEST_MIN_ENDPOINTS_BY_SOURCE={},
     )
     monkeypatch.setattr(
-        fixtures.certificate_service, "get", Mock(return_value=certificate)
+        fixtures.certificate_service,
+        "get",
+        Mock(
+            side_effect=lambda certificate_id: primary if certificate_id == 1 else sni
+        ),
     )
     monkeypatch.setattr(
         fixtures.endpoint_service,
         "get_by_name_and_source",
         Mock(return_value=endpoint),
     )
+    monkeypatch.setattr(fixtures, "_listener_certificates", Mock(return_value=("", [])))
+    monkeypatch.setattr(fixtures, "_certificate_arn", Mock(return_value="arn"))
+    monkeypatch.setattr(fixtures, "_verify_remote_state", Mock())
+    query = MagicMock()
+    query.filter.return_value.all.return_value = [
+        Mock(primary_certificate=primary_replacement),
+        Mock(primary_certificate=sni_replacement),
+    ]
+    monkeypatch.setattr(fixtures.Endpoint, "query", query)
 
-    with pytest.raises(RuntimeError, match="was not rotated"):
-        fixtures.verify({"certificate_id": 1, "source_labels": []})
+    with pytest.raises(RuntimeError, match="primary generation"):
+        fixtures.verify_generation(
+            {
+                "certificate_ids": {"primary": 1, "sni": 3},
+                "source_labels": [],
+                "coa_paths": {},
+            },
+            1,
+        )
 
 
 def test_bootstrap_database_rejects_normal_configuration(app):

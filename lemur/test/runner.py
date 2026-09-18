@@ -3,19 +3,15 @@
 import json
 import time
 import uuid
-from contextlib import contextmanager
 
 from flask import current_app
 
 from lemur.extensions import db
 from lemur.common.celery import celery_app
-from lemur.common.redis import RedisHandler
 from lemur.extensions import metrics
 from lemur.test.catalog import scenarios, validate_task_catalog
 from lemur.test.database import reset_and_seed, validate_database_identity
 from lemur.test import fixtures
-
-LOCK_KEY = "lemur-test:run-lock"
 
 
 def validate_isolation():
@@ -38,21 +34,47 @@ def validate_isolation():
     if current_app.config.get("CELERY_DEFAULT_QUEUE", queue) != queue:
         raise RuntimeError("CELERY_DEFAULT_QUEUE must match LEMUR_TEST_QUEUE")
 
+    account = current_app.config.get("LEMUR_TEST_AWS_ACCOUNT")
+    allowed_account = current_app.config.get("LEMUR_TEST_ALLOWED_AWS_ACCOUNT")
+    if not allowed_account or account != allowed_account:
+        raise RuntimeError(
+            "Refusing AWS test access for account {!r}; expected RDNA account {!r}".format(
+                account, allowed_account
+            )
+        )
 
-@contextmanager
-def run_lock(run_id):
-    """Prevent concurrent manual and scheduled test runs."""
-    redis_client = RedisHandler().redis()
-    timeout = current_app.config.get("LEMUR_TEST_LOCK_SECONDS", 3 * 60 * 60)
-    acquired = redis_client.set(LOCK_KEY, run_id, nx=True, ex=timeout)
-    if not acquired:
-        owner = redis_client.get(LOCK_KEY)
-        raise RuntimeError("Another Lemur test run holds the lock: {}".format(owner))
-    try:
-        yield
-    finally:
-        if redis_client.get(LOCK_KEY) == run_id:
-            redis_client.delete(LOCK_KEY)
+    configured_plugins = current_app.config.get(
+        "LEMUR_TEST_DESTINATIONS", []
+    ) + current_app.config.get("LEMUR_TEST_SOURCES", [])
+    for configured in configured_plugins:
+        plugin_name = configured.get("plugin_name", "")
+        options = configured.get("options", {})
+        if plugin_name.startswith("aws"):
+            configured_account = options.get("accountNumber")
+            if configured_account != allowed_account:
+                raise RuntimeError(
+                    "Refusing {} access for AWS account {!r}".format(
+                        plugin_name, configured_account
+                    )
+                )
+
+    allowed_coa_prefix = current_app.config.get("LEMUR_TEST_ALLOWED_COA_PATH_PREFIX")
+    if not allowed_coa_prefix:
+        raise RuntimeError("LEMUR_TEST_ALLOWED_COA_PATH_PREFIX must be configured")
+    for configured in configured_plugins:
+        if configured.get("plugin_name") not in (
+            "cert-orchestration-adapter-dest",
+            "coa-source",
+        ):
+            continue
+        configured_paths = configured.get("options", {}).get("paths", "")
+        for path in configured_paths.split(","):
+            if path != allowed_coa_prefix:
+                raise RuntimeError(
+                    "Refusing COA test access outside {!r}: {!r}".format(
+                        allowed_coa_prefix, path
+                    )
+                )
 
 
 def _selected_scenarios(task_names=None):
@@ -67,6 +89,77 @@ def _selected_scenarios(task_names=None):
     return {name: resolved[name] for name in task_names}
 
 
+def _run_task(task_name, scenario, queue, timeout, run_id, results, stage):
+    """Dispatch one task through the isolated worker and record its result."""
+    task_started = time.time()
+    entry = {"task": task_name, "stage": stage, "status": "failed"}
+    try:
+        result = celery_app.send_task(
+            task_name,
+            args=scenario.args,
+            kwargs=scenario.kwargs,
+            queue=queue,
+        )
+        entry["task_id"] = result.id
+        entry["result"] = result.get(timeout=timeout, propagate=True)
+        entry["status"] = "passed"
+        if scenario.wait_after_seconds:
+            time.sleep(scenario.wait_after_seconds)
+        metrics.send(
+            "test.task.success",
+            "counter",
+            1,
+            metric_tags={"task_name": task_name, "run_id": run_id, "stage": stage},
+        )
+    except Exception as error:
+        entry["error"] = repr(error)
+        metrics.send(
+            "test.task.failure",
+            "counter",
+            1,
+            metric_tags={"task_name": task_name, "run_id": run_id, "stage": stage},
+        )
+    finally:
+        entry["duration_seconds"] = round(time.time() - task_started, 3)
+        results.append(entry)
+    return entry
+
+
+def _sync_test_sources(state, queue, timeout, run_id, results, stage):
+    scenario = scenarios()["lemur.common.celery.sync_source"]
+    for source_label in state["source_labels"]:
+        source_scenario = type(scenario)(
+            args=[source_label],
+            kwargs=dict(scenario.kwargs),
+            wait_after_seconds=scenario.wait_after_seconds,
+        )
+        _run_task(
+            "lemur.common.celery.sync_source",
+            source_scenario,
+            queue,
+            timeout,
+            run_id,
+            results,
+            stage,
+        )
+
+
+def _verify_generation(state, generation, phases):
+    phase_started = time.time()
+    phase = {
+        "phase": "verify-generation-{}".format(generation),
+        "status": "failed",
+    }
+    try:
+        phase["result"] = fixtures.verify_generation(state, generation)
+        phase["status"] = "passed"
+    except Exception as error:
+        phase["error"] = repr(error)
+    finally:
+        phase["duration_seconds"] = round(time.time() - phase_started, 3)
+        phases.append(phase)
+
+
 def run(task_names=None, timeout=None, reset_database=False):
     """Dispatch cataloged tasks sequentially and wait for their real results."""
     validate_isolation()
@@ -79,85 +172,97 @@ def run(task_names=None, timeout=None, reset_database=False):
     phases = []
     started = time.time()
 
-    with run_lock(run_id):
-        fixture_state = None
-        database_ready = not reset_database
-        setup_succeeded = not reset_database
-        if reset_database:
+    fixture_state = None
+    database_ready = not reset_database
+    setup_succeeded = not reset_database
+    if reset_database:
+        phase_started = time.time()
+        phase = {"phase": "prepare", "status": "failed"}
+        try:
+            reset_and_seed()
+            database_ready = True
+            fixture_state = fixtures.prepare(run_id)
+            phase["status"] = "passed"
+            setup_succeeded = True
+        except Exception as error:
+            phase["error"] = repr(error)
+        finally:
+            db.session.remove()
+            phase["duration_seconds"] = round(time.time() - phase_started, 3)
+            phases.append(phase)
+
+    try:
+        if setup_succeeded:
+            for task_name, scenario in _selected_scenarios(task_names).items():
+                _run_task(
+                    task_name,
+                    scenario,
+                    queue,
+                    timeout,
+                    run_id,
+                    results,
+                    "catalog",
+                )
+
+        if reset_database and fixture_state:
+            _sync_test_sources(
+                fixture_state,
+                queue,
+                timeout,
+                run_id,
+                results,
+                "generation-1-resync",
+            )
+            _verify_generation(fixture_state, 1, phases)
+
+            rotation_generations = current_app.config.get(
+                "LEMUR_TEST_ROTATION_GENERATIONS", 2
+            )
+            resolved = scenarios(
+                current_app.config.get("LEMUR_TEST_TASK_SCENARIOS", {})
+            )
+            for generation in range(2, rotation_generations + 1):
+                stage = "generation-{}".format(generation)
+                _run_task(
+                    "lemur.common.celery.certificate_reissue",
+                    resolved["lemur.common.celery.certificate_reissue"],
+                    queue,
+                    timeout,
+                    run_id,
+                    results,
+                    stage,
+                )
+                _run_task(
+                    "lemur.common.celery.certificate_rotate",
+                    resolved["lemur.common.celery.certificate_rotate"],
+                    queue,
+                    timeout,
+                    run_id,
+                    results,
+                    stage,
+                )
+                _sync_test_sources(
+                    fixture_state,
+                    queue,
+                    timeout,
+                    run_id,
+                    results,
+                    "{}-resync".format(stage),
+                )
+                _verify_generation(fixture_state, generation, phases)
+    finally:
+        if reset_database and database_ready:
+            db.session.remove()
             phase_started = time.time()
-            phase = {"phase": "prepare", "status": "failed"}
+            phase = {"phase": "cleanup", "status": "failed"}
             try:
-                reset_and_seed()
-                database_ready = True
-                fixture_state = fixtures.prepare(run_id)
+                fixtures.cleanup(fixture_state)
                 phase["status"] = "passed"
-                setup_succeeded = True
             except Exception as error:
                 phase["error"] = repr(error)
             finally:
-                db.session.remove()
                 phase["duration_seconds"] = round(time.time() - phase_started, 3)
                 phases.append(phase)
-
-        try:
-            if setup_succeeded:
-                for task_name, scenario in _selected_scenarios(task_names).items():
-                    task_started = time.time()
-                    entry = {"task": task_name, "status": "failed"}
-                    try:
-                        result = celery_app.send_task(
-                            task_name,
-                            args=scenario.args,
-                            kwargs=scenario.kwargs,
-                            queue=queue,
-                        )
-                        entry["task_id"] = result.id
-                        entry["result"] = result.get(timeout=timeout, propagate=True)
-                        entry["status"] = "passed"
-                        if scenario.wait_after_seconds:
-                            time.sleep(scenario.wait_after_seconds)
-                        metrics.send(
-                            "test.task.success",
-                            "counter",
-                            1,
-                            metric_tags={"task_name": task_name, "run_id": run_id},
-                        )
-                    except Exception as error:
-                        entry["error"] = repr(error)
-                        metrics.send(
-                            "test.task.failure",
-                            "counter",
-                            1,
-                            metric_tags={"task_name": task_name, "run_id": run_id},
-                        )
-                    finally:
-                        entry["duration_seconds"] = round(time.time() - task_started, 3)
-                        results.append(entry)
-
-            if reset_database and fixture_state:
-                phase_started = time.time()
-                phase = {"phase": "verify", "status": "failed"}
-                try:
-                    phase["result"] = fixtures.verify(fixture_state)
-                    phase["status"] = "passed"
-                except Exception as error:
-                    phase["error"] = repr(error)
-                finally:
-                    phase["duration_seconds"] = round(time.time() - phase_started, 3)
-                    phases.append(phase)
-        finally:
-            if reset_database and database_ready:
-                db.session.remove()
-                phase_started = time.time()
-                phase = {"phase": "cleanup", "status": "failed"}
-                try:
-                    fixtures.cleanup(fixture_state)
-                    phase["status"] = "passed"
-                except Exception as error:
-                    phase["error"] = repr(error)
-                finally:
-                    phase["duration_seconds"] = round(time.time() - phase_started, 3)
-                    phases.append(phase)
 
     report = {
         "run_id": run_id,

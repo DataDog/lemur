@@ -508,9 +508,6 @@ class AWSSourcePlugin(SourcePlugin):
             )
 
         partition = current_app.config.get("LEMUR_AWS_PARTITION", "aws")
-        new_cert_arn = iam.create_arn_from_cert(
-            account_number, partition, new_cert.name, ""
-        )
         old_cert_path = next(
             (
                 assoc.path
@@ -518,6 +515,9 @@ class AWSSourcePlugin(SourcePlugin):
                 if not assoc.primary and assoc.certificate == old_cert
             ),
             "",
+        )
+        new_cert_arn = iam.create_arn_from_cert(
+            account_number, partition, new_cert.name, old_cert_path
         )
         old_cert_arn = iam.create_arn_from_cert(
             account_number, partition, old_cert.name, old_cert_path
