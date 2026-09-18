@@ -79,6 +79,8 @@ def wait_for_dns_change(change_id, account_number=None):
 
 
 def delete_txt_record(change_ids, account_number, host, value):
+    if isinstance(change_ids, tuple):
+        change_ids = [change_ids]
     client = _get_client(account_number)
     for resource_group, zone, relative_name, _, _ in change_ids:
         try:

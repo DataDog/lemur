@@ -139,6 +139,33 @@ def test_delete_txt_record_deletes_empty_record_set(mock_get_client):
     )
 
 
+@patch("lemur.plugins.lemur_acme.azure._get_client")
+def test_delete_txt_record_accepts_single_change_tuple(mock_get_client):
+    client = mock_get_client.return_value
+    client.record_sets.get.return_value = RecordSet(
+        ttl=60, txt_records=[TxtRecord(value=["old-token"])]
+    )
+    change_id = (
+        "sub",
+        "sub.example.com",
+        "_acme-challenge.test",
+        "_acme-challenge.test.sub.example.com",
+        "old-token",
+    )
+
+    azure.delete_txt_record(
+        change_id,
+        OPTIONS,
+        "_acme-challenge.test.sub.example.com",
+        "old-token",
+    )
+
+    client.record_sets.delete.assert_called_once_with(
+        "sub", "sub.example.com", "_acme-challenge.test", "TXT"
+    )
+    client.record_sets.create_or_update.assert_not_called()
+
+
 @patch("lemur.plugins.lemur_acme.azure.time.sleep")
 @patch("lemur.plugins.lemur_acme.azure.dnsutil.get_dns_records")
 @patch("lemur.plugins.lemur_acme.azure.dnsutil.get_authoritative_nameserver")
