@@ -51,6 +51,7 @@ azure-common==1.1.28
     # via
     #   -r requirements.txt
     #   azure-mgmt-cdn
+    #   azure-mgmt-dns
     #   azure-mgmt-subscription
 azure-core==1.39.0
     # via
@@ -83,8 +84,11 @@ azure-mgmt-core==1.6.0
     # via
     #   -r requirements.txt
     #   azure-mgmt-cdn
+    #   azure-mgmt-dns
     #   azure-mgmt-network
     #   azure-mgmt-subscription
+azure-mgmt-dns==9.0.0
+    # via -r requirements.txt
 azure-mgmt-network==30.2.0
     # via -r requirements.txt
 azure-mgmt-subscription==3.1.1
@@ -122,8 +126,8 @@ botocore==1.42.73
     #   s3transfer
 celery[redis]==5.6.2
     # via
-    #   -r requirements.txt
     #   -r requirements-tests.in
+    #   -r requirements.txt
 cert-manager==3.0.0
     # via -r requirements.txt
 certbot==5.4.0
@@ -184,8 +188,8 @@ coverage==7.13.5
     # via -r requirements-tests.in
 cryptography==43.0.1
     # via
-    #   -r requirements.txt
     #   -r requirements-tests.in
+    #   -r requirements.txt
     #   acme
     #   azure-identity
     #   azure-keyvault-keys
@@ -358,6 +362,7 @@ isodate==0.7.2
     #   azure-keyvault-keys
     #   azure-keyvault-secrets
     #   azure-mgmt-cdn
+    #   azure-mgmt-dns
     #   azure-mgmt-network
     #   msrest
 itsdangerous==2.2.0
@@ -706,8 +711,8 @@ sentry-sdk==2.55.0
     # via -r requirements.txt
 simplejson==3.20.2
     # via
-    #   -r requirements.txt
     #   -r requirements-tests.in
+    #   -r requirements.txt
 six==1.17.0
     # via
     #   -r requirements.txt
@@ -791,6 +796,7 @@ typing-extensions==4.15.0
     #   azure-keyvault-certificates
     #   azure-keyvault-keys
     #   azure-keyvault-secrets
+    #   azure-mgmt-dns
     #   azure-mgmt-network
     #   black
     #   cfn-lint

@@ -10,6 +10,7 @@
 azure-identity >= 1.16.1  # (VUNL-7150)
 azure-keyvault
 azure-mgmt-cdn
+azure-mgmt-dns
 azure-mgmt-network
 azure-mgmt-subscription
 cert_manager

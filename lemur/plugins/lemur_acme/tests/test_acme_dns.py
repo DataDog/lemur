@@ -357,6 +357,8 @@ class TestAcmeDns(unittest.TestCase):
         assert cloudflare
         dyn = provider.get_dns_provider("dyn")
         assert dyn
+        azure = provider.get_dns_provider("azure")
+        assert azure
 
     def test_autodetect_dns_providers_rejects_ambiguous_match(self):
         first_provider = Mock()

@@ -38,6 +38,28 @@ class VaultTokenCredential(TokenCredential):
         )
 
 
+def get_azure_credential_from_options(audience, options):
+    tenant = options.get("azureTenant")
+    auth_method = options.get("authenticationMethod")
+
+    if auth_method == "hashicorpVault":
+        client = hvac.Client(url=os.environ["VAULT_ADDR"])
+        return VaultTokenCredential(
+            audience=audience,
+            client=client,
+            mount_point=options.get("hashicorpVaultMountPoint"),
+            role_name=options.get("hashicorpVaultRoleName"),
+        )
+    if auth_method == "azureApp":
+        return ClientSecretCredential(
+            tenant_id=tenant,
+            client_id=options.get("azureAppID"),
+            client_secret=options.get("azurePassword"),
+        )
+
+    raise Exception("No supported way to authenticate with Azure")
+
+
 def get_azure_credential(audience, plugin, options):
     """
     Fetches a credential used for authenticating with the Azure API.
@@ -49,30 +71,16 @@ def get_azure_credential(audience, plugin, options):
     :param options: options set for the plugin
     :return: an Azure credential
     """
-    tenant = plugin.get_option("azureTenant", options)
-    auth_method = plugin.get_option("authenticationMethod", options)
-
-    if auth_method == "hashicorpVault":
-        mount_point = plugin.get_option("hashicorpVaultMountPoint", options)
-        role_name = plugin.get_option("hashicorpVaultRoleName", options)
-        client = hvac.Client(url=os.environ["VAULT_ADDR"])
-
-        plugin.credential = VaultTokenCredential(
-            audience=audience,
-            client=client,
-            mount_point=mount_point,
-            role_name=role_name,
+    option_values = {
+        name: plugin.get_option(name, options)
+        for name in (
+            "azureTenant",
+            "authenticationMethod",
+            "azureAppID",
+            "azurePassword",
+            "hashicorpVaultMountPoint",
+            "hashicorpVaultRoleName",
         )
-        return plugin.credential
-    elif auth_method == "azureApp":
-        app_id = plugin.get_option("azureAppID", options)
-        password = plugin.get_option("azurePassword", options)
-
-        plugin.credential = ClientSecretCredential(
-            tenant_id=tenant,
-            client_id=app_id,
-            client_secret=password,
-        )
-        return plugin.credential
-
-    raise Exception("No supported way to authenticate with Azure")
+    }
+    plugin.credential = get_azure_credential_from_options(audience, option_values)
+    return plugin.credential

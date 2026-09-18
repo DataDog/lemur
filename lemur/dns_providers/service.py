@@ -95,6 +95,55 @@ def get_types():
                     ],
                 },
                 {
+                    "name": "azure",
+                    "requirements": [
+                        {
+                            "name": "subscription_id",
+                            "type": "str",
+                            "required": True,
+                            "helpMessage": "Azure subscription ID",
+                        },
+                        {
+                            "name": "authenticationMethod",
+                            "type": "select",
+                            "value": "hashicorpVault",
+                            "required": True,
+                            "available": ["hashicorpVault", "azureApp"],
+                            "helpMessage": "Authentication method to use",
+                        },
+                        {
+                            "name": "azureTenant",
+                            "type": "str",
+                            "required": True,
+                            "helpMessage": "Azure tenant ID",
+                        },
+                        {
+                            "name": "azureAppID",
+                            "type": "str",
+                            "required": False,
+                            "helpMessage": "Required for azureApp authentication",
+                        },
+                        {
+                            "name": "azurePassword",
+                            "type": "str",
+                            "required": False,
+                            "helpMessage": "Required for azureApp authentication",
+                        },
+                        {
+                            "name": "hashicorpVaultMountPoint",
+                            "type": "str",
+                            "required": False,
+                            "helpMessage": "Required for hashicorpVault authentication",
+                        },
+                        {
+                            "name": "hashicorpVaultRoleName",
+                            "type": "str",
+                            "required": False,
+                            "helpMessage": "Required for hashicorpVault authentication",
+                        },
+                    ],
+                },
+                {
                     "name": "cloudflare",
                     "requirements": [
                         {
