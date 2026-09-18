@@ -649,3 +649,223 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
     assert len(broken_calls) == 1
     assert broken_calls[0].args[2] == 2  # expired + uncovered
     assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert-issuer"
+
+
+def test_dcv_persist_account_uris_default_configured():
+    import os
+
+    from lemur.factory import from_file
+
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "default.conf.py",
+    )
+    config = from_file(config_path)
+    assert isinstance(config.DCV_PERSIST_ACCOUNT_URIS, dict)
+    assert config.DCV_PERSIST_ACCOUNT_URIS.get("digicert.com")
+    assert config.DCV_PERSIST_ACCOUNT_URIS.get("sectigo.com")
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_emits_gauge(
+    mock_current_app, mock_metrics, mock_verify, mock_active
+):
+    mock_active.return_value = {"digicert-issuer": {"example.com"}}
+    mock_current_app.config.get.return_value = {
+        "digicert.com": "https://digicert.com/account/abc",
+        "sectigo.com": "acct:1@sectigo.com",
+    }
+    mock_verify.return_value = [
+        {
+            "domain": "example.com",
+            "ca": "digicert.com",
+            "status": "ok",
+            "account_uri": "https://digicert.com/account/abc",
+        },
+        {
+            "domain": "example.com",
+            "ca": "sectigo.com",
+            "status": "missing",
+            "account_uri": None,
+        },
+    ]
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    emit_persist_record_metrics()
+
+    gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
+    persist_calls = [c for c in gauge_calls if "dcv.persist_record_ok" in c.args[0]]
+    assert len(persist_calls) == 2
+    ok_call = next(c for c in persist_calls if c.args[2] == 1)
+    bad_call = next(c for c in persist_calls if c.args[2] == 0)
+    assert ok_call.kwargs["metric_tags"]["persist_record_status"] == "ok"
+    assert bad_call.kwargs["metric_tags"]["persist_record_status"] == "missing"
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_skips_without_config(
+    mock_current_app, mock_verify, mock_active
+):
+    mock_active.return_value = {"digicert-issuer": {"example.com"}}
+    mock_current_app.config.get.return_value = {}
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    assert emit_persist_record_metrics() == 0
+    mock_verify.assert_not_called()
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_skips_without_persist_domains(
+    mock_current_app, mock_verify, mock_active
+):
+    mock_active.return_value = {}  # no active-cert domains
+    mock_current_app.config.get.return_value = {
+        "digicert.com": "https://digicert.com/account/abc",
+    }
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    assert emit_persist_record_metrics() == 0
+    mock_verify.assert_not_called()
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_emits_broken_count(
+    mock_current_app, mock_metrics, mock_verify, mock_active
+):
+    mock_active.return_value = {"digicert-issuer": {"a.com", "b.com", "c.com", "d.com"}}
+    mock_current_app.config.get.return_value = {
+        "digicert.com": "https://digicert.com/account/abc",
+    }
+    # ok + missing + wrong = 2 broken for digicert.com; dns_error is not broken.
+    mock_verify.return_value = [
+        {"domain": "a.com", "ca": "digicert.com", "status": "ok", "account_uri": "x"},
+        {
+            "domain": "b.com",
+            "ca": "digicert.com",
+            "status": "missing",
+            "account_uri": None,
+        },
+        {
+            "domain": "c.com",
+            "ca": "digicert.com",
+            "status": "wrong",
+            "account_uri": "y",
+        },
+        {
+            "domain": "d.com",
+            "ca": "digicert.com",
+            "status": "dns_error",
+            "account_uri": None,
+        },
+    ]
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    emit_persist_record_metrics()
+
+    broken_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.persist_record_broken" in c.args[0]
+    ]
+    assert len(broken_calls) == 1
+    assert broken_calls[0].args[2] == 2  # missing + wrong
+    assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert.com"
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_emits_zero_broken_when_recovered(
+    mock_current_app, mock_metrics, mock_verify, mock_active
+):
+    # Review finding: the broken gauge was only submitted when nonzero, so a
+    # resolved failure went stale / no-data instead of clearly recovering. A
+    # healthy CA must still emit dcv.persist_record_broken = 0.
+    mock_active.return_value = {"digicert-issuer": {"a.com"}}
+    mock_current_app.config.get.return_value = {
+        "digicert.com": "https://digicert.com/account/abc",
+    }
+    mock_verify.return_value = [
+        {"domain": "a.com", "ca": "digicert.com", "status": "ok", "account_uri": "x"},
+    ]
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    emit_persist_record_metrics()
+
+    broken_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.persist_record_broken" in c.args[0]
+    ]
+    assert len(broken_calls) == 1
+    assert broken_calls[0].args[2] == 0
+    assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert.com"
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.verify_persist_records")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_persist_record_metrics_expired_counts_broken_and_tags_persist_until(
+    mock_current_app, mock_metrics, mock_verify, mock_active
+):
+    # An "expired" status (persistUntil passed) is not healthy: it increments the
+    # broken count, emits the gauge as 0, and surfaces persist_until as a tag.
+    mock_active.return_value = {"digicert-issuer": {"a.com"}}
+    mock_current_app.config.get.return_value = {
+        "digicert.com": "https://digicert.com/account/abc",
+    }
+    mock_verify.return_value = [
+        {
+            "domain": "a.com",
+            "ca": "digicert.com",
+            "status": "expired",
+            "account_uri": "x",
+            "persist_until": 1,
+        },
+    ]
+
+    from lemur.common.celery import emit_persist_record_metrics
+
+    emit_persist_record_metrics()
+
+    broken_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.persist_record_broken" in c.args[0]
+    ]
+    assert len(broken_calls) == 1
+    assert broken_calls[0].args[2] == 1  # expired counts as broken
+
+    ok_calls = [
+        c
+        for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2
+        and c.args[1] == "gauge"
+        and "dcv.persist_record_ok" in c.args[0]
+    ]
+    assert ok_calls[0].args[2] == 0
+    assert ok_calls[0].kwargs["metric_tags"]["persist_record_status"] == "expired"
+    assert ok_calls[0].kwargs["metric_tags"]["persist_until"] == "1"
