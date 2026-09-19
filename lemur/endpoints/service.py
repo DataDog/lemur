@@ -98,6 +98,28 @@ def get_by_dnsname_and_port(dnsname, port):
     )
 
 
+def get_by_dnsname_port_and_source(dnsname, port, source):
+    """
+    Retrieves an endpoint by its dnsname, port and source.
+
+    Including the source in the key lets a single logical hostname served from many
+    DCs (e.g. COA, where each DC is its own source/destination with a distinct
+    hostname) keep one Endpoint row per DC instead of collapsing to one row. The
+    existing row is matched on its stable ``source_id`` so a re-sync updates it
+    (e.g. its ``name``) rather than appending a duplicate. See CLOUDR-1927.
+    :param dnsname:
+    :param port:
+    :param source:
+    :return:
+    """
+    return (
+        Endpoint.query.filter(Endpoint.dnsname == dnsname)
+        .filter(Endpoint.port == port)
+        .filter(Endpoint.source_id == source.id)
+        .scalar()
+    )
+
+
 def get_by_source(source_label):
     """
     Retrieves all endpoints for a given source.
@@ -205,6 +227,7 @@ def update(endpoint_id, **kwargs):
     endpoint.policy = kwargs["policy"]
     endpoint.source = kwargs["source"]
     endpoint.registry_type = kwargs["registry_type"]
+    endpoint.name = kwargs["name"]
 
     existing_alias = {}
     for e in endpoint.aliases:
