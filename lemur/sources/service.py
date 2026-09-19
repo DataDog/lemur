@@ -177,9 +177,12 @@ def sync_endpoints(source):
 
         policy["ciphers"] = policy_ciphers
         endpoint["policy"] = endpoint_service.get_or_create_policy(**policy)
-        endpoint["source"] = source
 
         if not exists:
+            # Only assign the source on create. On update (a matched dnsname:port),
+            # preserve the existing source_id so a multi-source (e.g. multi-DC COA)
+            # endpoint doesn't thrash to whichever source synced last. See CLOUDR-1927.
+            endpoint["source"] = source
             current_app.logger.debug(
                 "Endpoint Created: Name: {name}".format(name=endpoint["name"])
             )
