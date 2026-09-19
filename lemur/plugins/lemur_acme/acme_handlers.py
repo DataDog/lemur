@@ -115,10 +115,21 @@ class AcmeHandler:
             )
             raise
         except errors.ValidationError:
+            # finalize_order can raise ValidationError after the CA has already
+            # issued the cert (e.g. the order became valid but the local copy
+            # of the order wasn't refreshed). Don't drop the issued cert — try
+            # to recover it from the CA before giving up.
             if order.fullchain_pem:
                 orderr = order
             else:
-                raise
+                orderr = self._recover_issued_cert(acme_client, order, deadline)
+
+        # finalize_order can finalize the order at the CA (issuing the cert and
+        # consuming the CA quota) and still return an order without a fullchain
+        # (e.g. a transient failure). Since the cert is already issued, recover
+        # it from the CA so it persists in Lemur instead of being lost.
+        if not orderr.fullchain_pem:
+            orderr = self._recover_issued_cert(acme_client, orderr, deadline)
 
         metrics.send(
             "request_certificate_success", "counter", 1, metric_tags={"uri": order.uri}
@@ -137,6 +148,29 @@ class AcmeHandler:
             f"{type(pem_certificate)} {type(pem_certificate_chain)}"
         )
         return pem_certificate, pem_certificate_chain
+
+    def _recover_issued_cert(self, acme_client, order, deadline):
+        """Retrieve an issued cert from an ACME order that finalized at the CA.
+
+        Once an ACME order is finalized at the CA the certificate is issued and
+        counts against the CA quota, even if the local order object has no
+        fullchain_pem (e.g. a transient failure after finalize_order). Poll the
+        finalized order to retrieve the cert so it can be persisted in Lemur
+        instead of being dropped and wasting the CA issuance.
+        """
+        try:
+            orderr = acme_client.poll_finalization(
+                order, deadline, fetch_alternative_chains=True
+            )
+        except (AcmeError, TimeoutError, errors.ValidationError):
+            # The order may not have been finalized yet — do a full poll and
+            # finalize to retrieve the issued cert.
+            orderr = acme_client.poll_and_finalize(order, deadline)
+        if not orderr.fullchain_pem:
+            raise Exception(
+                f"Unable to recover issued cert for finalized Acme order: {order.uri}"
+            )
+        return orderr
 
     def extract_cert_and_chain(
         self, fullchain_pem, alternative_fullchains_pem, preferred_issuer=None
