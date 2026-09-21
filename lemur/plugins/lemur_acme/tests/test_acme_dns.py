@@ -9,6 +9,7 @@ from flask import Flask, current_app
 from lemur.plugins.lemur_acme import plugin
 from lemur.plugins.lemur_acme.acme_handlers import AuthorizationRecord
 from lemur.common.utils import generate_private_key
+from lemur.exceptions import InvalidConfiguration
 from lemur.tests.conf import LEMUR_ENCRYPTION_KEYS
 from unittest.mock import MagicMock
 
@@ -358,6 +359,25 @@ class TestAcmeDns(unittest.TestCase):
         assert dyn
         azure = provider.get_dns_provider("azure")
         assert azure
+
+    def test_autodetect_dns_providers_rejects_ambiguous_match(self):
+        first_provider = Mock()
+        first_provider.name = "first"
+        first_provider.domains = ["staging.dog"]
+        second_provider = Mock()
+        second_provider.name = "second"
+        second_provider.domains = ["staging.dog"]
+        self.acme.all_dns_providers = [first_provider, second_provider]
+
+        with self.assertRaises(InvalidConfiguration) as error:
+            self.acme.autodetect_dns_providers("registry.us3.staging.dog")
+
+        self.assertEqual(
+            str(error.exception),
+            "Multiple DNS providers match domain registry.us3.staging.dog: "
+            "first, second. Select a provider explicitly for direct validation, "
+            "or remove overlapping provider configuration for a delegated CNAME target.",
+        )
 
     @patch("lemur.plugins.lemur_acme.plugin.AcmeHandler.setup_acme_client")
     @patch("lemur.plugins.lemur_acme.acme_handlers.dns_provider_service")
