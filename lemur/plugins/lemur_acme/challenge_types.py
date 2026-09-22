@@ -257,7 +257,9 @@ class AcmeDnsChallenge(AcmeChallenge):
             current_app.logger.debug(
                 "Using DNS provider: {0}".format(dns_provider.provider_type)
             )
-            account_number = credentials.get("account_id")
+            account_number = credentials.get("account_id") or credentials.get(
+                "subscription_id"
+            )
             provider_type = dns_provider.provider_type
             if provider_type == "route53" and not account_number:
                 error = "Route53 DNS Provider {} does not have an account number configured.".format(

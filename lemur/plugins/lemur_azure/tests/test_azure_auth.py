@@ -2,7 +2,11 @@ import os
 import unittest
 from unittest.mock import patch
 from azure.core.credentials import AccessToken
-from lemur.plugins.lemur_azure.auth import VaultTokenCredential, get_azure_credential
+from lemur.plugins.lemur_azure.auth import (
+    VaultTokenCredential,
+    get_azure_credential,
+    get_azure_credential_from_options,
+)
 from lemur.plugins.lemur_azure.plugin import AzureDestinationPlugin
 from flask import Flask
 
@@ -16,6 +20,25 @@ class TestAzureAuth(unittest.TestCase):
 
     def tearDown(self):
         self.ctx.pop()
+
+    @patch("lemur.plugins.lemur_azure.auth.ClientSecretCredential")
+    def test_get_azure_credential_from_options(self, credential_mock):
+        options = {
+            "azureTenant": "mockedTenant",
+            "authenticationMethod": "azureApp",
+            "azureAppID": "mockedApp",
+            "azurePassword": "mockedPassword",
+        }
+
+        assert (
+            get_azure_credential_from_options("https://management.azure.com/", options)
+            == credential_mock.return_value
+        )
+        credential_mock.assert_called_once_with(
+            tenant_id="mockedTenant",
+            client_id="mockedApp",
+            client_secret="mockedPassword",
+        )
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
     @patch("hvac.Client")
