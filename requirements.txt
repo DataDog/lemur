@@ -213,6 +213,8 @@ googleapis-common-protos[grpc]==1.73.0
     #   google-api-core
     #   grpc-google-iam-v1
     #   grpcio-status
+greenlet==3.5.0
+    # via sqlalchemy
 grpc-google-iam-v1==0.14.3
     # via google-cloud-private-ca
 grpcio==1.78.0
@@ -435,7 +437,7 @@ sniffio==1.3.1
     # via
     #   anyio
     #   cloudflare
-sqlalchemy==1.3.24
+sqlalchemy==2.0.49
     # via
     #   -r requirements-base.in
     #   alembic
@@ -472,6 +474,7 @@ typing-extensions==4.15.0
     #   pydantic-core
     #   pyjwt
     #   pyopenssl
+    #   sqlalchemy
     #   typing-inspection
 typing-inspection==0.4.2
     # via pydantic
