@@ -48,6 +48,7 @@ def test_create_txt_record_uses_most_specific_zone_and_preserves_records(
     )
     child_zone.list_resource_record_sets.return_value = [existing]
     replacement = child_zone.resource_record_set.return_value
+    child_zone.changes.return_value.name = "change-1"
     mock_get_client.return_value.list_zones.return_value = [parent_zone, child_zone]
 
     change_id = gcp.create_txt_record(
@@ -56,7 +57,7 @@ def test_create_txt_record_uses_most_specific_zone_and_preserves_records(
 
     assert change_id == (
         "child",
-        "sub.example.com",
+        "change-1",
         "_acme-challenge.test.sub.example.com",
         "new-token",
     )
@@ -76,14 +77,34 @@ def test_create_txt_record_uses_most_specific_zone_and_preserves_records(
 def test_create_txt_record_creates_missing_record_set(mock_get_client):
     managed_zone = zone("example", "example.com.")
     managed_zone.list_resource_record_sets.return_value = []
+    managed_zone.changes.return_value.name = "change-1"
     mock_get_client.return_value.list_zones.return_value = [managed_zone]
 
-    gcp.create_txt_record("_acme-challenge.test.example.com", "new-token", OPTIONS)
+    change_id = gcp.create_txt_record(
+        "_acme-challenge.test.example.com", "new-token", OPTIONS
+    )
 
+    assert change_id[1] == "change-1"
     managed_zone.resource_record_set.assert_called_once_with(
         "_acme-challenge.test.example.com.", "TXT", 300, ['"new-token"']
     )
     managed_zone.changes.return_value.delete_record_set.assert_not_called()
+
+
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_create_txt_record_returns_no_change_for_existing_value(mock_get_client):
+    managed_zone = zone("example", "example.com.")
+    managed_zone.list_resource_record_sets.return_value = [
+        txt_record("_acme-challenge.test.example.com.", ['"existing-token"'])
+    ]
+    mock_get_client.return_value.list_zones.return_value = [managed_zone]
+
+    change_id = gcp.create_txt_record(
+        "_acme-challenge.test.example.com", "existing-token", OPTIONS
+    )
+
+    assert change_id[1] is None
+    managed_zone.changes.assert_not_called()
 
 
 @patch("lemur.plugins.lemur_acme.gcp._get_client")
@@ -137,23 +158,43 @@ def test_delete_txt_record_deletes_empty_record_set(mock_get_client):
 
 
 @patch("lemur.plugins.lemur_acme.gcp.time.sleep")
-@patch("lemur.plugins.lemur_acme.gcp.dnsutil.get_dns_records")
-@patch("lemur.plugins.lemur_acme.gcp.dnsutil.get_authoritative_nameserver")
-def test_wait_for_dns_change(mock_get_nameserver, mock_get_dns_records, mock_sleep):
-    mock_get_nameserver.return_value = "192.0.2.53"
-    mock_get_dns_records.side_effect = [[], ["new-token"]]
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_wait_for_dns_change(mock_get_client, mock_sleep):
+    change = Mock()
+    change.status = "pending"
+
+    def reload_change():
+        if change.reload.call_count == 2:
+            change.status = "done"
+
+    change.reload.side_effect = reload_change
+    managed_zone = mock_get_client.return_value.zone.return_value
+    managed_zone.changes.return_value = change
     change_id = (
         "example",
-        "example.com",
+        "change-1",
         "_acme-challenge.test.example.com",
         "new-token",
     )
 
     gcp.wait_for_dns_change(change_id, OPTIONS)
 
-    mock_get_nameserver.assert_called_once_with("example.com")
-    assert mock_get_dns_records.call_count == 2
-    mock_get_dns_records.assert_called_with(
-        "_acme-challenge.test.example.com", "TXT", "192.0.2.53"
-    )
+    mock_get_client.return_value.zone.assert_called_once_with("example")
+    assert change.name == "change-1"
+    assert change.reload.call_count == 2
     mock_sleep.assert_called_once_with(5)
+
+
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_wait_for_dns_change_skips_existing_value(mock_get_client):
+    gcp.wait_for_dns_change(
+        (
+            "example",
+            None,
+            "_acme-challenge.test.example.com",
+            "existing-token",
+        ),
+        OPTIONS,
+    )
+
+    mock_get_client.assert_not_called()

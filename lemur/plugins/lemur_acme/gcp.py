@@ -2,7 +2,6 @@ import time
 
 from google.cloud import dns
 
-import lemur.dns_providers.util as dnsutil
 from lemur.plugins.lemur_gcp.auth import get_gcp_credentials_from_options
 
 
@@ -49,9 +48,10 @@ def get_zones(account_number=None):
 
 
 def create_txt_record(host, value, account_number):
-    zone, zone_name = _find_zone(host, _get_client(account_number))
+    zone, _ = _find_zone(host, _get_client(account_number))
     existing = _find_txt_record(zone, host)
     values = list(existing.rrdatas) if existing else []
+    change_name = None
     if not any(_matches_value(rrdata, value) for rrdata in values):
         values.append(f'"{value}"')
 
@@ -67,18 +67,22 @@ def create_txt_record(host, value, account_number):
             )
         )
         changes.create()
+        change_name = changes.name
 
-    return zone.name, zone_name, host, value
+    return zone.name, change_name, host, value
 
 
 def wait_for_dns_change(change_id, account_number=None):
-    _, zone_name, host, value = change_id
-    nameserver = dnsutil.get_authoritative_nameserver(zone_name)
-    for _ in range(12):
-        if value in dnsutil.get_dns_records(host, "TXT", nameserver):
-            return
+    zone_name, change_name, _, _ = change_id
+    if not change_name:
+        return
+
+    change = _get_client(account_number).zone(zone_name).changes()
+    change.name = change_name
+    change.reload()
+    while change.status != "done":
         time.sleep(5)
-    raise RuntimeError(f"GCP Cloud DNS TXT record did not propagate for {host}")
+        change.reload()
 
 
 def delete_txt_record(change_ids, account_number, host, value):
