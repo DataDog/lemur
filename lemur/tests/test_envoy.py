@@ -58,7 +58,7 @@ def snapshot():
                 "listener": {
                     "name": "public",
                     "address": {
-                        "socket_address": {"address": "0.0.0.0", "port_value": 443}
+                        "socket_address": {"address": "127.0.0.1", "port_value": 443}
                     },
                     "filter_chains": [tls],
                 }
