@@ -14,6 +14,7 @@ from flask import Flask
 from lemur.sources import envoy, service
 from lemur.deployment import service as deployment
 from lemur.certificates import cli, service as certificates
+from lemur.plugins.lemur_fabric.plugin import FabricSourcePlugin
 
 
 @pytest.fixture
@@ -24,7 +25,10 @@ def context():
 
 @pytest.fixture
 def source():
-    return SimpleNamespace(label="test-coa", plugin_name="coa-source")
+    return SimpleNamespace(
+        label="test-fabric", plugin_name="fabric-source",
+        options=[{"name": "datacenter", "value": "us1.staging.dog"}],
+    )
 
 
 @pytest.fixture
@@ -32,7 +36,6 @@ def proxy():
     return {
         "name": "replica-1",
         "url": "https://envoy.test:8086",
-        "listeners": ["public"],
     }
 
 
@@ -90,7 +93,7 @@ def test_associations_and_stable_source_scoped_identity(source, proxy, snapshot)
         envoy._parse(source, proxy, listeners, secrets, resolve)[0]["name"]
         != endpoint["name"]
     )
-    source.label = "test-coa"
+    source.label = "test-fabric"
     proxy["name"] = "replica-2"
     assert (
         envoy._parse(source, proxy, listeners, secrets, resolve)[0]["name"]
@@ -190,7 +193,6 @@ def test_http_get_only_and_no_redirects(proxy):
 
 
 def test_failure_before_writes(context, source, proxy):
-    context.config["ENVOY_ADMIN_SOURCES"] = {source.label: [proxy]}
     with patch.object(
         envoy, "get_endpoints", side_effect=envoy.DiscoveryError("failed")
     ), patch.object(service.endpoint_service, "create") as create, patch.object(
@@ -204,7 +206,6 @@ def test_failure_before_writes(context, source, proxy):
 
 def test_sync_uses_source_identity(context, source, proxy, snapshot):
     endpoints = envoy._parse(source, proxy, *snapshot, lambda s: s["name"])
-    context.config["ENVOY_ADMIN_SOURCES"] = {source.label: [proxy]}
     with patch.object(envoy, "get_endpoints", return_value=endpoints), patch.object(
         service.endpoint_service, "get_by_name_and_source", return_value=None
     ) as lookup, patch.object(
@@ -230,7 +231,6 @@ def test_rotation_does_not_mutate_or_report_success(context):
 
 
 def test_sync_failure_does_not_expire_endpoints(context, source):
-    context.config["ENVOY_ADMIN_SOURCES"] = {source.label: []}
     with patch.object(
         service, "sync_certificates", return_value=(0, 0, 0)
     ), patch.object(service, "expire_endpoints") as expire, patch.object(
@@ -242,6 +242,7 @@ def test_sync_failure_does_not_expire_endpoints(context, source):
 
 
 def test_unconfigured_sources_keep_plugin_discovery(context, source):
+    source.plugin_name = "coa-source"
     plugin = Mock()
     plugin.get_endpoints.return_value = []
     with patch.object(service.plugins, "get", return_value=plugin):
@@ -268,11 +269,48 @@ def test_live_revocation_check_uses_discovery(context, source):
 
 
 def test_all_proxies_must_succeed(context, source, proxy, snapshot):
-    context.config["ENVOY_ADMIN_SOURCES"] = {
-        source.label: [proxy, {**proxy, "name": "replica-2"}]
-    }
     with patch.object(
+        envoy, "discover_proxies", return_value=[proxy, {**proxy, "name": "replica-2"}]
+    ), patch.object(
         envoy, "_read", side_effect=[*snapshot, envoy.DiscoveryError("unreachable")]
     ), patch.object(envoy, "_resolve", side_effect=lambda s: s["name"]):
         with pytest.raises(envoy.DiscoveryError):
             envoy.get_endpoints(source)
+
+
+def test_fabric_source_does_not_import_certificates():
+    plugin = FabricSourcePlugin()
+    assert plugin.type == "source"
+    assert plugin.slug == "fabric-source"
+    assert plugin.get_certificates([]) == []
+    assert [option["name"] for option in plugin.options] == ["datacenter"]
+
+
+def test_coa_cannot_be_used_for_envoy_discovery(source):
+    source.plugin_name = "coa-source"
+    with pytest.raises(envoy.DiscoveryError, match="requires a Fabric source"):
+        envoy.get_endpoints(source)
+
+
+def test_inventory_receives_source_datacenter(source):
+    with patch.object(envoy, "discover_proxies", return_value=[]) as discover:
+        with pytest.raises(envoy.DiscoveryError, match="No Envoy proxies discovered"):
+            envoy.get_endpoints(source)
+        discover.assert_called_once_with("us1.staging.dog")
+
+
+def test_all_active_listeners_discovered_without_allowlist(source, proxy, snapshot):
+    listeners, secrets = snapshot
+    other = copy.deepcopy(listeners[0])
+    other["active_state"]["listener"]["name"] = "another"
+    plaintext = copy.deepcopy(other)
+    plaintext["active_state"]["listener"].update(name="plaintext", filter_chains=[{}])
+    endpoints = envoy._parse(
+        source, proxy, listeners + [other, plaintext], secrets, lambda s: s["name"]
+    )
+    assert len(endpoints) == 2
+
+
+def test_inventory_is_explicitly_unavailable():
+    with pytest.raises(envoy.DiscoveryError, match="not implemented"):
+        envoy.discover_proxies("us1.staging.dog")

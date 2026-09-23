@@ -76,7 +76,7 @@ def sync_update_destination(certificate, source):
 
 
 def sync_endpoints(source):
-    if envoy.configured(source):
+    if source.plugin_name == "fabric-source":
         return sync_envoy_endpoints(source)
     new, updated, updated_by_hash = 0, 0, 0
     current_app.logger.debug("Retrieving endpoints from {0}".format(source.label))

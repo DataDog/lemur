@@ -1,4 +1,4 @@
-"""Read-only discovery of certificates loaded by explicitly configured Envoy proxies."""
+"""Read-only discovery of certificates loaded by Fabric's Envoy proxies."""
 
 import base64
 import hashlib
@@ -7,15 +7,16 @@ from urllib.parse import urlsplit
 
 import requests
 from cryptography import x509
-from flask import current_app
 
 
 class DiscoveryError(RuntimeError):
     pass
 
 
-def configured(source):
-    return source.label in current_app.config.get("ENVOY_ADMIN_SOURCES", {})
+def discover_proxies(datacenter):
+    # TODO: enumerate individual proxy admin endpoints through Fabric inventory.
+    # Never treat unavailable inventory as an empty, successful source snapshot.
+    raise DiscoveryError("Fabric proxy inventory discovery is not implemented yet")
 
 
 def _read(session, proxy, resource):
@@ -89,13 +90,8 @@ def _parse(source, proxy, listeners, secrets, resolve):
             if listener["name"] in active:
                 raise DiscoveryError("Duplicate active listener")
             active[listener["name"]] = listener
-    selected = proxy["listeners"]
-    if (
-        not selected
-        or len(set(selected)) != len(selected)
-        or not set(selected).issubset(active)
-    ):
-        raise DiscoveryError("Configured Envoy listeners are missing or duplicated")
+    if not active:
+        raise DiscoveryError("No active Envoy listeners were discovered")
     secret_map = {}
     for item in secrets:
         if not item.get("@type", "").endswith("SecretsConfigDump.DynamicSecret"):
@@ -106,13 +102,12 @@ def _parse(source, proxy, listeners, secrets, resolve):
         secret_map[name] = item
 
     endpoints = []
-    for name in selected:
+    for name in sorted(active):
         listener = active[name]
         socket = listener["address"]["socket_address"]
         chains = list(listener.get("filter_chains", []))
         if listener.get("default_filter_chain"):
             chains.append(listener["default_filter_chain"])
-        found = False
         identities = set()
         for chain in chains:
             transport = chain.get("transport_socket", {})
@@ -160,21 +155,21 @@ def _parse(source, proxy, listeners, secrets, resolve):
                     policy={"name": "Envoy (observed, read-only)", "ciphers": []},
                 )
             )
-            found = True
-        if not found:
-            raise DiscoveryError(
-                "Configured listener has no supported TLS filter chain"
-            )
     return endpoints
 
 
 def get_endpoints(source):
     """Resolve the entire snapshot before callers write associations or expire endpoints."""
-    if source.plugin_name != "coa-source":
-        raise DiscoveryError("Envoy discovery must be configured on a COA source")
-    proxies = current_app.config.get("ENVOY_ADMIN_SOURCES", {}).get(source.label)
+    if source.plugin_name != "fabric-source":
+        raise DiscoveryError("Envoy discovery requires a Fabric source")
+    from lemur.plugins.utils import get_plugin_option
+
+    datacenter = get_plugin_option("datacenter", source.options)
+    if not datacenter:
+        raise DiscoveryError("Fabric source requires a datacenter")
+    proxies = discover_proxies(datacenter)
     if not proxies:
-        raise DiscoveryError("No Envoy proxies configured for source")
+        raise DiscoveryError("No Envoy proxies discovered for Fabric source")
     endpoints = []
     names = set()
     with requests.Session() as session:

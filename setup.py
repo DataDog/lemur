@@ -151,6 +151,7 @@ setup(
             "aws_sns = lemur.plugins.lemur_aws.plugin:SNSNotificationPlugin",
             "coa_destination = cert_orchestration_adapter.plugin:AdapterDestinationPlugin",
             "coa_source = cert_orchestration_adapter.plugin:AdapterSourcePlugin",
+            "fabric_source = lemur.plugins.lemur_fabric.plugin:FabricSourcePlugin",
             "email_notification = lemur.plugins.lemur_email.plugin:EmailNotificationPlugin",
             "slack_notification = lemur.plugins.lemur_slack.plugin:SlackNotificationPlugin",
             "java_truststore_export = lemur.plugins.lemur_jks.plugin:JavaTruststoreExportPlugin",
