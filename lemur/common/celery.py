@@ -22,7 +22,9 @@ from celery.signals import (
     task_received,
     task_revoked,
     task_success,
+    worker_ready,
 )
+from celery.worker import state as worker_state
 from datetime import datetime, timezone, timedelta
 from flask import current_app
 from sentry_sdk import capture_exception
@@ -97,6 +99,24 @@ def make_celery(app):
 
 
 celery_app = make_celery(flask_app)
+
+
+def report_worker_utilization(consumer):
+    capacity = consumer.pool.num_processes
+    if capacity:
+        with flask_app.app_context():
+            metrics.send(
+                "celery.worker_utilization",
+                "gauge",
+                len(worker_state.active_requests) / capacity,
+                metric_tags={"worker_hostname": consumer.hostname},
+            )
+
+
+@worker_ready.connect
+def start_worker_utilization_reporting(sender, **kwargs):
+    # Run in the parent process, not as a task that a full pool could block.
+    sender.timer.call_repeated(60, report_worker_utilization, (sender,))
 
 
 def is_task_active(fun, task_id, args):

@@ -112,3 +112,37 @@ def test_dns_discovery_has_hard_timeout(celery_module):
     task = celery_module.get_all_zones
     assert task.soft_time_limit == 600
     assert task.time_limit == 660
+
+
+@pytest.mark.parametrize(
+    "busy,capacity,expected", [(0, 3, 0), (1, 3, 1 / 3), (3, 3, 1), (4, 4, 1)]
+)
+def test_worker_utilization(celery_module, busy, capacity, expected):
+    consumer = Mock(hostname="celery@test-pod")
+    consumer.pool.num_processes = capacity
+    with patch.object(
+        celery_module.worker_state, "active_requests", set(range(busy))
+    ), patch.object(celery_module.metrics, "send") as send:
+        celery_module.report_worker_utilization(consumer)
+    send.assert_called_once_with(
+        "celery.worker_utilization",
+        "gauge",
+        expected,
+        metric_tags={"worker_hostname": "celery@test-pod"},
+    )
+
+
+def test_worker_utilization_skips_empty_pool(celery_module):
+    consumer = Mock()
+    consumer.pool.num_processes = 0
+    with patch.object(celery_module.metrics, "send") as send:
+        celery_module.report_worker_utilization(consumer)
+    send.assert_not_called()
+
+
+def test_worker_utilization_uses_parent_timer(celery_module):
+    consumer = Mock()
+    celery_module.start_worker_utilization_reporting(consumer)
+    consumer.timer.call_repeated.assert_called_once_with(
+        60, celery_module.report_worker_utilization, (consumer,)
+    )
