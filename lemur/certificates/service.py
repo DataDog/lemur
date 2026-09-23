@@ -1049,6 +1049,15 @@ def is_attached_to_endpoint(certificate_name, endpoint_name):
     :return: True if certificate is attached to the given endpoint, False otherwise
     """
     endpoint = endpoint_service.get_by_name(endpoint_name)
+    if endpoint.type == "envoy":
+        from lemur.sources import envoy
+
+        for observed in envoy.get_endpoints(endpoint.source):
+            if observed["name"] == endpoint.name:
+                associations = [observed["primary_certificate"]] + observed["sni_certificates"]
+                return any(c["certificate"].name == certificate_name for c in associations)
+        # A disappeared listener is not evidence that it is safe to revoke a certificate.
+        raise envoy.DiscoveryError("Unable to verify the Envoy endpoint")
     attached_certificates = endpoint.source.plugin.get_endpoint_certificate_names(
         endpoint
     )

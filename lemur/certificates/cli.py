@@ -144,6 +144,9 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
     :param commit:
     :return:
     """
+    if endpoint.type == "envoy":
+        # Read-only endpoints must not report a successful deployment or send notifications.
+        return
     status = FAILURE_METRIC_STATUS
     if commit:
         try:
