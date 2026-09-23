@@ -22,7 +22,9 @@ from celery.signals import (
     task_received,
     task_revoked,
     task_success,
+    worker_ready,
 )
+from celery.worker import state as worker_state
 from datetime import datetime, timezone, timedelta
 from flask import current_app
 from sentry_sdk import capture_exception
@@ -99,9 +101,26 @@ def make_celery(app):
 celery_app = make_celery(flask_app)
 
 
+def report_worker_utilization(consumer):
+    capacity = consumer.pool.num_processes
+    if capacity:
+        with flask_app.app_context():
+            metrics.send(
+                "celery.worker_utilization",
+                "gauge",
+                len(worker_state.active_requests) / capacity,
+                metric_tags={"worker_hostname": consumer.hostname},
+            )
+
+
+@worker_ready.connect
+def start_worker_utilization_reporting(sender, **kwargs):
+    # Run in the parent process, not as a task that a full pool could block.
+    sender.timer.call_repeated(60, report_worker_utilization, (sender,))
+
+
 def is_task_active(fun, task_id, args):
-    if not args:
-        args = "()"  # empty args
+    args = tuple(args or ())
 
     i = celery_app.control.inspect()
     active_tasks = i.active()
@@ -111,7 +130,11 @@ def is_task_active(fun, task_id, args):
         for task in tasks:
             if task.get("id") == task_id:
                 continue
-            if task.get("name") == fun and task.get("args") == str(args):
+            task_args = task.get("args")
+            # Celery reports argument lists; older workers may return their repr.
+            if isinstance(task_args, (list, tuple)):
+                task_args = tuple(task_args)
+            if task.get("name") == fun and task_args in (args, str(args)):
                 return True
     return False
 
@@ -773,7 +796,7 @@ def certificate_rotate(**kwargs):
     return log_data
 
 
-@celery_app.task(soft_time_limit=600)
+@celery_app.task(soft_time_limit=600, time_limit=660)
 def get_all_zones():
     """
     This celery syncs all zones from the available dns providers
