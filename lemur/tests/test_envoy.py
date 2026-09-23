@@ -77,6 +77,7 @@ def snapshot():
 
 def test_associations_and_stable_source_scoped_identity(source, proxy, snapshot):
     listeners, secrets = snapshot
+
     def resolve(item):
         return item["name"]
     endpoint = envoy._parse(source, proxy, listeners, secrets, resolve)[0]
