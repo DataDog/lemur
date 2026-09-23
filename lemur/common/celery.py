@@ -100,8 +100,7 @@ celery_app = make_celery(flask_app)
 
 
 def is_task_active(fun, task_id, args):
-    if not args:
-        args = "()"  # empty args
+    args = tuple(args or ())
 
     i = celery_app.control.inspect()
     active_tasks = i.active()
@@ -111,7 +110,11 @@ def is_task_active(fun, task_id, args):
         for task in tasks:
             if task.get("id") == task_id:
                 continue
-            if task.get("name") == fun and task.get("args") == str(args):
+            task_args = task.get("args")
+            # Celery reports argument lists; older workers may return their repr.
+            if isinstance(task_args, (list, tuple)):
+                task_args = tuple(task_args)
+            if task.get("name") == fun and task_args in (args, str(args)):
                 return True
     return False
 
@@ -773,7 +776,7 @@ def certificate_rotate(**kwargs):
     return log_data
 
 
-@celery_app.task(soft_time_limit=600)
+@celery_app.task(soft_time_limit=600, time_limit=660)
 def get_all_zones():
     """
     This celery syncs all zones from the available dns providers
