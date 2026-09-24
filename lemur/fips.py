@@ -5,10 +5,16 @@ import os
 import sys
 from types import SimpleNamespace
 
+from lemur.logging import json_log_formatter
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.propagate = False
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(json_log_formatter())
+logger.handlers = [_handler]
 
 
 class OpensslFipsStatus:
@@ -216,34 +222,34 @@ class OpensslFipsStatus:
 
     def must_enable_fips_if_needed(self) -> bool:
         """Enables FIPS mode for the current OpenSSL if FIPS_ENABLED env var is set to true."""
-        logging.info("Enabling FIPS mode on OpenSSL if needed...")
+        logger.info("Enabling FIPS mode on OpenSSL if needed...")
 
         version_info_debug = self.debug_openssl_version()
-        logging.info("openssl_version_info = [%s]", version_info_debug)
+        logger.info("openssl_version_info = [%s]", version_info_debug)
 
         fips_status_debug = self.debug_fips_status()
-        logging.info("openssl_fips_status = [%s]", fips_status_debug)
+        logger.info("openssl_fips_status = [%s]", fips_status_debug)
 
         must_enable_fips = (
             os.environ.get("FIPS_ENABLED", "false").lower().strip() == "true"
         )
         if must_enable_fips:
-            logging.info(
+            logger.info(
                 "Detected that FIPS mode on OpenSSL is needed, attempting to enable..."
             )
             enable_fips_result = self.enable_fips()
-            logging.info("enable_fips_result = [%s]", enable_fips_result)
+            logger.info("enable_fips_result = [%s]", enable_fips_result)
             if enable_fips_result:
-                logging.info("FIPS mode on OpenSSL successfully enabled")
+                logger.info("FIPS mode on OpenSSL successfully enabled")
                 fips_status_debug = self.debug_fips_status()
-                logging.info("openssl_fips_status = [%s]", fips_status_debug)
+                logger.info("openssl_fips_status = [%s]", fips_status_debug)
                 return True
-            logging.error(
+            logger.error(
                 "Failed to enable FIPS mode on OpenSSL. Potentially unsafe and inconsistent state. Exiting."
             )
             sys.exit(1)
         else:
-            logging.info(
+            logger.info(
                 "FIPS mode on OpenSSL is NOT needed, it will NOT be enabled..."
             )
             return False
