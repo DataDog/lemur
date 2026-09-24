@@ -2,7 +2,18 @@ import os
 import unittest
 from unittest.mock import patch, ANY
 
+from cryptography.hazmat.primitives.serialization import pkcs12
 from flask import Flask
+
+from lemur.tests.vectors import (
+    INTERMEDIATE_CERT,
+    INTERMEDIATE_CERT_STR,
+    ROOTCA_CERT,
+    ROOTCA_CERT_STR,
+    SAN_CERT,
+    SAN_CERT_KEY,
+    SAN_CERT_STR,
+)
 
 # mock certificate to test the upload function code
 test_server_cert = """-----BEGIN CERTIFICATE-----
@@ -89,6 +100,35 @@ class TestAzureDestination(unittest.TestCase):
 
     def tearDown(self):
         self.ctx.pop()
+
+    @patch("azure.keyvault.certificates.CertificateClient.import_certificate")
+    def test_upload_preserves_full_chain(self, import_certificate_mock):
+        from lemur.plugins.lemur_azure.plugin import AzureDestinationPlugin
+
+        options = [
+            {"name": "azureKeyVaultUrl", "value": "https://couldbeanyvalue.com"},
+            {"name": "azureTenant", "value": "mockedTenant"},
+            {"name": "azureAppID", "value": "mockedAPPid"},
+            {"name": "azurePassword", "value": "norealPW"},
+            {"name": "authenticationMethod", "value": "azureApp"},
+        ]
+        AzureDestinationPlugin().upload(
+            "Test_Certificate",
+            SAN_CERT_STR,
+            SAN_CERT_KEY,
+            INTERMEDIATE_CERT_STR + "\n" + ROOTCA_CERT_STR,
+            options,
+        )
+
+        import_certificate_mock.assert_called_once()
+        private_key, cert, chain = pkcs12.load_key_and_certificates(
+            import_certificate_mock.call_args.kwargs["certificate_bytes"], None
+        )
+        self.assertEqual(cert, SAN_CERT)
+        self.assertEqual(
+            private_key.public_key().public_numbers(), cert.public_key().public_numbers()
+        )
+        self.assertEqual(chain, [INTERMEDIATE_CERT, ROOTCA_CERT])
 
     @patch.dict(os.environ, {"VAULT_ADDR": "https://fakevaultinstance:8200"})
     @patch("azure.keyvault.certificates.CertificateClient.import_certificate")
