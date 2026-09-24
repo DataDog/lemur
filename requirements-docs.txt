@@ -407,7 +407,7 @@ idna==3.11
     #   requests
 imagesize==2.0.0
     # via sphinx
-importlib-metadata==8.5.0
+importlib-metadata==9.0.0
     # via -r requirements-tests.txt
 inflection==0.5.1
     # via
