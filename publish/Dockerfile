@@ -9,8 +9,14 @@ ARG CI_COMMIT_SHA
 USER root
 
 RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -
-RUN apt-get install -y --no-install-recommends libpq-dev curl build-essential locales libffi-dev libsasl2-dev libldap2-dev \
-        dh-autoreconf git python3-dev python3-pip python3-venv python3-wheel nodejs unzip make
+# Refresh package indexes on retries to recover from transient mirror 404s.
+RUN for attempt in 1 2 3; do \
+        apt-get -o APT::Update::Error-Mode=any update && \
+        apt-get install -y --no-install-recommends libpq-dev curl build-essential locales libffi-dev libsasl2-dev libldap2-dev \
+            dh-autoreconf git python3-dev python3-pip python3-venv python3-wheel nodejs unzip make && break; \
+        if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+        sleep 10; \
+    done
 
 # Download Lemur source code
 RUN echo "Getting code from COMMIT SHA $CI_COMMIT_SHA"
