@@ -15,6 +15,7 @@ azure-mgmt-network
 azure-mgmt-subscription
 cert_manager
 google-cloud-compute
+google-cloud-dns
 logmatic-python
 simplejson
 
