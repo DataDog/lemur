@@ -89,7 +89,9 @@ def test_associations_and_stable_source_scoped_identity(source, proxy, snapshot)
         return item["name"]
 
     endpoint = envoy._parse(source, proxy, listeners, secrets, resolve)[0]
-    assert endpoint["type"] == "envoy"
+    assert endpoint["type"] == "fabric-envoy"
+    assert endpoint["registry_type"] == "fabric-envoy"
+    assert endpoint["name"].startswith("fabric-envoy:")
     assert endpoint["primary_certificate"] == {"certificate": "rsa", "path": ""}
     assert endpoint["sni_certificates"] == [{"certificate": "ecc", "path": ""}]
     assert len(endpoint["name"]) <= 128
@@ -113,6 +115,13 @@ def test_filter_chains_are_separate(source, proxy, snapshot):
     chains[1]["filter_chain_match"] = {"server_names": ["other.test"]}
     endpoints = envoy._parse(source, proxy, listeners, secrets, lambda s: s["name"])
     assert len({e["name"] for e in endpoints}) == 2
+
+
+def test_endpoint_name_fits_database_column(source, proxy, snapshot):
+    proxy["name"] = "long-admin-destination-" * 10
+    endpoint = envoy._parse(source, proxy, *snapshot, lambda s: s["name"])[0]
+    assert endpoint["name"].startswith("fabric-envoy:")
+    assert len(endpoint["name"]) == 128
 
 
 @pytest.mark.parametrize(
@@ -248,7 +257,7 @@ def test_sync_uses_source_identity(context, source, proxy, snapshot):
 
 
 def test_rotation_does_not_mutate_or_report_success(context):
-    endpoint = SimpleNamespace(type="envoy")
+    endpoint = SimpleNamespace(type="fabric-envoy")
     with patch.object(deployment.database, "update") as update, patch.object(
         cli, "send_rotation_notification"
     ) as notify, patch.object(cli.metrics, "send") as metric:
@@ -283,7 +292,7 @@ def test_unconfigured_sources_keep_plugin_discovery(context, source):
 
 
 def test_live_revocation_check_uses_discovery(context, source):
-    endpoint = SimpleNamespace(type="envoy", source=source, name="observed")
+    endpoint = SimpleNamespace(type="fabric-envoy", source=source, name="observed")
     observed = {
         "name": "observed",
         "primary_certificate": {"certificate": SimpleNamespace(name="loaded")},

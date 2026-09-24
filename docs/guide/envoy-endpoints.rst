@@ -44,7 +44,9 @@ inline listener certificates, certificate providers and filename-only secrets
 are not supported yet. This coverage must be validated against actual proxies
 before enabling the source.
 
-Each TLS filter chain becomes an endpoint. Identity includes the Fabric source,
+Each TLS filter chain becomes a ``fabric-envoy`` endpoint, with the same registry
+type and a ``fabric-envoy:`` name prefix. The source plugin remains ``Fabric``
+(``fabric-source``). Identity includes the Fabric source,
 logical destination and hostname, listener name and filter chain name (or
 match conditions). Replica changes do not create new endpoint identities.
 The leaf certificate is matched to exactly one existing Lemur certificate by

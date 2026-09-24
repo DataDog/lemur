@@ -218,11 +218,14 @@ def _parse(source, proxy, listeners, secrets, resolve):
             associations = [dict(certificate=cert, path="") for cert in certs]
             endpoints.append(
                 dict(
-                    name="envoy:" + (proxy["name"] + ":" + name)[:55] + ":" + digest,
+                    name="fabric-envoy:"
+                    + (proxy["name"] + ":" + name)[:50]
+                    + ":"
+                    + digest,
                     dnsname=socket["address"],
                     port=int(socket["port_value"]),
-                    type="envoy",
-                    registry_type="envoy",
+                    type="fabric-envoy",
+                    registry_type="fabric-envoy",
                     primary_certificate=associations[0],
                     sni_certificates=associations[1:],
                     policy={"name": "Envoy (observed, read-only)", "ciphers": []},

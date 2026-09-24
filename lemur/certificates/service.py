@@ -1049,7 +1049,7 @@ def is_attached_to_endpoint(certificate_name, endpoint_name):
     :return: True if certificate is attached to the given endpoint, False otherwise
     """
     endpoint = endpoint_service.get_by_name(endpoint_name)
-    if endpoint.type == "envoy":
+    if endpoint.type == "fabric-envoy":
         from lemur.sources import envoy
 
         for observed in envoy.get_endpoints(endpoint.source):

@@ -205,7 +205,7 @@ def update(endpoint_id, **kwargs):
     endpoint.policy = kwargs["policy"]
     endpoint.source = kwargs["source"]
     endpoint.registry_type = kwargs["registry_type"]
-    if endpoint.type == "envoy":
+    if endpoint.type == "fabric-envoy":
         endpoint.dnsname = kwargs["dnsname"]
         endpoint.port = kwargs["port"]
 
