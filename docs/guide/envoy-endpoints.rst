@@ -20,11 +20,23 @@ Discovery reads the ``fabric-gateway/internal-services-proxy`` Fabric route
 configuration and selects virtual hosts routing to the requested destination
 namespace/name. Explicit hostnames in the requested DC become HTTPS admin URLs,
 deduplicated across zones. No Edge pool or ISP hostname list is maintained.
-The runtime requires the ``fabric`` CLI on PATH and service read permissions for
-that route configuration. The current Lemur image does not install the CLI yet;
-image packaging and service permissions must be supplied before enabling this.
+Discovery calls FabricManagement's read-only ``ListObjects`` gRPC method directly,
+using a Sycamore service token for the ``service-discovery`` audience. No Fabric
+CLI is needed. ``DD_DATACENTER`` selects direct access with Emissary mTLS for the
+local DC, or the source cross-DC gateway for another DC. Missing local TLS files
+fail closed. Connections are closed after each call and credentials are reread
+on the next sync. Service read permissions for the route configuration in
+``fabric-gateway`` must be granted before enabling discovery.
+
+``lemur/sources/fabric.pb`` contains the upstream generated protobuf descriptors,
+not a hand-maintained copy of the API. Regenerate it using
+``scripts/generate_fabric_schema.go`` from the pinned Fabric checkout documented
+in that script. The private descriptor pool avoids conflicts with COA protobufs.
 Lemur's service access and certificate matching still need sandbox validation
 before enabling a source. Laptop access does not prove service access.
+On September 24, 2026, an in-memory sandbox check reached Fabric using this
+client and Lemur's service identity, but ``ListObjects`` returned
+``PERMISSION_DENIED``. Discovery remains blocked on that read permission.
 Live ISP snapshots also contain different certificates with the same SDS name
 (public DigiCert and internal infrastructure certificates). Discovery currently
 fails closed on this ambiguity. SDS provider disambiguation remains required

@@ -4,12 +4,13 @@ import base64
 import hashlib
 import json
 import re
-import subprocess
 from urllib.parse import urlsplit
 
 import requests
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
+
+from lemur.sources.fabric import FabricError, read_routes
 
 
 class DiscoveryError(RuntimeError):
@@ -24,25 +25,7 @@ def discover_proxies(datacenter, namespace, destination=None):
     if not namespace or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", namespace):
         raise DiscoveryError("Invalid Fabric destination namespace")
     try:
-        result = subprocess.run(
-            [
-                "fabric",
-                "-d",
-                datacenter,
-                "-n",
-                "fabric-gateway",
-                "envoy-route-configuration",
-                "get",
-                "internal-services-proxy",
-                "-o",
-                "json",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30,
-        )
-        inventory = json.loads(result.stdout)
+        inventory = read_routes(datacenter)
         proxies = {}
         for group in inventory["objects"].values():
             for obj in group["objects"]:
@@ -68,8 +51,9 @@ def discover_proxies(datacenter, namespace, destination=None):
                                 "url": "https://" + domain,
                             }
         return [proxies[name] for name in sorted(proxies)]
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
-        # CLI output may include credentials or internal response data.
+    except FabricError as error:
+        raise DiscoveryError(str(error)) from None
+    except (ValueError, KeyError, TypeError):
         raise DiscoveryError(
             "Unable to discover Envoy admin routes through Fabric"
         ) from None

@@ -376,10 +376,7 @@ def route_inventory():
 
 
 def test_route_discovery_filters_and_deduplicates():
-    import json
-
-    with patch.object(envoy.subprocess, "run") as run:
-        run.return_value.stdout = json.dumps(route_inventory())
+    with patch.object(envoy, "read_routes", return_value=route_inventory()) as read:
         assert envoy.discover_proxies("us1.staging.dog", "edge-backend") == [
             {
                 "name": "edge-backend/ingress-haproxy-api/envoy-api.us1.staging.dog",
@@ -388,16 +385,14 @@ def test_route_discovery_filters_and_deduplicates():
         ]
         assert envoy.discover_proxies("us1.staging.dog", "fabric-gateway") == []
         assert envoy.discover_proxies("us1.staging.dog", "edge-backend", "other") == []
-        assert run.call_args.kwargs["timeout"] == 30
-        assert "get" in run.call_args.args[0]
+        read.assert_called_with("us1.staging.dog")
 
 
-@pytest.mark.parametrize(
-    "error", [FileNotFoundError(), envoy.subprocess.TimeoutExpired("fabric", 30)]
-)
-def test_route_discovery_failure(error):
-    with patch.object(envoy.subprocess, "run", side_effect=error):
-        with pytest.raises(envoy.DiscoveryError, match="through Fabric"):
+def test_route_discovery_failure():
+    with patch.object(
+        envoy, "read_routes", side_effect=envoy.FabricError("UNAVAILABLE")
+    ):
+        with pytest.raises(envoy.DiscoveryError, match="UNAVAILABLE"):
             envoy.discover_proxies("us1.staging.dog", "edge-backend")
 
 
