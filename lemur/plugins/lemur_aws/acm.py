@@ -119,3 +119,17 @@ def upload_cert(body, private_key, cert_chain=None, **kwargs):
         }
     )
     return response
+
+
+@sts_client("acm")
+def delete_imported_cert(body, **kwargs):
+    """Delete the imported ACM certificate matching a PEM body."""
+    client = kwargs.pop("client")
+    fingerprint = certificate_fingerprint(body)
+    for certificate in _get_imported_certificates(client, skip_missing=True):
+        if certificate_fingerprint(certificate["body"]) != fingerprint:
+            continue
+        client.delete_certificate(CertificateArn=certificate["arn"])
+        metrics.send("delete_acm_cert", "counter", 1)
+        return certificate["arn"]
+    return None
