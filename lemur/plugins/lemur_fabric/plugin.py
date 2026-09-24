@@ -18,6 +18,19 @@ class FabricSourcePlugin(SourcePlugin):
             "validation": r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
             "helpMessage": "Fabric datacenter, for example us1.staging.dog.",
         },
+        {
+            "name": "namespace",
+            "type": "str",
+            "required": True,
+            "validation": r"^[a-z0-9][a-z0-9-]*$",
+            "helpMessage": "Admin destination namespace, e.g. edge-backend or fabric-gateway.",
+        },
+        {
+            "name": "destination",
+            "type": "str",
+            "required": False,
+            "helpMessage": "Optional exact destination name, e.g. internal-services-proxy-admin.",
+        },
     ]
 
     def get_certificates(self, options, **kwargs):

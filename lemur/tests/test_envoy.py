@@ -26,15 +26,19 @@ def context():
 @pytest.fixture
 def source():
     return SimpleNamespace(
-        label="test-fabric", plugin_name="fabric-source",
-        options=[{"name": "datacenter", "value": "us1.staging.dog"}],
+        label="test-fabric",
+        plugin_name="fabric-source",
+        options=[
+            {"name": "datacenter", "value": "us1.staging.dog"},
+            {"name": "namespace", "value": "edge-backend"},
+        ],
     )
 
 
 @pytest.fixture
 def proxy():
     return {
-        "name": "replica-1",
+        "name": "isp",
         "url": "https://envoy.test:8086",
     }
 
@@ -83,6 +87,7 @@ def test_associations_and_stable_source_scoped_identity(source, proxy, snapshot)
 
     def resolve(item):
         return item["name"]
+
     endpoint = envoy._parse(source, proxy, listeners, secrets, resolve)[0]
     assert endpoint["type"] == "envoy"
     assert endpoint["primary_certificate"] == {"certificate": "rsa", "path": ""}
@@ -163,7 +168,9 @@ def test_exact_fingerprint_not_serial_or_name(encoding):
     ) as lookup:
         assert envoy._resolve(secret) is right
         lookup.assert_called_once_with("42")
-    for candidates in ([wrong], [right, right]):
+    with patch.object(certificates, "get_by_serial", return_value=[wrong]):
+        assert envoy._resolve(secret) is None
+    for candidates in ([right, right],):
         with patch.object(certificates, "get_by_serial", return_value=candidates):
             with pytest.raises(envoy.DiscoveryError):
                 envoy._resolve(secret)
@@ -180,16 +187,38 @@ def test_file_reference_is_not_mistaken_for_certificate():
         )
 
 
-def test_http_get_only_and_no_redirects(proxy):
+def config_dump(snapshot):
+    listeners, secrets = copy.deepcopy(snapshot)
+    for item in listeners + secrets:
+        item.pop("@type", None)
+    return {
+        "configs": [
+            {
+                "@type": "type.googleapis.com/envoy.admin.v3.ListenersConfigDump",
+                "dynamic_listeners": listeners,
+            },
+            {
+                "@type": "type.googleapis.com/envoy.admin.v3.SecretsConfigDump",
+                "dynamic_active_secrets": secrets,
+            },
+        ]
+    }
+
+
+def test_http_get_only_and_no_redirects(proxy, snapshot):
     session = Mock()
     session.get.return_value.status_code = 200
-    session.get.return_value.json.return_value = {"configs": []}
-    assert envoy._read(session, proxy, "dynamic_listeners") == []
+    session.get.return_value.json.return_value = config_dump(snapshot)
+    listeners, secrets = envoy._read(session, proxy)
+    assert len(listeners) == 1
+    assert len(secrets) == 2
+    session.get.assert_called_once()
+    assert "params" not in session.get.call_args.kwargs
     assert session.get.call_args.kwargs["allow_redirects"] is False
     assert session.get.call_args.kwargs["verify"] is True
     session.get.return_value.status_code = 302
     with pytest.raises(envoy.DiscoveryError):
-        envoy._read(session, proxy, "dynamic_listeners")
+        envoy._read(session, proxy)
 
 
 def test_failure_before_writes(context, source, proxy):
@@ -235,6 +264,8 @@ def test_sync_failure_does_not_expire_endpoints(context, source):
         service, "sync_certificates", return_value=(0, 0, 0)
     ), patch.object(service, "expire_endpoints") as expire, patch.object(
         service.metrics, "send"
+    ), patch.object(
+        envoy, "get_endpoints", side_effect=envoy.DiscoveryError("unreachable")
     ):
         with pytest.raises(envoy.DiscoveryError):
             service.sync(source, None)
@@ -272,8 +303,10 @@ def test_all_proxies_must_succeed(context, source, proxy, snapshot):
     with patch.object(
         envoy, "discover_proxies", return_value=[proxy, {**proxy, "name": "replica-2"}]
     ), patch.object(
-        envoy, "_read", side_effect=[*snapshot, envoy.DiscoveryError("unreachable")]
-    ), patch.object(envoy, "_resolve", side_effect=lambda s: s["name"]):
+        envoy, "_read", side_effect=[snapshot, envoy.DiscoveryError("unreachable")]
+    ), patch.object(
+        envoy, "_resolve", side_effect=lambda s: s["name"]
+    ):
         with pytest.raises(envoy.DiscoveryError):
             envoy.get_endpoints(source)
 
@@ -283,7 +316,11 @@ def test_fabric_source_does_not_import_certificates():
     assert plugin.type == "source"
     assert plugin.slug == "fabric-source"
     assert plugin.get_certificates([]) == []
-    assert [option["name"] for option in plugin.options] == ["datacenter"]
+    assert [option["name"] for option in plugin.options] == [
+        "datacenter",
+        "namespace",
+        "destination",
+    ]
 
 
 def test_coa_cannot_be_used_for_envoy_discovery(source):
@@ -296,7 +333,7 @@ def test_inventory_receives_source_datacenter(source):
     with patch.object(envoy, "discover_proxies", return_value=[]) as discover:
         with pytest.raises(envoy.DiscoveryError, match="No Envoy proxies discovered"):
             envoy.get_endpoints(source)
-        discover.assert_called_once_with("us1.staging.dog")
+        discover.assert_called_once_with("us1.staging.dog", "edge-backend", None)
 
 
 def test_all_active_listeners_discovered_without_allowlist(source, proxy, snapshot):
@@ -311,6 +348,114 @@ def test_all_active_listeners_discovered_without_allowlist(source, proxy, snapsh
     assert len(endpoints) == 2
 
 
-def test_inventory_is_explicitly_unavailable():
-    with pytest.raises(envoy.DiscoveryError, match="not implemented"):
-        envoy.discover_proxies("us1.staging.dog")
+def route_inventory():
+    host = {
+        "domains": ["envoy-api.us1.staging.dog", "*.us1.staging.dog", "other.example"],
+        "routes": [
+            {
+                "action": {
+                    "routeDestination": {
+                        "namespace": "edge-backend",
+                        "name": "ingress-haproxy-api",
+                    }
+                }
+            }
+        ],
+    }
+    obj = {"envoyRouteConfiguration": {"spec": {"virtualHosts": [host]}}}
+    return {"objects": {"zone-a": {"objects": [obj]}, "zone-b": {"objects": [obj]}}}
+
+
+def test_route_discovery_filters_and_deduplicates():
+    import json
+
+    with patch.object(envoy.subprocess, "run") as run:
+        run.return_value.stdout = json.dumps(route_inventory())
+        assert envoy.discover_proxies("us1.staging.dog", "edge-backend") == [
+            {
+                "name": "edge-backend/ingress-haproxy-api/envoy-api.us1.staging.dog",
+                "url": "https://envoy-api.us1.staging.dog",
+            }
+        ]
+        assert envoy.discover_proxies("us1.staging.dog", "fabric-gateway") == []
+        assert envoy.discover_proxies("us1.staging.dog", "edge-backend", "other") == []
+        assert run.call_args.kwargs["timeout"] == 30
+        assert "get" in run.call_args.args[0]
+
+
+@pytest.mark.parametrize(
+    "error", [FileNotFoundError(), envoy.subprocess.TimeoutExpired("fabric", 30)]
+)
+def test_route_discovery_failure(error):
+    with patch.object(envoy.subprocess, "run", side_effect=error):
+        with pytest.raises(envoy.DiscoveryError, match="through Fabric"):
+            envoy.discover_proxies("us1.staging.dog", "edge-backend")
+
+
+@pytest.mark.parametrize(
+    "dc", [None, "", "https://example.dog", "dc.dog/path", "dc.dog@other"]
+)
+def test_invalid_datacenter(dc):
+    with pytest.raises(envoy.DiscoveryError, match="Invalid Fabric datacenter"):
+        envoy.discover_proxies(dc, "edge-backend")
+
+
+def test_one_request_per_logical_route(source, snapshot):
+    session = Mock()
+    session.get.return_value.status_code = 200
+    session.get.return_value.json.return_value = config_dump(snapshot)
+    with patch.object(envoy.requests, "Session") as factory, patch.object(
+        envoy, "_resolve", side_effect=lambda s: s["name"]
+    ), patch.object(
+        envoy,
+        "discover_proxies",
+        return_value=[{"name": "isp", "url": "https://isp.us1.staging.dog"}],
+    ):
+        factory.return_value.__enter__.return_value = session
+        first = envoy.get_endpoints(source)
+        session.get.assert_called_once()
+        session.get.assert_called_with(
+            "https://isp.us1.staging.dog/config_dump",
+            timeout=(5, 20),
+            allow_redirects=False,
+            verify=True,
+            cert=None,
+        )
+        assert envoy.get_endpoints(source) == first
+
+
+def test_duplicate_secret_names_must_have_same_leaf(source, proxy, snapshot):
+    listeners, secrets = snapshot
+    for secret in secrets:
+        secret["secret"] = {
+            "tls_certificate": {
+                "certificate_chain": {"inline_string": make_certificate()}
+            }
+        }
+    secrets.append(copy.deepcopy(secrets[0]))
+    assert (
+        len(envoy._parse(source, proxy, listeners, secrets, lambda s: s["name"])) == 1
+    )
+    secrets[-1]["secret"]["tls_certificate"]["certificate_chain"][
+        "inline_string"
+    ] = make_certificate()
+    with pytest.raises(envoy.DiscoveryError, match="Conflicting"):
+        envoy._parse(source, proxy, listeners, secrets, lambda s: s["name"])
+
+
+def test_missing_snapshot_section_fails(proxy, snapshot):
+    session = Mock()
+    session.get.return_value.status_code = 200
+    payload = config_dump(snapshot)
+    payload["configs"].pop()
+    session.get.return_value.json.return_value = payload
+    with pytest.raises(envoy.DiscoveryError):
+        envoy._read(session, proxy)
+
+
+def test_unmanaged_certificates_are_not_imported(source, proxy, snapshot):
+    assert envoy._parse(source, proxy, *snapshot, lambda s: None) == []
+    endpoints = envoy._parse(
+        source, proxy, *snapshot, lambda s: "known" if s["name"] == "ecc" else None
+    )
+    assert endpoints[0]["primary_certificate"]["certificate"] == "known"

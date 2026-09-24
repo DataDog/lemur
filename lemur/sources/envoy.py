@@ -3,23 +3,79 @@
 import base64
 import hashlib
 import json
+import re
+import subprocess
 from urllib.parse import urlsplit
 
 import requests
 from cryptography import x509
+from cryptography.hazmat.primitives import hashes
 
 
 class DiscoveryError(RuntimeError):
     pass
 
 
-def discover_proxies(datacenter):
-    # TODO: enumerate individual proxy admin endpoints through Fabric inventory.
-    # Never treat unavailable inventory as an empty, successful source snapshot.
-    raise DiscoveryError("Fabric proxy inventory discovery is not implemented yet")
+def discover_proxies(datacenter, namespace, destination=None):
+    if not isinstance(datacenter, str) or not re.fullmatch(
+        r"[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z]+", datacenter
+    ):
+        raise DiscoveryError("Invalid Fabric datacenter")
+    if not namespace or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", namespace):
+        raise DiscoveryError("Invalid Fabric destination namespace")
+    try:
+        result = subprocess.run(
+            [
+                "fabric",
+                "-d",
+                datacenter,
+                "-n",
+                "fabric-gateway",
+                "envoy-route-configuration",
+                "get",
+                "internal-services-proxy",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        inventory = json.loads(result.stdout)
+        proxies = {}
+        for group in inventory["objects"].values():
+            for obj in group["objects"]:
+                for host in obj["envoyRouteConfiguration"]["spec"].get(
+                    "virtualHosts", []
+                ):
+                    for route in host.get("routes", []):
+                        target = route.get("action", {}).get("routeDestination", {})
+                        name = target.get("name")
+                        if target.get("namespace") != namespace or not name:
+                            continue
+                        if destination and name != destination:
+                            continue
+                        for domain in host["domains"]:
+                            # Only explicit DNS hosts in the selected DC, never wildcard routes.
+                            if not re.fullmatch(r"[a-z0-9.-]+", domain):
+                                continue
+                            if not domain.endswith("." + datacenter):
+                                continue
+                            identity = namespace + "/" + name + "/" + domain
+                            proxies[identity] = {
+                                "name": identity,
+                                "url": "https://" + domain,
+                            }
+        return [proxies[name] for name in sorted(proxies)]
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        # CLI output may include credentials or internal response data.
+        raise DiscoveryError(
+            "Unable to discover Envoy admin routes through Fabric"
+        ) from None
 
 
-def _read(session, proxy, resource):
+def _read(session, proxy):
     # Do not log responses: admin dumps can contain private key material.
     url = proxy["url"].rstrip("/")
     parsed = urlsplit(url)
@@ -34,7 +90,6 @@ def _read(session, proxy, resource):
     try:
         response = session.get(
             url + "/config_dump",
-            params={"resource": resource},
             timeout=(5, 20),
             allow_redirects=False,
             verify=proxy.get("ca_bundle", True),
@@ -46,7 +101,20 @@ def _read(session, proxy, resource):
         configs = payload["configs"]
         if not isinstance(configs, list):
             raise ValueError()
-        return configs
+        # Envoy cannot apply a field mask spanning different config types. Fetch
+        # once so listeners and secrets come from the same load-balanced replica.
+        sections = {}
+        for config in configs:
+            kind = config.get("@type", "").rsplit(".", 1)[-1]
+            if kind in ("ListenersConfigDump", "SecretsConfigDump"):
+                if kind in sections:
+                    raise DiscoveryError("Duplicate Envoy configuration section")
+                sections[kind] = config
+        listeners = sections["ListenersConfigDump"]["dynamic_listeners"]
+        secrets = sections["SecretsConfigDump"]["dynamic_active_secrets"]
+        if not isinstance(listeners, list) or not isinstance(secrets, list):
+            raise ValueError()
+        return listeners, secrets
     except (requests.RequestException, ValueError, KeyError, TypeError):
         raise DiscoveryError("Unable to read Envoy admin configuration") from None
 
@@ -73,6 +141,9 @@ def _resolve(secret):
     matches = find_matching_certificates_by_hash(
         leaf, service.get_by_serial(str(leaf.serial_number))
     )
+    if not matches:
+        # Internal Fabric identities are not necessarily managed by Lemur.
+        return None
     if len(matches) != 1:
         raise DiscoveryError(
             "Loaded Envoy certificate must match exactly one Lemur certificate by SHA-256"
@@ -83,8 +154,6 @@ def _resolve(secret):
 def _parse(source, proxy, listeners, secrets, resolve):
     active = {}
     for item in listeners:
-        if not item.get("@type", "").endswith("ListenersConfigDump.DynamicListener"):
-            raise DiscoveryError("Unexpected Envoy listener response type")
         listener = item.get("active_state", {}).get("listener")
         if listener:
             if listener["name"] in active:
@@ -94,11 +163,13 @@ def _parse(source, proxy, listeners, secrets, resolve):
         raise DiscoveryError("No active Envoy listeners were discovered")
     secret_map = {}
     for item in secrets:
-        if not item.get("@type", "").endswith("SecretsConfigDump.DynamicSecret"):
-            raise DiscoveryError("Unexpected Envoy secret response type")
         name = item["name"]
         if name in secret_map:
-            raise DiscoveryError("Duplicate active SDS secret")
+            if _leaf(item).fingerprint(hashes.SHA256()) != _leaf(
+                secret_map[name]
+            ).fingerprint(hashes.SHA256()):
+                raise DiscoveryError("Conflicting active SDS secrets")
+            continue
         secret_map[name] = item
 
     endpoints = []
@@ -139,8 +210,10 @@ def _parse(source, proxy, listeners, secrets, resolve):
                         "Listener references an unavailable active SDS secret"
                     )
                 cert = resolve(secret_map[ref["name"]])
-                if cert not in certs:
+                if cert is not None and cert not in certs:
                     certs.append(cert)
+            if not certs:
+                continue
             # Primary is a storage convention, not a claim about Envoy's selection algorithm.
             associations = [dict(certificate=cert, path="") for cert in certs]
             endpoints.append(
@@ -167,7 +240,11 @@ def get_endpoints(source):
     datacenter = get_plugin_option("datacenter", source.options)
     if not datacenter:
         raise DiscoveryError("Fabric source requires a datacenter")
-    proxies = discover_proxies(datacenter)
+    proxies = discover_proxies(
+        datacenter,
+        get_plugin_option("namespace", source.options),
+        get_plugin_option("destination", source.options),
+    )
     if not proxies:
         raise DiscoveryError("No Envoy proxies discovered for Fabric source")
     endpoints = []
@@ -187,8 +264,7 @@ def get_endpoints(source):
                     _parse(
                         source,
                         proxy,
-                        _read(session, proxy, "dynamic_listeners"),
-                        _read(session, proxy, "dynamic_active_secrets"),
+                        *_read(session, proxy),
                         _resolve,
                     )
                 )
