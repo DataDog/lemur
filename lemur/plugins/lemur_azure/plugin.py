@@ -29,6 +29,7 @@ from azure.mgmt.network.models import (
 from lemur.common.defaults import common_name, bitstrength
 from lemur.common.utils import (
     parse_certificate,
+    parse_cert_chain,
     parse_private_key,
     check_validation,
     get_key_type_from_certificate,
@@ -38,6 +39,7 @@ from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins.lemur_azure.auth import get_azure_credential
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
@@ -291,8 +293,21 @@ class AzureDestinationPlugin(DestinationPlugin):
         # The certificate name must be a 1-127 character string, starting with a letter
         # and containing only 0-9, a-z, A-Z, and -.
         cert = parse_certificate(body)
-        ca_certs = parse_certificate(cert_chain)
-        ca_vendor = parse_ca_vendor(ca_certs)
+        ca_certs = parse_cert_chain(cert_chain)
+        if not ca_certs:
+            raise ValueError("Certificate chain is empty")
+        ca_vendors = set()
+        for ca_cert in ca_certs:
+            try:
+                cert.verify_directly_issued_by(ca_cert)
+            except (ValueError, InvalidSignature):
+                continue
+            ca_vendors.add(parse_ca_vendor(ca_cert))
+        if not ca_vendors:
+            raise ValueError("Certificate chain does not contain the leaf certificate's issuer")
+        if len(ca_vendors) != 1:
+            raise ValueError("Certificate chain contains ambiguous CA vendors")
+        ca_vendor = ca_vendors.pop()
         key_type = get_key_type_from_certificate(body)
         certificate_name = re.sub(
             r"[^0-9A-Za-z-]",
@@ -316,7 +331,7 @@ class AzureDestinationPlugin(DestinationPlugin):
                 name=certificate_name.encode(),
                 key=parse_private_key(private_key),
                 cert=cert,
-                cas=[ca_certs],
+                cas=ca_certs,
                 encryption_algorithm=serialization.NoEncryption(),
             ),
             enabled=True,
