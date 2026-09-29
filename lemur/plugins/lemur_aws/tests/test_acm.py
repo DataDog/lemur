@@ -257,7 +257,7 @@ def test_acm_destination_is_a_single_region_paired_source(app):
         SAN_CERT_STR,
         SAN_CERT_KEY,
         cert_chain=INTERMEDIATE_CERT_STR,
-        replaces_fingerprints=(),
+        replaces=(),
         account_number="123456789012",
         region="eu-west-1",
     )
@@ -341,7 +341,7 @@ def test_acm_reimports_twice_and_retries_at_the_same_arn(app, renewal_certificat
                 replacement,
                 SAN_CERT_KEY,
                 cert_chain=INTERMEDIATE_CERT_STR,
-                replaces_fingerprints=[acm.certificate_fingerprint(predecessor)],
+                replaces=[predecessor],
                 client=client,
             )
             assert response["CertificateArn"] == "arn:stable"
@@ -355,7 +355,7 @@ def test_acm_reimports_twice_and_retries_at_the_same_arn(app, renewal_certificat
             retry = acm.upload_cert.__wrapped__(
                 replacement,
                 SAN_CERT_KEY,
-                replaces_fingerprints=[acm.certificate_fingerprint(predecessor)],
+                replaces=[predecessor],
                 client=client,
             )
             assert retry == {"CertificateArn": "arn:stable", "AlreadyExists": True}
@@ -389,7 +389,7 @@ def test_acm_reimport_rejects_missing_or_ambiguous_arn(
             acm.upload_cert.__wrapped__(
                 new,
                 SAN_CERT_KEY,
-                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                replaces=[old],
                 client=client,
             )
     client.import_certificate.assert_not_called()
@@ -418,7 +418,7 @@ def test_acm_reimport_leaves_certificate_constraints_to_aws(
         acm.upload_cert.__wrapped__(
             new,
             SAN_CERT_KEY,
-            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            replaces=[old],
             client=client,
         )
     client.import_certificate.assert_called_once_with(
@@ -443,7 +443,7 @@ def test_acm_reimport_does_not_fall_back_after_aws_rejection(app, renewal_certif
             acm.upload_cert.__wrapped__(
                 new,
                 SAN_CERT_KEY,
-                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                replaces=[old],
                 client=client,
             )
     assert client.import_certificate.call_count == 1
@@ -469,20 +469,14 @@ def test_destination_event_passes_predecessor_to_acm(app):
         private_key=SAN_CERT_KEY,
         chain=INTERMEDIATE_CERT_STR,
         expired=False,
-        replaces=[
-            SimpleNamespace(
-                parsed_cert=x509.load_pem_x509_certificate(ROOTCA_CERT_STR.encode())
-            )
-        ],
+        replaces=[SimpleNamespace(body=ROOTCA_CERT_STR)],
     )
     with (
         mock.patch.object(plugins, "get", return_value=ACMDestinationPlugin()),
         mock.patch.object(acm, "upload_cert") as upload,
     ):
         update_destinations(certificate, destination, None)
-    assert upload.call_args.kwargs["replaces_fingerprints"] == [
-        acm.certificate_fingerprint(ROOTCA_CERT_STR)
-    ]
+    assert upload.call_args.kwargs["replaces"] == [ROOTCA_CERT_STR]
     assert upload.call_args.kwargs["account_number"] == "123456789012"
     assert upload.call_args.kwargs["region"] == "us-east-1"
 
@@ -495,10 +489,7 @@ def test_acm_reimport_rejects_multiple_predecessors(app):
         acm.upload_cert.__wrapped__(
             SAN_CERT_STR,
             SAN_CERT_KEY,
-            replaces_fingerprints=[
-                acm.certificate_fingerprint(cert)
-                for cert in (ROOTCA_CERT_STR, INTERMEDIATE_CERT_STR)
-            ],
+            replaces=[ROOTCA_CERT_STR, INTERMEDIATE_CERT_STR],
             client=client,
         )
     client.list_certificates.assert_not_called()
@@ -564,13 +555,13 @@ def test_acm_retry_after_timeout_when_aws_already_accepted(app, renewal_certific
             acm.upload_cert.__wrapped__(
                 new,
                 SAN_CERT_KEY,
-                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                replaces=[old],
                 client=client,
             )
         result = acm.upload_cert.__wrapped__(
             new,
             SAN_CERT_KEY,
-            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            replaces=[old],
             client=client,
         )
 
@@ -594,7 +585,7 @@ def test_acm_stale_retry_cannot_overwrite_visible_newer_generation(
             acm.upload_cert.__wrapped__(
                 new,
                 SAN_CERT_KEY,
-                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                replaces=[old],
                 client=client,
             )
     client.import_certificate.assert_not_called()
@@ -618,7 +609,7 @@ def test_acm_renewal_preserves_unrelated_same_hostname_certificate(
         acm.upload_cert.__wrapped__(
             new,
             SAN_CERT_KEY,
-            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            replaces=[old],
             client=client,
         )
     client.import_certificate.assert_called_once()
@@ -643,7 +634,7 @@ def test_acm_renewal_allows_additional_sans(app, renewal_certificates):
         acm.upload_cert.__wrapped__(
             new,
             SAN_CERT_KEY,
-            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            replaces=[old],
             client=client,
         )
     assert client.import_certificate.call_args.kwargs["CertificateArn"] == "arn:stable"

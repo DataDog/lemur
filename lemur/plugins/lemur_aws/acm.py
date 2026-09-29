@@ -80,7 +80,7 @@ def get_imported_certificates(**kwargs):
 
 
 @sts_client("acm")
-def upload_cert(body, private_key, cert_chain=None, replaces_fingerprints=(), **kwargs):
+def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     """Import new certificates, or reimport an explicit replacement at the same ARN.
 
     Reimport deploys the renewal to all consumers of the ARN as AWS propagates it.
@@ -92,10 +92,10 @@ def upload_cert(body, private_key, cert_chain=None, replaces_fingerprints=(), **
     assert isinstance(private_key, str)
     client = kwargs.pop("client")
     fingerprint = certificate_fingerprint(body)
-    if len(replaces_fingerprints) > 1:
+    if len(replaces) > 1:
         raise ValueError("ACM reimport requires exactly one predecessor certificate")
 
-    predecessor = replaces_fingerprints[0] if replaces_fingerprints else None
+    predecessor = certificate_fingerprint(replaces[0]) if replaces else None
     matches = [
         certificate
         for certificate in _get_imported_certificates(client)
@@ -103,7 +103,7 @@ def upload_cert(body, private_key, cert_chain=None, replaces_fingerprints=(), **
     ]
     # Include both old and new fingerprints: a separately imported renewal must not
     # hide the old ARN that is still attached to consumers.
-    if len(matches) > 1 or (replaces_fingerprints and not matches):
+    if len(matches) > 1 or (replaces and not matches):
         raise ValueError("ACM reimport requires one unambiguous existing ARN")
 
     for certificate in matches:
@@ -126,7 +126,7 @@ def upload_cert(body, private_key, cert_chain=None, replaces_fingerprints=(), **
     if cert_chain:
         params["CertificateChain"] = cert_chain.encode("utf-8")
 
-    if replaces_fingerprints:
+    if replaces:
         params["CertificateArn"] = matches[0]["arn"]
 
     response = client.import_certificate(**params)

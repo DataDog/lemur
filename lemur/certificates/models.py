@@ -11,7 +11,6 @@ from datetime import timedelta
 import arrow
 import json
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
 from flask import current_app
 from idna.core import InvalidCodepoint
 from sentry_sdk import capture_exception
@@ -519,10 +518,7 @@ def update_destinations(target, value, initiator):
                 target.private_key,
                 target.chain,
                 value.options,
-                replaces_fingerprints=[
-                    certificate.parsed_cert.fingerprint(hashes.SHA256())
-                    for certificate in target.replaces
-                ],
+                replaces=[certificate.body for certificate in target.replaces],
             )
             status = SUCCESS_METRIC_STATUS
     except Exception as e:
