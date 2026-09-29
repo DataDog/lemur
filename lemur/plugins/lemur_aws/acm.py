@@ -107,8 +107,17 @@ def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     ]
     # Include both old and new fingerprints: a separately imported renewal must not
     # hide the old ARN that is still attached to consumers.
-    if len(matches) > 1 or (replaces and not matches):
-        raise ValueError("ACM reimport requires one unambiguous existing ARN")
+    if len(matches) > 1:
+        raise ValueError(
+            "Multiple ACM ARNs match the current or predecessor certificate. "
+            "Cannot safely choose which ARN to reuse; resolve the duplicate imports first."
+        )
+    if replaces and not matches:
+        raise ValueError(
+            "No ACM ARN matches the current or predecessor certificate in this account "
+            "and region. Cannot renew in place without an existing ARN; check the "
+            "destination and replacement link."
+        )
 
     for certificate in matches:
         if certificate_fingerprint(certificate["body"]) == fingerprint:

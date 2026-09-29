@@ -178,7 +178,7 @@ def test_upload_cert_rejects_duplicate_fingerprint_without_predecessor(app):
             {"arn": "arn:two", "body": SAN_CERT_STR},
         ],
     ):
-        with pytest.raises(ValueError, match="unambiguous existing ARN"):
+        with pytest.raises(ValueError, match="Multiple ACM ARNs match"):
             acm.upload_cert.__wrapped__(SAN_CERT_STR, SAN_CERT_KEY, client=client)
 
     client.import_certificate.assert_not_called()
@@ -385,7 +385,12 @@ def test_acm_reimport_rejects_missing_or_ambiguous_arn(
     with mock.patch.object(
         acm, "_get_imported_certificates", return_value=inventories[inventory_kind]
     ):
-        with pytest.raises(ValueError, match="unambiguous existing ARN"):
+        message = (
+            "Multiple ACM ARNs match"
+            if inventory_kind in ("duplicate", "old_and_new")
+            else "No ACM ARN matches"
+        )
+        with pytest.raises(ValueError, match=message):
             acm.upload_cert.__wrapped__(
                 new,
                 SAN_CERT_KEY,
@@ -581,7 +586,7 @@ def test_acm_stale_retry_cannot_overwrite_visible_newer_generation(
         "_get_imported_certificates",
         return_value=[{"arn": "arn:stable", "body": newest}],
     ):
-        with pytest.raises(ValueError, match="unambiguous existing ARN"):
+        with pytest.raises(ValueError, match="No ACM ARN matches"):
             acm.upload_cert.__wrapped__(
                 new,
                 SAN_CERT_KEY,
