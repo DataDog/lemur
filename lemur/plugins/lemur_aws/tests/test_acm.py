@@ -1,7 +1,12 @@
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from lemur.tests.vectors import (
     INTERMEDIATE_CERT_STR,
@@ -62,9 +67,7 @@ def test_get_imported_certificates_paginates_all_statuses_and_key_types():
     assert result[1]["chain"] is None
     assert client.list_certificates.call_args_list == [
         mock.call(Includes={"keyTypes": acm.ACM_KEY_TYPES}),
-        mock.call(
-            Includes={"keyTypes": acm.ACM_KEY_TYPES}, NextToken="next-page"
-        ),
+        mock.call(Includes={"keyTypes": acm.ACM_KEY_TYPES}, NextToken="next-page"),
     ]
     client.get_certificate.assert_has_calls(
         [
@@ -236,6 +239,7 @@ def test_acm_destination_is_a_single_region_paired_source(app):
         SAN_CERT_STR,
         SAN_CERT_KEY,
         cert_chain=INTERMEDIATE_CERT_STR,
+        replaces=(),
         account_number="123456789012",
         region="eu-west-1",
     )
@@ -264,11 +268,13 @@ def test_acm_destination_creates_source_with_matching_options(app):
         ACMSourcePlugin.slug: ACMSourcePlugin(),
     }
 
-    with mock.patch.object(
-        plugins, "get", side_effect=lambda slug: plugin_by_slug[slug]
-    ), mock.patch.object(source_service, "get_all", return_value=[]), mock.patch.object(
-        source_service, "create"
-    ) as create:
+    with (
+        mock.patch.object(
+            plugins, "get", side_effect=lambda slug: plugin_by_slug[slug]
+        ),
+        mock.patch.object(source_service, "get_all", return_value=[]),
+        mock.patch.object(source_service, "create") as create,
+    ):
         assert source_service.add_destination_to_sources(destination) is True
 
     create.assert_called_once()
@@ -277,3 +283,224 @@ def test_acm_destination_creates_source_with_matching_options(app):
     assert create.call_args.kwargs["plugin_name"] == ACMSourcePlugin.slug
     assert get_plugin_option("accountNumber", source_options) == "123456789012"
     assert get_plugin_option("region", source_options) == "ap-southeast-2"
+
+
+@pytest.fixture
+def renewal_certificates():
+    key = serialization.load_pem_private_key(SAN_CERT_KEY.encode(), password=None)
+
+    def issue(days, names=("example.com", "www.example.com"), public_key=None):
+        subject = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, names[0])])
+        now = datetime.now(timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(subject)
+            .public_key(public_key or key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(days=1))
+            .not_valid_after(now + timedelta(days=days))
+            .add_extension(
+                x509.SubjectAlternativeName([x509.DNSName(n) for n in names]), False
+            )
+            .sign(key, hashes.SHA256())
+        )
+        return cert.public_bytes(serialization.Encoding.PEM).decode()
+
+    return issue
+
+
+def test_acm_reimports_twice_and_retries_at_the_same_arn(app, renewal_certificates):
+    from lemur.plugins.lemur_aws import acm
+
+    old, new, newest = [renewal_certificates(days) for days in (30, 90, 180)]
+    client = mock.Mock()
+    client.import_certificate.return_value = {"CertificateArn": "arn:stable"}
+    inventory = [{"arn": "arn:stable", "body": old}]
+    with mock.patch.object(acm, "_get_imported_certificates", return_value=inventory):
+        for predecessor, replacement in ((old, new), (new, newest)):
+            response = acm.upload_cert.__wrapped__(
+                replacement,
+                SAN_CERT_KEY,
+                cert_chain=INTERMEDIATE_CERT_STR,
+                replaces=[predecessor],
+                client=client,
+            )
+            assert response["CertificateArn"] == "arn:stable"
+            client.import_certificate.assert_called_with(
+                CertificateArn="arn:stable",
+                Certificate=replacement.encode(),
+                PrivateKey=SAN_CERT_KEY.encode(),
+                CertificateChain=INTERMEDIATE_CERT_STR.encode(),
+            )
+            inventory[0]["body"] = replacement
+            retry = acm.upload_cert.__wrapped__(
+                replacement,
+                SAN_CERT_KEY,
+                replaces=[predecessor],
+                client=client,
+            )
+            assert retry == {"CertificateArn": "arn:stable", "AlreadyExists": True}
+
+    assert client.import_certificate.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "inventory_kind", ["missing", "duplicate", "old_and_new", "same_cn"]
+)
+def test_acm_reimport_rejects_missing_or_ambiguous_arn(
+    app, renewal_certificates, inventory_kind
+):
+    from lemur.plugins.lemur_aws import acm
+
+    old, new = renewal_certificates(30), renewal_certificates(90)
+    inventories = {
+        "missing": [],
+        "same_cn": [{"arn": "arn:unrelated", "body": renewal_certificates(60)}],
+        "duplicate": [{"arn": "arn:one", "body": old}, {"arn": "arn:two", "body": old}],
+        "old_and_new": [
+            {"arn": "arn:one", "body": old},
+            {"arn": "arn:two", "body": new},
+        ],
+    }
+    client = mock.Mock()
+    with mock.patch.object(
+        acm, "_get_imported_certificates", return_value=inventories[inventory_kind]
+    ):
+        with pytest.raises(ValueError, match="unambiguous existing ARN"):
+            acm.upload_cert.__wrapped__(
+                new, SAN_CERT_KEY, replaces=[old], client=client
+            )
+    client.import_certificate.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["domains", "key", "validity"])
+def test_acm_reimport_rejects_incompatible_renewal(app, renewal_certificates, change):
+    from lemur.plugins.lemur_aws import acm
+
+    old = renewal_certificates(30)
+    if change == "domains":
+        new = renewal_certificates(90, names=("example.com",))
+    elif change == "key":
+        key = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+        new = renewal_certificates(90, public_key=key.public_key())
+    else:
+        new = renewal_certificates(10)
+    client = mock.Mock()
+    with mock.patch.object(
+        acm,
+        "_get_imported_certificates",
+        return_value=[{"arn": "arn:old", "body": old}],
+    ):
+        with pytest.raises(ValueError, match="ACM reimport"):
+            acm.upload_cert.__wrapped__(
+                new, SAN_CERT_KEY, replaces=[old], client=client
+            )
+    client.import_certificate.assert_not_called()
+
+
+def test_acm_reimport_does_not_fall_back_after_aws_rejection(app, renewal_certificates):
+    from lemur.plugins.lemur_aws import acm
+
+    old, new = renewal_certificates(30), renewal_certificates(90)
+    client = mock.Mock()
+    client.import_certificate.side_effect = RuntimeError("AWS rejected reimport")
+    with mock.patch.object(
+        acm,
+        "_get_imported_certificates",
+        return_value=[{"arn": "arn:old", "body": old}],
+    ):
+        with pytest.raises(RuntimeError, match="AWS rejected reimport"):
+            acm.upload_cert.__wrapped__(
+                new, SAN_CERT_KEY, replaces=[old], client=client
+            )
+    assert client.import_certificate.call_count == 1
+    assert client.import_certificate.call_args.kwargs["CertificateArn"] == "arn:old"
+
+
+def test_destination_event_passes_predecessor_to_acm(app):
+    from lemur.certificates.models import update_destinations
+    from lemur.plugins.base import plugins
+    from lemur.plugins.lemur_aws import acm
+    from lemur.plugins.lemur_aws.plugin import ACMDestinationPlugin
+    from lemur.plugins.utils import set_plugin_option
+
+    options = deepcopy(ACMDestinationPlugin.options)
+    set_plugin_option("accountNumber", "123456789012", options)
+    set_plugin_option("region", "us-east-1", options)
+    destination = SimpleNamespace(
+        plugin_name="aws-acm-destination", options=options, label="test", description=""
+    )
+    certificate = SimpleNamespace(
+        name="renewal",
+        body=SAN_CERT_STR,
+        private_key=SAN_CERT_KEY,
+        chain=INTERMEDIATE_CERT_STR,
+        expired=False,
+        replaces=[SimpleNamespace(body=ROOTCA_CERT_STR)],
+    )
+    with (
+        mock.patch.object(plugins, "get", return_value=ACMDestinationPlugin()),
+        mock.patch.object(acm, "upload_cert") as upload,
+    ):
+        update_destinations(certificate, destination, None)
+    assert upload.call_args.kwargs["replaces"] == [ROOTCA_CERT_STR]
+    assert upload.call_args.kwargs["account_number"] == "123456789012"
+    assert upload.call_args.kwargs["region"] == "us-east-1"
+
+
+def test_acm_reimport_rejects_multiple_predecessors(app):
+    from lemur.plugins.lemur_aws import acm
+
+    client = mock.Mock()
+    with pytest.raises(ValueError, match="exactly one predecessor"):
+        acm.upload_cert.__wrapped__(
+            SAN_CERT_STR,
+            SAN_CERT_KEY,
+            replaces=[ROOTCA_CERT_STR, INTERMEDIATE_CERT_STR],
+            client=client,
+        )
+    client.list_certificates.assert_not_called()
+    client.import_certificate.assert_not_called()
+
+
+def test_acm_source_sync_unlinks_old_certificate_without_deleting_arn(app):
+    from lemur import database
+    from lemur.certificates import service as certificates
+    from lemur.destinations import service as destinations
+    from lemur.plugins.base import plugins
+    from lemur.plugins.lemur_aws import acm
+    from lemur.plugins.lemur_aws.plugin import ACMSourcePlugin
+    from lemur.sources import service as sources
+
+    source = SimpleNamespace(
+        id=1, label="acm", plugin_name="aws-acm-source", options=[]
+    )
+    destination = SimpleNamespace(label="acm")
+    old = SimpleNamespace(
+        id=1, name="old", sources=[source], destinations=[destination]
+    )
+    new = SimpleNamespace(id=2, name="new", sources=[], destinations=[destination])
+    with (
+        mock.patch.object(plugins, "get", return_value=ACMSourcePlugin()),
+        mock.patch.object(
+            acm,
+            "get_imported_certificates",
+            return_value=[{"arn": "arn:stable", "body": SAN_CERT_STR}],
+        ),
+        mock.patch.object(
+            certificates, "get_all_valid_certificates_with_source", return_value=[old]
+        ) as existing,
+        mock.patch.object(sources, "find_cert", return_value=([new], 0)),
+        mock.patch.object(destinations, "get_by_label", return_value=destination),
+        mock.patch.object(database, "update"),
+        mock.patch.object(certificates, "remove_from_destination") as remote_delete,
+    ):
+        sources.sync_certificates(source, SimpleNamespace(email="test@example.com"))
+
+    existing.assert_called_once_with(source.id, include_replaced=True)
+    assert old.sources == []
+    assert old.destinations == []
+    assert new.sources == [source]
+    assert new.destinations == [destination]
+    remote_delete.assert_not_called()

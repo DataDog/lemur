@@ -518,6 +518,7 @@ def update_destinations(target, value, initiator):
                 target.private_key,
                 target.chain,
                 value.options,
+                replaces=[certificate.body for certificate in target.replaces],
             )
             status = SUCCESS_METRIC_STATUS
     except Exception as e:

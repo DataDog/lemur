@@ -1135,19 +1135,20 @@ def get_issued_cert_count_for_authority(authority):
     )
 
 
-def get_all_valid_certificates_with_source(source_id):
+def get_all_valid_certificates_with_source(source_id, include_replaced=False):
     """
     Return list of certificates
     :param source_id:
     :return:
     """
-    return (
+    query = (
         Certificate.query.filter(Certificate.sources.any(id=source_id))
         .filter(Certificate.revoked == false())
         .filter(Certificate.not_after >= arrow.now())
-        .filter(not_(Certificate.replaced.any()))
-        .all()
     )
+    if not include_replaced:
+        query = query.filter(not_(Certificate.replaced.any()))
+    return query.all()
 
 
 def get_all_valid_certificates_with_destination(destination_id):

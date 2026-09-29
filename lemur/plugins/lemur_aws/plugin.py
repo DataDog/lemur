@@ -644,6 +644,8 @@ class AWSSourcePlugin(SourcePlugin):
 
 
 class ACMSourcePlugin(SourcePlugin):
+    # Reimport removes the predecessor's material from ACM without deleting its ARN.
+    sync_replaced_certificates = True
     title = "AWS-ACM"
     slug = "aws-acm-source"
     description = "Discovers imported certificates in one AWS ACM account and region"
@@ -763,6 +765,7 @@ class ACMDestinationPlugin(DestinationPlugin):
             body,
             private_key,
             cert_chain=cert_chain,
+            replaces=kwargs.get("replaces", ()),
             account_number=self.get_option("accountNumber", options),
             region=self.get_option("region", options),
         )
