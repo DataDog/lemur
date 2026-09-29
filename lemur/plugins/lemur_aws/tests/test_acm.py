@@ -522,3 +522,106 @@ def test_acm_source_sync_unlinks_old_certificate_without_deleting_arn(app):
     assert new.sources == [source]
     assert new.destinations == [destination]
     remote_delete.assert_not_called()
+
+
+def test_acm_retry_after_timeout_when_aws_already_accepted(app, renewal_certificates):
+    from lemur.plugins.lemur_aws import acm
+
+    old, new = renewal_certificates(30), renewal_certificates(90)
+    inventory = [{"arn": "arn:stable", "body": old}]
+    client = mock.Mock()
+
+    def accept_then_timeout(**kwargs):
+        inventory[0]["body"] = kwargs["Certificate"].decode()
+        raise TimeoutError("response lost after AWS accepted import")
+
+    client.import_certificate.side_effect = accept_then_timeout
+    with mock.patch.object(acm, "_get_imported_certificates", return_value=inventory):
+        with pytest.raises(TimeoutError):
+            acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+        result = acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+
+    assert result == {"CertificateArn": "arn:stable", "AlreadyExists": True}
+    client.import_certificate.assert_called_once()
+
+
+def test_acm_stale_retry_cannot_overwrite_visible_newer_generation(app, renewal_certificates):
+    from lemur.plugins.lemur_aws import acm
+
+    old, new, newest = [renewal_certificates(days) for days in (30, 90, 180)]
+    client = mock.Mock()
+    with mock.patch.object(
+        acm, "_get_imported_certificates",
+        return_value=[{"arn": "arn:stable", "body": newest}],
+    ):
+        with pytest.raises(ValueError, match="unambiguous existing ARN"):
+            acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+    client.import_certificate.assert_not_called()
+
+
+def test_acm_renewal_preserves_unrelated_same_hostname_certificate(app, renewal_certificates):
+    from lemur.plugins.lemur_aws import acm
+
+    old, unrelated, new = [renewal_certificates(days) for days in (30, 60, 90)]
+    client = mock.Mock()
+    with mock.patch.object(acm, "_get_imported_certificates", return_value=[
+        {"arn": "arn:unrelated", "body": unrelated},
+        {"arn": "arn:managed", "body": old},
+    ]):
+        acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+    client.import_certificate.assert_called_once()
+    assert client.import_certificate.call_args.kwargs["CertificateArn"] == "arn:managed"
+
+
+def test_acm_renewal_allows_additional_sans(app, renewal_certificates):
+    from lemur.plugins.lemur_aws import acm
+
+    old = renewal_certificates(30)
+    new = renewal_certificates(90, names=("example.com", "www.example.com", "api.example.com"))
+    client = mock.Mock()
+    with mock.patch.object(acm, "_get_imported_certificates", return_value=[
+        {"arn": "arn:stable", "body": old},
+    ]):
+        acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+    assert client.import_certificate.call_args.kwargs["CertificateArn"] == "arn:stable"
+
+
+def test_acm_source_failure_does_not_remove_associations(app):
+    from lemur.certificates import service as certificates
+    from lemur.plugins.base import plugins
+    from lemur.sources import service as sources
+
+    source = SimpleNamespace(id=1, label="acm", plugin_name="aws-acm-source", options=[])
+    plugin = mock.Mock()
+    plugin.get_certificates.side_effect = RuntimeError("ACM inventory unavailable")
+    with (
+        mock.patch.object(plugins, "get", return_value=plugin),
+        mock.patch.object(certificates, "remove_source_association") as remove_source,
+        mock.patch.object(certificates, "remove_destination_association") as remove_destination,
+    ):
+        with pytest.raises(RuntimeError, match="inventory unavailable"):
+            sources.sync_certificates(source, SimpleNamespace(email="test@example.com"))
+    remove_source.assert_not_called()
+    remove_destination.assert_not_called()
+
+
+@pytest.mark.parametrize("plugin_name", ["aws-source", "aws-acm-source"])
+def test_only_acm_source_includes_replaced_certificates(app, plugin_name):
+    from lemur.certificates import service as certificates
+    from lemur.destinations import service as destinations
+    from lemur.plugins.base import plugins
+    from lemur.plugins.lemur_aws.plugin import ACMSourcePlugin, AWSSourcePlugin
+    from lemur.sources import service as sources
+
+    plugin = ACMSourcePlugin() if plugin_name == "aws-acm-source" else AWSSourcePlugin()
+    source = SimpleNamespace(id=1, label="test", plugin_name=plugin_name, options=[])
+    with (
+        mock.patch.object(plugins, "get", return_value=plugin),
+        mock.patch.object(plugin, "get_certificates", return_value=[]),
+        mock.patch.object(
+            certificates, "get_all_valid_certificates_with_source", return_value=[]
+        ) as existing,
+        mock.patch.object(destinations, "get_by_label", return_value=None),
+    ):
+        sources.sync_certificates(source, SimpleNamespace(email="test@example.com"))
+    existing.assert_called_once_with(1, include_replaced=plugin_name == "aws-acm-source")
