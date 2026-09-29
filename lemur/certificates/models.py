@@ -520,19 +520,23 @@ def update_destinations(target, value, initiator):
                 value.options,
             )
             status = SUCCESS_METRIC_STATUS
-    except Exception as e:
+    except Exception:
         capture_exception()
         raise
-
-    metric_tags = {
-        "status": status,
-        "certificate": target.name,
-        "destination": value.label,
-    }
-    datacenter = _datacenter_from_description(value.description)
-    if datacenter:
-        metric_tags["datacenter"] = datacenter
-    metrics.send("destination_upload", "counter", 1, metric_tags=metric_tags)
+    finally:
+        metric_tags = {
+            "status": status,
+            "certificate": target.name,
+            "destination": value.label,
+        }
+        datacenter = _datacenter_from_description(value.description)
+        if datacenter:
+            metric_tags["datacenter"] = datacenter
+        metrics.send("destination_upload", "counter", 1, metric_tags=metric_tags)
+        if status == FAILURE_METRIC_STATUS:
+            metrics.send(
+                "destination_upload_failure", "counter", 1, metric_tags=metric_tags
+            )
 
 
 @event.listens_for(Certificate.replaces, "append")
