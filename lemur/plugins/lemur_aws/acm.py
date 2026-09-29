@@ -3,8 +3,7 @@
 from cryptography.hazmat.primitives import hashes
 from flask import current_app
 
-from lemur.common import defaults
-from lemur.common.utils import get_key_type_from_certificate, parse_certificate
+from lemur.common.utils import parse_certificate
 from lemur.extensions import metrics
 from lemur.plugins.lemur_aws.sts import sts_client
 
@@ -81,7 +80,7 @@ def get_imported_certificates(**kwargs):
 
 
 @sts_client("acm")
-def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
+def upload_cert(body, private_key, cert_chain=None, replaces_fingerprints=(), **kwargs):
     """Import new certificates, or reimport an explicit replacement at the same ARN.
 
     Reimport deploys the renewal to all consumers of the ARN as AWS propagates it.
@@ -93,10 +92,10 @@ def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     assert isinstance(private_key, str)
     client = kwargs.pop("client")
     fingerprint = certificate_fingerprint(body)
-    if len(replaces) > 1:
+    if len(replaces_fingerprints) > 1:
         raise ValueError("ACM reimport requires exactly one predecessor certificate")
 
-    predecessor = certificate_fingerprint(replaces[0]) if replaces else None
+    predecessor = replaces_fingerprints[0] if replaces_fingerprints else None
     matches = [
         certificate
         for certificate in _get_imported_certificates(client)
@@ -104,7 +103,7 @@ def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     ]
     # Include both old and new fingerprints: a separately imported renewal must not
     # hide the old ARN that is still attached to consumers.
-    if len(matches) > 1 or (replaces and not matches):
+    if len(matches) > 1 or (replaces_fingerprints and not matches):
         raise ValueError("ACM reimport requires one unambiguous existing ARN")
 
     for certificate in matches:
@@ -127,18 +126,7 @@ def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     if cert_chain:
         params["CertificateChain"] = cert_chain.encode("utf-8")
 
-    if replaces:
-        old = parse_certificate(replaces[0])
-        new = parse_certificate(body)
-        if get_key_type_from_certificate(replaces[0]) != get_key_type_from_certificate(body):
-            raise ValueError("ACM reimport cannot change the key type or size")
-        if (
-            not set(defaults.domains(old)).issubset(defaults.domains(new))
-            or defaults.common_name(old) != defaults.common_name(new)
-        ):
-            raise ValueError("ACM reimport cannot remove existing certificate domains")
-        if new.not_valid_after_utc <= old.not_valid_after_utc:
-            raise ValueError("ACM reimport must extend certificate validity")
+    if replaces_fingerprints:
         params["CertificateArn"] = matches[0]["arn"]
 
     response = client.import_certificate(**params)

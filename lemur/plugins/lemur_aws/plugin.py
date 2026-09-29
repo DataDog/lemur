@@ -769,7 +769,7 @@ class ACMDestinationPlugin(DestinationPlugin):
             body,
             private_key,
             cert_chain=cert_chain,
-            replaces=kwargs.get("replaces", ()),
+            replaces_fingerprints=kwargs.get("replaces_fingerprints", ()),
             account_number=self.get_option("accountNumber", options),
             region=self.get_option("region", options),
         )

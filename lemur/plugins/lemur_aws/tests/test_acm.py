@@ -257,7 +257,7 @@ def test_acm_destination_is_a_single_region_paired_source(app):
         SAN_CERT_STR,
         SAN_CERT_KEY,
         cert_chain=INTERMEDIATE_CERT_STR,
-        replaces=(),
+        replaces_fingerprints=(),
         account_number="123456789012",
         region="eu-west-1",
     )
@@ -341,7 +341,7 @@ def test_acm_reimports_twice_and_retries_at_the_same_arn(app, renewal_certificat
                 replacement,
                 SAN_CERT_KEY,
                 cert_chain=INTERMEDIATE_CERT_STR,
-                replaces=[predecessor],
+                replaces_fingerprints=[acm.certificate_fingerprint(predecessor)],
                 client=client,
             )
             assert response["CertificateArn"] == "arn:stable"
@@ -355,7 +355,7 @@ def test_acm_reimports_twice_and_retries_at_the_same_arn(app, renewal_certificat
             retry = acm.upload_cert.__wrapped__(
                 replacement,
                 SAN_CERT_KEY,
-                replaces=[predecessor],
+                replaces_fingerprints=[acm.certificate_fingerprint(predecessor)],
                 client=client,
             )
             assert retry == {"CertificateArn": "arn:stable", "AlreadyExists": True}
@@ -387,13 +387,18 @@ def test_acm_reimport_rejects_missing_or_ambiguous_arn(
     ):
         with pytest.raises(ValueError, match="unambiguous existing ARN"):
             acm.upload_cert.__wrapped__(
-                new, SAN_CERT_KEY, replaces=[old], client=client
+                new,
+                SAN_CERT_KEY,
+                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                client=client,
             )
     client.import_certificate.assert_not_called()
 
 
 @pytest.mark.parametrize("change", ["domains", "key", "validity"])
-def test_acm_reimport_rejects_incompatible_renewal(app, renewal_certificates, change):
+def test_acm_reimport_leaves_certificate_constraints_to_aws(
+    app, renewal_certificates, change
+):
     from lemur.plugins.lemur_aws import acm
 
     old = renewal_certificates(30)
@@ -410,11 +415,17 @@ def test_acm_reimport_rejects_incompatible_renewal(app, renewal_certificates, ch
         "_get_imported_certificates",
         return_value=[{"arn": "arn:old", "body": old}],
     ):
-        with pytest.raises(ValueError, match="ACM reimport"):
-            acm.upload_cert.__wrapped__(
-                new, SAN_CERT_KEY, replaces=[old], client=client
-            )
-    client.import_certificate.assert_not_called()
+        acm.upload_cert.__wrapped__(
+            new,
+            SAN_CERT_KEY,
+            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            client=client,
+        )
+    client.import_certificate.assert_called_once_with(
+        CertificateArn="arn:old",
+        Certificate=new.encode(),
+        PrivateKey=SAN_CERT_KEY.encode(),
+    )
 
 
 def test_acm_reimport_does_not_fall_back_after_aws_rejection(app, renewal_certificates):
@@ -430,7 +441,10 @@ def test_acm_reimport_does_not_fall_back_after_aws_rejection(app, renewal_certif
     ):
         with pytest.raises(RuntimeError, match="AWS rejected reimport"):
             acm.upload_cert.__wrapped__(
-                new, SAN_CERT_KEY, replaces=[old], client=client
+                new,
+                SAN_CERT_KEY,
+                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                client=client,
             )
     assert client.import_certificate.call_count == 1
     assert client.import_certificate.call_args.kwargs["CertificateArn"] == "arn:old"
@@ -455,14 +469,20 @@ def test_destination_event_passes_predecessor_to_acm(app):
         private_key=SAN_CERT_KEY,
         chain=INTERMEDIATE_CERT_STR,
         expired=False,
-        replaces=[SimpleNamespace(body=ROOTCA_CERT_STR)],
+        replaces=[
+            SimpleNamespace(
+                parsed_cert=x509.load_pem_x509_certificate(ROOTCA_CERT_STR.encode())
+            )
+        ],
     )
     with (
         mock.patch.object(plugins, "get", return_value=ACMDestinationPlugin()),
         mock.patch.object(acm, "upload_cert") as upload,
     ):
         update_destinations(certificate, destination, None)
-    assert upload.call_args.kwargs["replaces"] == [ROOTCA_CERT_STR]
+    assert upload.call_args.kwargs["replaces_fingerprints"] == [
+        acm.certificate_fingerprint(ROOTCA_CERT_STR)
+    ]
     assert upload.call_args.kwargs["account_number"] == "123456789012"
     assert upload.call_args.kwargs["region"] == "us-east-1"
 
@@ -475,7 +495,10 @@ def test_acm_reimport_rejects_multiple_predecessors(app):
         acm.upload_cert.__wrapped__(
             SAN_CERT_STR,
             SAN_CERT_KEY,
-            replaces=[ROOTCA_CERT_STR, INTERMEDIATE_CERT_STR],
+            replaces_fingerprints=[
+                acm.certificate_fingerprint(cert)
+                for cert in (ROOTCA_CERT_STR, INTERMEDIATE_CERT_STR)
+            ],
             client=client,
         )
     client.list_certificates.assert_not_called()
@@ -538,37 +561,66 @@ def test_acm_retry_after_timeout_when_aws_already_accepted(app, renewal_certific
     client.import_certificate.side_effect = accept_then_timeout
     with mock.patch.object(acm, "_get_imported_certificates", return_value=inventory):
         with pytest.raises(TimeoutError):
-            acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
-        result = acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+            acm.upload_cert.__wrapped__(
+                new,
+                SAN_CERT_KEY,
+                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                client=client,
+            )
+        result = acm.upload_cert.__wrapped__(
+            new,
+            SAN_CERT_KEY,
+            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            client=client,
+        )
 
     assert result == {"CertificateArn": "arn:stable", "AlreadyExists": True}
     client.import_certificate.assert_called_once()
 
 
-def test_acm_stale_retry_cannot_overwrite_visible_newer_generation(app, renewal_certificates):
+def test_acm_stale_retry_cannot_overwrite_visible_newer_generation(
+    app, renewal_certificates
+):
     from lemur.plugins.lemur_aws import acm
 
     old, new, newest = [renewal_certificates(days) for days in (30, 90, 180)]
     client = mock.Mock()
     with mock.patch.object(
-        acm, "_get_imported_certificates",
+        acm,
+        "_get_imported_certificates",
         return_value=[{"arn": "arn:stable", "body": newest}],
     ):
         with pytest.raises(ValueError, match="unambiguous existing ARN"):
-            acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+            acm.upload_cert.__wrapped__(
+                new,
+                SAN_CERT_KEY,
+                replaces_fingerprints=[acm.certificate_fingerprint(old)],
+                client=client,
+            )
     client.import_certificate.assert_not_called()
 
 
-def test_acm_renewal_preserves_unrelated_same_hostname_certificate(app, renewal_certificates):
+def test_acm_renewal_preserves_unrelated_same_hostname_certificate(
+    app, renewal_certificates
+):
     from lemur.plugins.lemur_aws import acm
 
     old, unrelated, new = [renewal_certificates(days) for days in (30, 60, 90)]
     client = mock.Mock()
-    with mock.patch.object(acm, "_get_imported_certificates", return_value=[
-        {"arn": "arn:unrelated", "body": unrelated},
-        {"arn": "arn:managed", "body": old},
-    ]):
-        acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+    with mock.patch.object(
+        acm,
+        "_get_imported_certificates",
+        return_value=[
+            {"arn": "arn:unrelated", "body": unrelated},
+            {"arn": "arn:managed", "body": old},
+        ],
+    ):
+        acm.upload_cert.__wrapped__(
+            new,
+            SAN_CERT_KEY,
+            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            client=client,
+        )
     client.import_certificate.assert_called_once()
     assert client.import_certificate.call_args.kwargs["CertificateArn"] == "arn:managed"
 
@@ -577,12 +629,23 @@ def test_acm_renewal_allows_additional_sans(app, renewal_certificates):
     from lemur.plugins.lemur_aws import acm
 
     old = renewal_certificates(30)
-    new = renewal_certificates(90, names=("example.com", "www.example.com", "api.example.com"))
+    new = renewal_certificates(
+        90, names=("example.com", "www.example.com", "api.example.com")
+    )
     client = mock.Mock()
-    with mock.patch.object(acm, "_get_imported_certificates", return_value=[
-        {"arn": "arn:stable", "body": old},
-    ]):
-        acm.upload_cert.__wrapped__(new, SAN_CERT_KEY, replaces=[old], client=client)
+    with mock.patch.object(
+        acm,
+        "_get_imported_certificates",
+        return_value=[
+            {"arn": "arn:stable", "body": old},
+        ],
+    ):
+        acm.upload_cert.__wrapped__(
+            new,
+            SAN_CERT_KEY,
+            replaces_fingerprints=[acm.certificate_fingerprint(old)],
+            client=client,
+        )
     assert client.import_certificate.call_args.kwargs["CertificateArn"] == "arn:stable"
 
 
@@ -591,13 +654,17 @@ def test_acm_source_failure_does_not_remove_associations(app):
     from lemur.plugins.base import plugins
     from lemur.sources import service as sources
 
-    source = SimpleNamespace(id=1, label="acm", plugin_name="aws-acm-source", options=[])
+    source = SimpleNamespace(
+        id=1, label="acm", plugin_name="aws-acm-source", options=[]
+    )
     plugin = mock.Mock()
     plugin.get_certificates.side_effect = RuntimeError("ACM inventory unavailable")
     with (
         mock.patch.object(plugins, "get", return_value=plugin),
         mock.patch.object(certificates, "remove_source_association") as remove_source,
-        mock.patch.object(certificates, "remove_destination_association") as remove_destination,
+        mock.patch.object(
+            certificates, "remove_destination_association"
+        ) as remove_destination,
     ):
         with pytest.raises(RuntimeError, match="inventory unavailable"):
             sources.sync_certificates(source, SimpleNamespace(email="test@example.com"))
@@ -624,4 +691,6 @@ def test_only_acm_source_includes_replaced_certificates(app, plugin_name):
         mock.patch.object(destinations, "get_by_label", return_value=None),
     ):
         sources.sync_certificates(source, SimpleNamespace(email="test@example.com"))
-    existing.assert_called_once_with(1, include_replaced=plugin_name == "aws-acm-source")
+    existing.assert_called_once_with(
+        1, include_replaced=plugin_name == "aws-acm-source"
+    )
