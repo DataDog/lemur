@@ -736,7 +736,11 @@ class AWSDestinationPlugin(DestinationPlugin):
 class ACMDestinationPlugin(DestinationPlugin):
     title = "AWS-ACM"
     slug = "aws-acm-destination"
-    description = "Imports certificates into one AWS ACM account and region"
+    description = (
+        "Imports certificates into one AWS ACM account and region. Renewals reuse the "
+        "existing ARN and update all its consumers on upload, without waiting for "
+        "endpoint rotation."
+    )
     version = aws.VERSION
     sync_as_source = True
     sync_as_source_name = ACMSourcePlugin.slug

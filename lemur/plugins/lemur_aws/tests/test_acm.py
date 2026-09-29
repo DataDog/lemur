@@ -166,6 +166,24 @@ def test_upload_cert_imports_new_fingerprint_without_tags(app):
     )
 
 
+def test_upload_cert_rejects_duplicate_fingerprint_without_predecessor(app):
+    from lemur.plugins.lemur_aws import acm
+
+    client = mock.Mock()
+    with mock.patch.object(
+        acm,
+        "_get_imported_certificates",
+        return_value=[
+            {"arn": "arn:one", "body": SAN_CERT_STR},
+            {"arn": "arn:two", "body": SAN_CERT_STR},
+        ],
+    ):
+        with pytest.raises(ValueError, match="unambiguous existing ARN"):
+            acm.upload_cert.__wrapped__(SAN_CERT_STR, SAN_CERT_KEY, client=client)
+
+    client.import_certificate.assert_not_called()
+
+
 def test_upload_cert_does_not_import_after_inventory_failure(app):
     from lemur.plugins.lemur_aws import acm
 

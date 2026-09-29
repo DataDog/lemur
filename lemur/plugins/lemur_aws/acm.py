@@ -84,6 +84,9 @@ def get_imported_certificates(**kwargs):
 def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     """Import new certificates, or reimport an explicit replacement at the same ARN.
 
+    Reimport deploys the renewal to all consumers of the ARN as AWS propagates it.
+    It does not wait for Lemur's endpoint rotation task.
+
     ACM list results are eventually consistent, so rapid concurrent or post-timeout
     retries can import duplicates before the first import becomes visible.
     """
@@ -101,7 +104,7 @@ def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     ]
     # Include both old and new fingerprints: a separately imported renewal must not
     # hide the old ARN that is still attached to consumers.
-    if replaces and len(matches) != 1:
+    if len(matches) > 1 or (replaces and not matches):
         raise ValueError("ACM reimport requires one unambiguous existing ARN")
 
     for certificate in matches:
