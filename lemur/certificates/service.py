@@ -279,6 +279,7 @@ def get_all_pending_reissue():
     return (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
+        .filter(not_(Certificate.pending_cert.any(PendingCertificate.resolved == false())))
         .filter(Certificate.in_rotation_window == true())
         .all()
     )  # noqa
