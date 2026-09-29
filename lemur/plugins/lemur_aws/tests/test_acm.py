@@ -485,7 +485,7 @@ def test_acm_reimport_rejects_multiple_predecessors(app):
     from lemur.plugins.lemur_aws import acm
 
     client = mock.Mock()
-    with pytest.raises(ValueError, match="exactly one predecessor"):
+    with pytest.raises(ValueError, match="Multiple predecessors may map to different ACM ARNs"):
         acm.upload_cert.__wrapped__(
             SAN_CERT_STR,
             SAN_CERT_KEY,

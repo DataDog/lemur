@@ -93,7 +93,11 @@ def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     client = kwargs.pop("client")
     fingerprint = certificate_fingerprint(body)
     if len(replaces) > 1:
-        raise ValueError("ACM reimport requires exactly one predecessor certificate")
+        raise ValueError(
+            "ACM reimport supports at most one predecessor certificate. "
+            "Multiple predecessors may map to different ACM ARNs, and this upload "
+            "can update only one ARN, so it cannot safely choose which to overwrite."
+        )
 
     predecessor = certificate_fingerprint(replaces[0]) if replaces else None
     matches = [
