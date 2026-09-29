@@ -119,7 +119,8 @@ def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
             "destination and replacement link."
         )
 
-    for certificate in matches:
+    if matches:
+        certificate = matches[0]
         if certificate_fingerprint(certificate["body"]) == fingerprint:
             current_app.logger.info(
                 {
