@@ -43,9 +43,6 @@ def test_destination_upload_metrics(app, fails):
             "destination": destination.label,
             "datacenter": "us1.staging.dog",
         }
-        metric.assert_any_call("destination_upload", "counter", 1, metric_tags=tags)
-        if fails:
-            metric.assert_any_call(
-                "destination_upload_failure", "counter", 1, metric_tags=tags
-            )
-        assert metric.call_count == (2 if fails else 1)
+        metric.assert_called_once_with(
+            "destination_upload", "counter", 1, metric_tags=tags
+        )
