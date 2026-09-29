@@ -382,7 +382,7 @@ def test_acm_reimport_rejects_incompatible_renewal(app, renewal_certificates, ch
     if change == "domains":
         new = renewal_certificates(90, names=("example.com",))
     elif change == "key":
-        key = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+        key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
         new = renewal_certificates(90, public_key=key.public_key())
     else:
         new = renewal_certificates(10)
