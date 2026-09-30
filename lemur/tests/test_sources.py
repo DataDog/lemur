@@ -178,6 +178,58 @@ def test_sync_endpoints(session):
     assert ep4.sni_certificates[0].name == crt3.name
 
 
+def test_sync_endpoints_preserves_source_on_update(session):
+    """CLOUDR-1927 (A): a matched (dnsname, port) endpoint must NOT have its
+    source reassigned to whichever source synced last."""
+    from unittest import mock
+    from lemur.endpoints import service as endpoint_service
+    from lemur.sources import service as source_service
+    from lemur.tests.factories import EndpointFactory, SourceFactory, CertificateFactory
+    from lemur.plugins.lemur_aws.plugin import AWSSourcePlugin
+
+    source_a = SourceFactory()
+    source_a.plugin_name = "aws-source"
+    source_b = SourceFactory()
+    source_b.plugin_name = "aws-source"
+
+    crt = CertificateFactory()
+    existing_endpoint = EndpointFactory(
+        name="test-lb-4", dnsname="test4.example.com", port=443
+    )
+    existing_endpoint.primary_certificate = crt
+    existing_endpoint.source = source_a
+    session.commit()
+
+    with mock.patch.object(
+        AWSSourcePlugin,
+        "get_endpoints",
+        return_value=[
+            dict(
+                name="test-lb-4",
+                dnsname="test4.example.com",
+                type="elbv2",
+                port=443,
+                policy=dict(name="none", ciphers=[]),
+                primary_certificate=dict(
+                    name=crt.name,
+                    path="/fakecrt",
+                    registry_type="iam",
+                ),
+                sni_certificates=[],
+                registry_type="iam",
+            ),
+        ],
+    ):
+        new, updated, updated_by_hash = source_service.sync_endpoints(source_b)
+
+    assert new == 0
+    assert updated == 1
+
+    ep = endpoint_service.get_by_name("test-lb-4")
+    assert ep.source_id == source_a.id
+    assert ep.source_id != source_b.id
+
+
 @pytest.mark.parametrize(
     "token,status",
     [
