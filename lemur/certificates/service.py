@@ -480,6 +480,51 @@ def import_certificate(**kwargs):
     return upload(**kwargs)
 
 
+def defer_acm_renewal_destinations(data):
+    """Keep live ACM updates out of certificate construction until it is committed."""
+    destinations = data.get("destinations", [])
+    if (
+        data.get("body")
+        and data.get("replaces")
+        and any(
+            destination.plugin_name == "aws-acm-destination"
+            for destination in destinations
+        )
+    ):
+        return list(data.pop("destinations"))
+    return []
+
+
+def upload_saved_renewal(cert, destinations):
+    """Commit successful deliveries individually; leave failures for manual retry."""
+    if not destinations:
+        return
+    cert_id = cert.id
+    # Cache these before a rollback expires the ORM objects.
+    destination_details = [(dest.id, dest.label) for dest in destinations]
+    for index, destination in enumerate(destinations):
+        try:
+            cert.destinations.append(destination)
+            database.commit()
+        except Exception as error:
+            database.rollback()
+            remaining = ", ".join(
+                f"{label} (ID {dest_id})"
+                for dest_id, label in destination_details[index:]
+            )
+            message = (
+                f"Renewal certificate ID {cert_id} was saved, but destination delivery "
+                f"failed at {destination_details[index][1]} "
+                f"(ID {destination_details[index][0]}). "
+                f"Retry by attaching these failed or unattempted destinations to the "
+                f"saved certificate: {remaining}. Do not reissue another certificate. "
+                "A remote upload may already have succeeded; retry using this same "
+                "certificate. Delivery will not be retried automatically."
+            )
+            current_app.logger.exception(message)
+            raise RuntimeError(message) from error
+
+
 def upload(**kwargs):
     """
     Allows for pre-made certificates to be imported into Lemur.
@@ -490,6 +535,7 @@ def upload(**kwargs):
         kwargs["roles"] = []
     kwargs["roles"] += [role for role in roles if role not in kwargs["roles"]]
 
+    deferred_destinations = defer_acm_renewal_destinations(kwargs)
     cert = Certificate(**kwargs)
     cert.authority = kwargs.get("authority")
     cert = database.create(cert)
@@ -497,6 +543,7 @@ def upload(**kwargs):
     kwargs["creator"].certificates.append(cert)
 
     cert = database.update(cert)
+    upload_saved_renewal(cert, deferred_destinations)
     certificate_imported.send(certificate=cert, authority=cert.authority)
     return cert
 
@@ -546,6 +593,7 @@ def create(**kwargs):
     else:
         kwargs["roles"] = roles
 
+    deferred_destinations = defer_acm_renewal_destinations(kwargs)
     if cert_body:
         cert = Certificate(**kwargs)
         kwargs["creator"].certificates.append(cert)
@@ -557,6 +605,8 @@ def create(**kwargs):
     cert.authority = kwargs["authority"]
 
     database.commit()
+
+    upload_saved_renewal(cert, deferred_destinations)
 
     if isinstance(cert, Certificate):
         certificate_issued.send(certificate=cert, authority=cert.authority)

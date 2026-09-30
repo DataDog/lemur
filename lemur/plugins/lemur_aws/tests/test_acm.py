@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from lemur.tests.vectors import (
+    CSR_STR,
     INTERMEDIATE_CERT_STR,
     ROOTCA_CERT_STR,
     SAN_CERT_KEY,
@@ -690,3 +691,166 @@ def test_only_acm_source_includes_replaced_certificates(app, plugin_name):
     existing.assert_called_once_with(
         1, include_replaced=plugin_name == "aws-acm-source"
     )
+
+
+@pytest.mark.parametrize("entry_point", ["create", "upload", "acme"])
+@pytest.mark.parametrize("failure", ["later_destination", "commit_after_acm"])
+def test_acm_renewal_survives_delivery_failure(
+    app, session, authority, renewal_certificates, entry_point, failure
+):
+    from lemur import database
+    from lemur.certificates import service
+    from lemur.certificates.models import Certificate
+    from lemur.pending_certificates import service as pending_service
+    from lemur.plugins.base import plugins
+    from lemur.plugins.lemur_aws import acm
+    from lemur.plugins.lemur_aws.plugin import ACMDestinationPlugin
+    from lemur.tests.factories import (
+        CertificateFactory,
+        DestinationFactory,
+        RoleFactory,
+        UserFactory,
+    )
+
+    old_body, new_body = (
+        renewal_certificates(30).strip(),
+        renewal_certificates(90).strip(),
+    )
+    user = UserFactory()
+    RoleFactory(name=user.email)
+    old = CertificateFactory(body=old_body, chain=None, authority=authority, user=user)
+    options = deepcopy(ACMDestinationPlugin.options)
+    acm_destination = DestinationFactory(
+        plugin_name="aws-acm-destination", options=options
+    )
+    other_destination = DestinationFactory(options=[])
+    unattempted_destination = DestinationFactory(options=[])
+    session.commit()
+    old_id, authority_id = old.id, authority.id
+    destinations = [acm_destination, other_destination, unattempted_destination]
+    destination_ids = [destination.id for destination in destinations]
+    inventory = [{"arn": "arn:stable", "body": old_body}]
+    client = mock.Mock()
+    other_plugin = mock.Mock(requires_key=True)
+    pending = None
+    real_commit = database.commit
+
+    def accept_import(**kwargs):
+        # Use a separate connection to prove persistence, not just an ORM flush.
+        from sqlalchemy import select
+
+        with database.db.engine.connect() as connection:
+            saved = connection.execute(
+                select([Certificate.id]).where(Certificate.body == new_body)
+            ).scalar()
+        assert saved is not None
+        inventory[0]["body"] = kwargs["Certificate"].decode()
+        return {"CertificateArn": "arn:stable"}
+
+    def fail_commit_after_upload():
+        if failure == "commit_after_acm" and inventory[0]["body"] == new_body:
+            raise RuntimeError("simulated database failure")
+        real_commit()
+
+    client.import_certificate.side_effect = accept_import
+    if failure == "later_destination":
+        other_plugin.upload.side_effect = RuntimeError("simulated destination failure")
+    uploader = acm.upload_cert.__wrapped__
+
+    def upload_to_fake_acm(*args, **kwargs):
+        return uploader(*args, **kwargs, client=client)
+
+    data = dict(
+        body=new_body,
+        private_key=SAN_CERT_KEY,
+        chain=None,
+        owner=user.email,
+        creator=user,
+        authority=authority,
+        replaces=[old],
+        destinations=destinations,
+        common_name="example.com",
+        key_type="RSA2048",
+        rotation=True,
+    )
+    with (
+        mock.patch.object(service, "create_certificate_roles", return_value=[]),
+        mock.patch.object(
+            plugins,
+            "get",
+            side_effect=lambda name: (
+                ACMDestinationPlugin()
+                if name == "aws-acm-destination"
+                else other_plugin
+            ),
+        ),
+        mock.patch.object(acm, "_get_imported_certificates", return_value=inventory),
+        mock.patch.object(acm, "upload_cert", side_effect=upload_to_fake_acm),
+    ):
+        if entry_point == "acme":
+            with (
+                mock.patch.dict(app.config, ACME_DISABLE_AUTORESOLVE=True),
+                mock.patch.object(
+                    service,
+                    "mint",
+                    return_value=(None, SAN_CERT_KEY, None, "pending-order", CSR_STR),
+                ),
+            ):
+                pending = service.create(**data)
+                session.refresh(pending)
+
+        with (
+            mock.patch.object(database, "commit", side_effect=fail_commit_after_upload),
+            mock.patch.object(
+                service,
+                "mint",
+                return_value=(new_body, SAN_CERT_KEY, None, "issued-order", None),
+            ),
+            pytest.raises(
+                RuntimeError, match="Do not reissue another certificate"
+            ) as error,
+        ):
+            if entry_point == "acme":
+                pending_service.create_certificate(
+                    pending,
+                    dict(body=new_body, chain=None, external_id="issued-order"),
+                    user,
+                )
+            else:
+                getattr(service, entry_point)(**data)
+
+        assert client.import_certificate.call_count == 1, repr(error.value.__cause__)
+        assert "simulated" in str(error.value.__cause__), repr(error.value.__cause__)
+        session.expire_all()
+        saved = Certificate.query.filter_by(body=new_body).one()
+        assert saved.private_key == SAN_CERT_KEY.strip()
+        assert saved.authority_id == authority_id
+        assert [certificate.id for certificate in saved.replaces] == [old_id]
+        assert f"certificate ID {saved.id}" in str(error.value)
+        assert "Delivery will not be retried automatically" in str(error.value)
+        expected_ids = (
+            destination_ids[1:] if failure == "later_destination" else destination_ids
+        )
+        for destination_id in expected_ids:
+            assert f"ID {destination_id}" in str(error.value)
+        assert [destination.id for destination in saved.destinations] == (
+            [destination_ids[0]] if failure == "later_destination" else []
+        )
+        if pending is not None:
+            assert pending.resolved
+            assert pending.resolved_cert_id == saved.id
+
+        # Retry delivery using the saved material, without calling the issuer again.
+        other_plugin.upload.side_effect = None
+        missing = [
+            destination
+            for destination in destinations
+            if destination.id in expected_ids
+        ]
+        service.upload_saved_renewal(saved, missing)
+        assert {destination.id for destination in saved.destinations} == set(
+            destination_ids
+        )
+        assert Certificate.query.filter_by(body=new_body).count() == 1
+        assert inventory[0]["body"] == new_body
+        client.import_certificate.assert_called_once()
