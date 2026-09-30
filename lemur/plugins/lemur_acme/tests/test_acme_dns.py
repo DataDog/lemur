@@ -359,6 +359,8 @@ class TestAcmeDns(unittest.TestCase):
         assert dyn
         azure = provider.get_dns_provider("azure")
         assert azure
+        gcp = provider.get_dns_provider("gcp")
+        assert gcp
 
     def test_autodetect_dns_providers_rejects_ambiguous_match(self):
         first_provider = Mock()
