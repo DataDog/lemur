@@ -108,13 +108,15 @@ def create_certificate(pending_certificate, certificate, user):
     :arg user: User that called this function, used as 'creator' of the certificate if it does not have an owner
     """
     certificate["owner"] = pending_certificate.owner
+    # Schema validation may commit and expire the pending object's scalar fields.
+    pending_data = dict(vars(pending_certificate))
     data, errors = CertificateUploadInputSchema().load(certificate)
     if errors:
         raise Exception(
             "Unable to create certificate: {reasons}".format(reasons=errors)
         )
 
-    data.update(vars(pending_certificate))
+    data.update(pending_data)
     # Copy relationships, vars doesn't copy this without explicit fields
     data["notifications"] = list(pending_certificate.notifications)
     data["destinations"] = list(pending_certificate.destinations)
@@ -122,6 +124,7 @@ def create_certificate(pending_certificate, certificate, user):
     data["roles"] = list(pending_certificate.roles)
     data["replaces"] = list(pending_certificate.replaces)
     data["rotation_policy"] = pending_certificate.rotation_policy
+    data["authority"] = pending_certificate.authority
 
     # Replace external id and chain with the one fetched from source
     data["external_id"] = certificate["external_id"]
@@ -137,7 +140,14 @@ def create_certificate(pending_certificate, certificate, user):
         del data["name"]
     data["creator"] = creator
 
+    deferred_destinations = certificate_service.defer_acm_renewal_destinations(data)
     cert = certificate_service.import_certificate(**data)
+    if deferred_destinations:
+        # Issuance is complete even if delivery fails. Do not recreate it next pass.
+        pending_certificate.resolved_cert_id = cert.id
+        pending_certificate.resolved = True
+        database.update(pending_certificate)
+        certificate_service.upload_saved_renewal(cert, deferred_destinations)
     database.update(cert)
 
     metrics.send(
