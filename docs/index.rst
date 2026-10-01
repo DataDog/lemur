@@ -20,6 +20,7 @@ User Guide
     :maxdepth: 2
 
     guide/index
+    guide/envoy-endpoints
 
 Administration
 --------------
@@ -69,5 +70,4 @@ Reference
 
     changelog
     license/index
-
 

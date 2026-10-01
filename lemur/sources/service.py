@@ -18,6 +18,7 @@ from sqlalchemy_utils import ArrowType
 
 from lemur import database
 from lemur.sources.models import Source
+from lemur.sources import envoy
 from lemur.certificates.models import Certificate
 from lemur.certificates import service as certificate_service
 from lemur.endpoints import service as endpoint_service
@@ -75,6 +76,8 @@ def sync_update_destination(certificate, source):
 
 
 def sync_endpoints(source):
+    if source.plugin_name == "fabric-source":
+        return sync_envoy_endpoints(source)
     new, updated, updated_by_hash = 0, 0, 0
     current_app.logger.debug("Retrieving endpoints from {0}".format(source.label))
     s = plugins.get(source.plugin_name)
@@ -192,6 +195,23 @@ def sync_endpoints(source):
             updated += 1
 
     return new, updated, updated_by_hash
+
+
+def sync_envoy_endpoints(source):
+    # Discovery and hash resolution must complete before any endpoint writes.
+    endpoints = envoy.get_endpoints(source)
+    new, updated = 0, 0
+    for endpoint in endpoints:
+        existing = endpoint_service.get_by_name_and_source(endpoint["name"], source.label)
+        endpoint["policy"] = endpoint_service.get_or_create_policy(**endpoint["policy"])
+        endpoint["source"] = source
+        if existing:
+            endpoint_service.update(existing.id, **endpoint)
+            updated += 1
+        else:
+            endpoint_service.create(**endpoint)
+            new += 1
+    return new, updated, 0
 
 
 def get_cert_for_endpoint(source, endpoint, certificate_name):
