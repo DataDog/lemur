@@ -4,11 +4,12 @@ Tests for the rollback of a failed certificate reissue (CLOUDR-2368).
 A failed reissue must not leave a new certificate in the database. It must also
 upload the old certificate again to every destination that the new one reached.
 """
-import inspect
+import sys
 from unittest.mock import patch
 
 import pytest
 from flask import current_app
+from sqlalchemy import event
 
 from lemur import database
 from lemur.certificates import service
@@ -67,7 +68,26 @@ def _reissue_metrics(metrics_mock):
 
 @pytest.fixture
 def env(session, destination_plugin, issuer_plugin, crypto_authority, logged_in_user):
-    return session, crypto_authority
+    """
+    The code under test commits more than once. The first commit ends the savepoint
+    of the `session` fixture, and the next commit would save data for real.
+    Start a new savepoint after each one, so no data is saved for real.
+    At the end, close the session. This rolls back the outer transaction too,
+    which the rollback of the `session` fixture does not do.
+    """
+
+    def restart_savepoint(sess, transaction):
+        if transaction.nested and not transaction._parent.nested:
+            # A real commit expires all objects. A savepoint release does not.
+            sess.expire_all()
+            sess.begin_nested()
+
+    event.listen(session, "after_transaction_end", restart_savepoint)
+    # A fixture above this one may have committed already, and this used the savepoint.
+    session.begin_nested()
+    yield session, crypto_authority
+    event.remove(session, "after_transaction_end", restart_savepoint)
+    session.close()
 
 
 def test_failed_reissue_is_rolled_back_before_next_cert(env):
@@ -158,10 +178,10 @@ def test_commit_failure_restores_all_destinations(env):
     real_commit = database.commit
 
     def failing_commit():
-        callers = [(f.function, f.filename) for f in inspect.stack()]
-        if any(
-            fn == "create" and filename.endswith("certificates/service.py")
-            for fn, filename in callers
+        # Fail only when create() itself commits, not when a helper commits (new role).
+        caller = sys._getframe(1)
+        if caller.f_code.co_name == "create" and caller.f_code.co_filename.endswith(
+            "certificates/service.py"
         ):
             raise RuntimeError("commit failed")
         return real_commit()
