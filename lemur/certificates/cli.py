@@ -24,6 +24,9 @@ from lemur.certificates.models import Certificate
 from lemur.certificates.schemas import CertificateOutputSchema
 from lemur.certificates.service import (
     reissue_certificate,
+    get_reissue_failure_step,
+    mark_reissue_failure,
+    restore_destinations,
     get_certificate_primitives,
     get_all_pending_reissue,
     get_by_name,
@@ -202,6 +205,7 @@ def request_reissue(certificate, notify, commit):
     """
     status = FAILURE_METRIC_STATUS
     notify = notify and certificate.notify
+    certificate_name = certificate.name
     try:
         print("[+] {0} is eligible for re-issuance".format(certificate.name))
 
@@ -222,11 +226,47 @@ def request_reissue(certificate, notify, commit):
         status = SUCCESS_METRIC_STATUS
 
     except Exception as e:
-        capture_exception(extra={"certificate_name": str(certificate.name)})
-        current_app.logger.exception(
-            f"Error reissuing certificate: {certificate.name}", exc_info=True
+        # Read the step and the destinations before the rollback expires the objects.
+        step = get_reissue_failure_step(e)
+        dests = list(getattr(e, "modified_destinations", []))
+        failed_destination = getattr(e, "failed_destination", None)
+        if failed_destination is not None:
+            dests.append(failed_destination)
+        current_app.logger.error(
+            {
+                "message": "Reissue failed at this step",
+                "certificate": certificate_name,
+                "step": step,
+                "error": f"{type(e).__name__}: {e}",
+            }
         )
-        print(f"[!] Failed to reissue certificate: {certificate.name}. Reason: {e}")
+        current_app.logger.info(
+            {
+                "message": "Rolling back database session",
+                "certificate": certificate_name,
+            }
+        )
+        database.rollback()
+        if dests:
+            try:
+                restore_destinations(certificate, dests)
+            except Exception:
+                current_app.logger.exception(
+                    f"Error restoring destinations for certificate: {certificate_name}"
+                )
+        else:
+            current_app.logger.info(
+                {
+                    "message": "No destination was changed. No destination rollback needed",
+                    "certificate": certificate_name,
+                }
+            )
+        mark_reissue_failure(certificate, step, e)
+        capture_exception(extra={"certificate_name": str(certificate_name)})
+        current_app.logger.exception(
+            f"Error reissuing certificate: {certificate_name}", exc_info=True
+        )
+        print(f"[!] Failed to reissue certificate: {certificate_name}. Reason: {e}")
         if notify:
             send_reissue_failed_notification(certificate)
 
@@ -234,7 +274,7 @@ def request_reissue(certificate, notify, commit):
         "certificate_reissue",
         "counter",
         1,
-        metric_tags={"status": status, "certificate": certificate.name},
+        metric_tags={"status": status, "certificate": certificate_name},
     )
     return status == SUCCESS_METRIC_STATUS
 

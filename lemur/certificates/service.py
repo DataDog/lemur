@@ -25,7 +25,12 @@ from sqlalchemy.sql.expression import false, true
 
 from lemur import database
 from lemur.authorities.models import Authority
-from lemur.certificates.models import Certificate, CertificateAssociation
+from lemur.certificates.models import (
+    Certificate,
+    CertificateAssociation,
+    _datacenter_from_description,
+    update_destinations,
+)
 from lemur.certificates.schemas import CertificateOutputSchema, CertificateInputSchema
 from lemur.common.utils import (
     generate_private_key,
@@ -500,6 +505,134 @@ def upload(**kwargs):
     return cert
 
 
+REISSUE_FAILURE_NOTE_RE = re.compile(r"\s*\[Lemur reissue failed:[^\]]*\]")
+DESCRIPTION_MAX_LENGTH = 1024
+
+
+def strip_reissue_failure_note(description):
+    """
+    Remove the reissue failure note from a description.
+    """
+    if not description:
+        return description
+    return REISSUE_FAILURE_NOTE_RE.sub("", description).strip()
+
+
+def get_reissue_failure_step(error):
+    """
+    Return a short text that says where a reissue failed.
+    The exception carries markers that are set by the destination listener
+    and by create().
+    """
+    failed_destination = getattr(error, "failed_destination", None)
+    if failed_destination is not None:
+        return f"upload to destination {failed_destination.label}"
+    if hasattr(error, "modified_destinations"):
+        return "save of the new certificate to the database"
+    return "issue of the new certificate, before any destination upload"
+
+
+def mark_reissue_failure(certificate, step, error):
+    """
+    Write a note in the description of the old certificate that says the
+    reissue failed. The new certificate does not exist after the rollback,
+    so the old certificate is the only place for this note.
+    A new note replaces the old one, and the description stays within its
+    column limit. This function never raises.
+
+    :param certificate: old certificate
+    :param step: text from get_reissue_failure_step
+    :param error: the exception
+    :return: True if the note was saved
+    """
+    try:
+        reason = f"{type(error).__name__}: {error}"
+        reason = reason.replace("]", ")").replace("\n", " ")[:200]
+        note = (
+            f"[Lemur reissue failed: {arrow.utcnow().format('YYYY-MM-DD HH:mm')} UTC, "
+            f"step: {step}, error: {reason}. This certificate is still in use.]"
+        )
+        base = strip_reissue_failure_note(certificate.description) or ""
+        room = DESCRIPTION_MAX_LENGTH - len(note) - 1
+        base = base[: max(room, 0)]
+        certificate.description = f"{base} {note}".strip()
+        database.update(certificate)
+        return True
+    except Exception:
+        database.rollback()
+        current_app.logger.error(
+            {
+                "message": "Could not save the reissue failure note",
+                "certificate": getattr(certificate, "name", None),
+            },
+            exc_info=True,
+        )
+        return False
+
+
+def restore_destinations(certificate, destinations):
+    """
+    Upload the given (old) certificate again to each destination.
+    One failed restore does not stop the others. This function never raises.
+
+    :param certificate: old certificate to upload again
+    :param destinations: list of Destination objects
+    :return: list of destinations that failed to restore
+    """
+    failed = []
+    unique = {}
+    for destination in destinations:
+        unique.setdefault(destination.id, destination)
+    name = getattr(certificate, "name", None)
+    for destination in unique.values():
+        label = getattr(destination, "label", None)
+        metric_tags = {"certificate": name, "destination": label}
+        datacenter = _datacenter_from_description(
+            getattr(destination, "description", None)
+        )
+        if datacenter:
+            metric_tags["datacenter"] = datacenter
+        current_app.logger.info(
+            {
+                "message": "Rolling back destination: upload the old certificate again",
+                "certificate": name,
+                "destination": label,
+            }
+        )
+        try:
+            update_destinations(certificate, destination, None)
+            metric_tags["status"] = SUCCESS_METRIC_STATUS
+            current_app.logger.info(
+                {
+                    "message": "Rolled back destination",
+                    "certificate": name,
+                    "destination": label,
+                }
+            )
+        except Exception:
+            metric_tags["status"] = FAILURE_METRIC_STATUS
+            failed.append(destination)
+            try:
+                current_app.logger.error(
+                    {
+                        "message": "Failed to restore certificate to destination",
+                        "certificate": name,
+                        "destination": label,
+                    },
+                    exc_info=True,
+                )
+                capture_exception()
+            except Exception:
+                pass
+        try:
+            metrics.send(
+                "destination_restore", "counter", 1, metric_tags=metric_tags
+            )
+        except Exception:
+            pass
+    return failed
+
+
 def create(**kwargs):
     """
     Creates a new certificate.
@@ -555,7 +688,12 @@ def create(**kwargs):
 
     cert.authority = kwargs["authority"]
 
-    database.commit()
+    try:
+        database.commit()
+    except Exception as e:
+        if isinstance(cert, Certificate) and not hasattr(e, "modified_destinations"):
+            e.modified_destinations = list(getattr(cert, "_modified_destinations", []))
+        raise
 
     if isinstance(cert, Certificate):
         certificate_issued.send(certificate=cert, authority=cert.authority)
@@ -1005,6 +1143,8 @@ def reissue_certificate(certificate, notify=None, replace=None, user=None):
     # as part of reissue
     reissue_message_prefix = "Reissued by Lemur for cert ID "
     reissue_message = re.compile(f"{reissue_message_prefix}([0-9]+)")
+    # A reissue failure note on the old certificate must not pass to the new one
+    primitives["description"] = strip_reissue_failure_note(primitives["description"])
     if primitives["description"]:
         match = reissue_message.search(primitives["description"])
         if match:

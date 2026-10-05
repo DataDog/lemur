@@ -520,8 +520,13 @@ def update_destinations(target, value, initiator):
                 value.options,
             )
             status = SUCCESS_METRIC_STATUS
-    except Exception:
+            if not hasattr(target, "_modified_destinations"):
+                target._modified_destinations = []
+            target._modified_destinations.append(value)
+    except Exception as e:
         capture_exception()
+        e.failed_destination = value
+        e.modified_destinations = list(getattr(target, "_modified_destinations", []))
         raise
     finally:
         metric_tags = {
