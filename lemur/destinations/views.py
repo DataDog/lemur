@@ -22,7 +22,6 @@ from lemur.destinations.schemas import (
     destination_output_schema,
 )
 
-
 mod = Blueprint("destinations", __name__)
 api = Api(mod)
 
@@ -352,6 +351,40 @@ class Destinations(AuthenticatedResource):
         return {"result": True}
 
 
+class DestinationCheck(AuthenticatedResource):
+    @admin_permission.require(http_exception=403)
+    def post(self, destination_id):
+        """Check a saved destination without changing it or uploading certificates."""
+        destination = service.get(destination_id)
+        if destination is None:
+            return {"message": "Destination not found"}, 404
+
+        # External plugins may not inherit Lemur's DestinationPlugin base class.
+        check = getattr(destination.plugin, "check_connection", None)
+        if check is None:
+            return {
+                "message": "Connectivity check is not supported for this destination"
+            }, 501
+        try:
+            check(destination.options)
+        except NotImplementedError:
+            return {
+                "message": "Connectivity check is not supported for this destination"
+            }, 501
+        except TimeoutError:
+            return {
+                "reachable": False,
+                "message": "Destination connectivity check timed out",
+            }, 504
+        except Exception:
+            # Plugin exceptions can contain credentials or upstream response bodies.
+            return {
+                "reachable": False,
+                "message": "Destination connectivity check failed",
+            }, 502
+        return {"reachable": True}, 200
+
+
 class CertificateDestinations(AuthenticatedResource):
     """Defines the 'certificate/<int:certificate_id/destinations'' endpoint"""
 
@@ -449,3 +482,8 @@ api.add_resource(
     endpoint="certificateDestinations",
 )
 api.add_resource(DestinationsStats, "/destinations/stats", endpoint="destinationStats")
+api.add_resource(
+    DestinationCheck,
+    "/destinations/<int:destination_id>/check",
+    endpoint="destinationCheck",
+)
