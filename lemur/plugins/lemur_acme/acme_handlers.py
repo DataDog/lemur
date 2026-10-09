@@ -39,6 +39,7 @@ from lemur.plugins.lemur_acme import (
     azure,
     cloudflare,
     dyn,
+    gcp,
     route53,
     ultradns,
     powerdns,
@@ -354,7 +355,7 @@ class AcmeDnsHandler(AcmeHandler):
 
     @staticmethod
     def get_dns_provider_context(dns_provider, options):
-        if dns_provider.provider_type == "azure":
+        if dns_provider.provider_type in {"azure", "gcp"}:
             return options
         return options.get("account_id")
 
@@ -401,6 +402,7 @@ class AcmeDnsHandler(AcmeHandler):
             "azure": azure,
             "cloudflare": cloudflare,
             "dyn": dyn,
+            "gcp": gcp,
             "route53": route53,
             "ultradns": ultradns,
             "powerdns": powerdns,
