@@ -278,3 +278,27 @@ def test_failure_note_stays_within_column_limit(env):
     assert service.mark_reissue_failure(cert, "step", RuntimeError("e" * 500))
     assert len(cert.description) <= 1024
     assert "[Lemur reissue failed:" in cert.description
+
+
+def test_modified_destinations_include_the_failed_destination(env):
+    """The list must be complete by itself, without help from the exception handler."""
+    from lemur.certificates.models import update_destinations
+
+    session, authority = env
+    dest_a = _make_destination(session, "A")
+    dest_b = _make_destination(session, "B")
+    cert = _make_cert(session, authority)
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        if _tag(options) == "B":
+            raise RuntimeError("destination B is down")
+
+    with patch(PLUGIN_UPLOAD, upload):
+        update_destinations(cert, dest_a, None)
+        with pytest.raises(RuntimeError) as error:
+            update_destinations(cert, dest_b, None)
+
+    # The failed destination is in the list on the certificate and on the exception.
+    assert cert._modified_destinations == [dest_a, dest_b]
+    assert error.value.modified_destinations == [dest_a, dest_b]
+    assert error.value.failed_destination == dest_b

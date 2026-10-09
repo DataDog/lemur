@@ -487,6 +487,17 @@ def _datacenter_from_description(description):
         return None
 
 
+def _record_modified_destination(target, value):
+    """
+    Remember a destination that got an upload, or may have got one.
+    A reissue that fails uses this list to upload the old certificate again.
+    """
+    if not hasattr(target, "_modified_destinations"):
+        target._modified_destinations = []
+    if value not in target._modified_destinations:
+        target._modified_destinations.append(value)
+
+
 @event.listens_for(Certificate.destinations, "append")
 def update_destinations(target, value, initiator):
     """
@@ -520,13 +531,15 @@ def update_destinations(target, value, initiator):
                 value.options,
             )
             status = SUCCESS_METRIC_STATUS
-            if not hasattr(target, "_modified_destinations"):
-                target._modified_destinations = []
-            target._modified_destinations.append(value)
+            _record_modified_destination(target, value)
     except Exception as e:
         capture_exception()
+        # An upload that fails can still change the destination, for example if the
+        # reply is lost. So a failed destination is a modified destination too.
+        _record_modified_destination(target, value)
+        # `failed_destination` is only for logs. The rollback uses `modified_destinations`.
         e.failed_destination = value
-        e.modified_destinations = list(getattr(target, "_modified_destinations", []))
+        e.modified_destinations = list(target._modified_destinations)
         raise
     finally:
         metric_tags = {

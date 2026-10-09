@@ -229,9 +229,6 @@ def request_reissue(certificate, notify, commit):
         # Read the step and the destinations before the rollback expires the objects.
         step = get_reissue_failure_step(e)
         dests = list(getattr(e, "modified_destinations", []))
-        failed_destination = getattr(e, "failed_destination", None)
-        if failed_destination is not None:
-            dests.append(failed_destination)
         current_app.logger.error(
             {
                 "message": "Reissue failed at this step",
