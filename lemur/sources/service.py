@@ -336,7 +336,9 @@ def sync_certificates(source, user):
     )
 
     existing_certificates_with_source_by_id = {}
-    for e in certificate_service.get_all_valid_certificates_with_source(source.id):
+    for e in certificate_service.get_all_valid_certificates_with_source(
+        source.id, include_replaced=getattr(s, "sync_replaced_certificates", False)
+    ):
         existing_certificates_with_source_by_id[e.id] = e
 
     for certificate in certificates:
