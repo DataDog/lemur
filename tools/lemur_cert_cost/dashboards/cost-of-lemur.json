@@ -1,0 +1,230 @@
+{
+  "title": "Cost of Lemur",
+  "description": "CA-agnostic cost of certs managed by Lemur. Sliced by the `ca` tag so DigiCert / Sectigo / Let's Encrypt / ACM each appear. Metrics emitted by the lemur-cert-cost exporter.",
+  "widgets": [
+    {
+      "definition": {
+        "title": "Total Cost / month",
+        "type": "query_value",
+        "requests": [
+          {
+            "q": "sum:lemur.cert.cost.monthly{}",
+            "aggregator": "avg"
+          }
+        ],
+        "autoscale": true,
+        "precision": 2
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "title": "Total Cost / year",
+        "type": "query_value",
+        "requests": [
+          {
+            "q": "sum:lemur.cert.cost.annual{}",
+            "aggregator": "avg"
+          }
+        ],
+        "autoscale": true,
+        "precision": 2
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "title": "Wasted (orphaned) / month",
+        "type": "query_value",
+        "requests": [
+          {
+            "q": "sum:lemur.cert.cost.orphaned{}",
+            "aggregator": "avg"
+          }
+        ],
+        "autoscale": true,
+        "precision": 2
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "title": "Monthly cost by CA ($/mo)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "q": "sum:lemur.cert.cost.monthly_by_ca{*}.as_count()",
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "scale": "linear"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 4
+      }
+    },
+    {
+      "definition": {
+        "title": "Monthly cost by env ($/mo)",
+        "type": "timeseries",
+        "requests": [
+          {
+            "q": "sum:lemur.cert.cost.monthly{*}.as_count()",
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "scale": "linear"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 4
+      }
+    },
+    {
+      "definition": {
+        "title": "Cost by CA",
+        "type": "toplist",
+        "requests": [
+          {
+            "q": "top(sum:lemur.cert.cost.monthly_by_ca{*})",
+            "style": {
+              "palette": "dog_classic"
+            },
+            "orderby": "value",
+            "order": "top"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 4
+      }
+    },
+    {
+      "definition": {
+        "title": "Cost by Owner",
+        "type": "toplist",
+        "requests": [
+          {
+            "q": "top(sum:lemur.cert.cost.monthly_by_owner{*})",
+            "style": {
+              "palette": "dog_classic"
+            },
+            "orderby": "value",
+            "order": "top"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 4
+      }
+    },
+    {
+      "definition": {
+        "title": "Cost by DC Zone",
+        "type": "toplist",
+        "requests": [
+          {
+            "q": "top(sum:lemur.cert.cost.monthly_by_zone{*})",
+            "style": {
+              "palette": "dog_classic"
+            },
+            "orderby": "value",
+            "order": "top"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 4
+      }
+    },
+    {
+      "definition": {
+        "title": "Active certs by CA",
+        "type": "timeseries",
+        "requests": [
+          {
+            "q": "sum:lemur.cert.count{*}.as_count()",
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "scale": "linear"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 4
+      }
+    },
+    {
+      "definition": {
+        "title": "Certs issued",
+        "type": "timeseries",
+        "requests": [
+          {
+            "q": "sum:lemur.cert.issued.count{*}.as_count().fill(null)",
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "scale": "linear"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 4
+      }
+    }
+  ],
+  "layout_type": "free",
+  "template_variables": [
+    {
+      "name": "ca",
+      "prefix": "ca",
+      "default": "*"
+    },
+    {
+      "name": "env",
+      "prefix": "env",
+      "default": "*"
+    }
+  ],
+  "notify_list": []
+}

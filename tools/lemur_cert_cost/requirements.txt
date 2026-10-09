@@ -1,0 +1,5 @@
+requests>=2.31
+# dev
+pytest>=7
+# statsd mode (optional; uncomment if you use --mode statsd)
+# statsd>=3.3
