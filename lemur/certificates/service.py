@@ -546,11 +546,14 @@ def mark_reissue_failure(certificate, step, error):
     :return: True if the note was saved
     """
     try:
-        reason = f"{type(error).__name__}: {error}"
-        reason = reason.replace("]", ")").replace("\n", " ")[:200]
+        # The note ends with "]", and the regex that removes it stops at the first "]".
+        # So remove "]" and new lines from text that comes from users, like a label.
+        step = str(step).replace("]", ")").replace("\n", " ")
+        # Write the error type only. The error message can be long, and it is in the logs.
         note = (
             f"[Lemur reissue failed: {arrow.utcnow().format('YYYY-MM-DD HH:mm')} UTC, "
-            f"step: {step}, error: {reason}. This certificate is still in use.]"
+            f"step: {step}, error type: {type(error).__name__}. "
+            "Details are in the Lemur logs. This certificate is still in use.]"
         )
         base = strip_reissue_failure_note(certificate.description) or ""
         room = DESCRIPTION_MAX_LENGTH - len(note) - 1

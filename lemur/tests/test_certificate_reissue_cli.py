@@ -135,6 +135,8 @@ def test_failed_reissue_is_rolled_back_before_next_cert(env):
     description = Certificate.query.get(first_id).description
     assert "[Lemur reissue failed:" in description
     assert f"upload to destination {dest_1.label}" in description
+    assert "error type: RuntimeError" in description
+    assert "destination is down" not in description  # the message is in the logs only
 
 
 def test_failed_upload_restores_modified_and_failed_destinations(env):
@@ -275,9 +277,11 @@ def test_failure_note_stays_within_column_limit(env):
     cert.description = "x" * 1024
     session.commit()
 
-    assert service.mark_reissue_failure(cert, "step", RuntimeError("e" * 500))
+    assert service.mark_reissue_failure(cert, "step", RuntimeError("e" * 5000))
     assert len(cert.description) <= 1024
     assert "[Lemur reissue failed:" in cert.description
+    assert "error type: RuntimeError" in cert.description
+    assert "eeee" not in cert.description
 
 
 def test_modified_destinations_include_the_failed_destination(env):
@@ -302,3 +306,15 @@ def test_modified_destinations_include_the_failed_destination(env):
     assert cert._modified_destinations == [dest_a, dest_b]
     assert error.value.modified_destinations == [dest_a, dest_b]
     assert error.value.failed_destination == dest_b
+
+
+def test_failure_note_is_removed_when_the_label_has_a_bracket(env):
+    session, authority = env
+    cert = _make_cert(session, authority)
+    cert.description = "my cert"
+    session.commit()
+
+    service.mark_reissue_failure(cert, "upload to destination a]b\nc", RuntimeError("x"))
+
+    assert "]" not in cert.description[: cert.description.rindex("]")]
+    assert service.strip_reissue_failure_note(cert.description) == "my cert"
