@@ -1,0 +1,320 @@
+"""
+Tests for the rollback of a failed certificate reissue (CLOUDR-2368).
+
+A failed reissue must not leave a new certificate in the database. It must also
+upload the old certificate again to every destination that the new one reached.
+"""
+import sys
+from unittest.mock import patch
+
+import pytest
+from flask import current_app
+from sqlalchemy import event
+
+from lemur import database
+from lemur.certificates import service
+from lemur.certificates.cli import request_reissue
+from lemur.certificates.models import Certificate
+from lemur.constants import FAILURE_METRIC_STATUS, SUCCESS_METRIC_STATUS
+from lemur.tests.factories import (
+    CertificateFactory,
+    DestinationFactory,
+    UserFactory,
+)
+
+PLUGIN_UPLOAD = "lemur.tests.plugins.destination_plugin.TestDestinationPlugin.upload"
+
+
+def _make_destination(session, tag):
+    destination = DestinationFactory(
+        options=[{"name": "tag", "type": "str", "value": tag}]
+    )
+    session.commit()
+    return destination
+
+
+def _make_cert(session, authority, destinations=()):
+    """Make a certificate. Uploads during setup are not recorded by the tests."""
+    cert = CertificateFactory(user=UserFactory(), authority=authority, destinations=[])
+    for destination in destinations:
+        cert.destinations.append(destination)
+    session.commit()
+    return cert
+
+
+def _tag(options):
+    for option in options or []:
+        if option.get("name") == "tag":
+            return option.get("value")
+    return None
+
+
+def _messages(logger_mock):
+    """Return the message text of each call to a mocked logger method."""
+    result = []
+    for call in logger_mock.call_args_list:
+        first = call.args[0] if call.args else ""
+        result.append(first.get("message", "") if isinstance(first, dict) else str(first))
+    return result
+
+
+def _reissue_metrics(metrics_mock):
+    return [
+        c.kwargs["metric_tags"]
+        for c in metrics_mock.send.call_args_list
+        if c.args and c.args[0] == "certificate_reissue"
+    ]
+
+
+@pytest.fixture
+def env(session, destination_plugin, issuer_plugin, crypto_authority, logged_in_user):
+    """
+    The code under test commits more than once. The first commit ends the savepoint
+    of the `session` fixture, and the next commit would save data for real.
+    Start a new savepoint after each one, so no data is saved for real.
+    At the end, close the session. This rolls back the outer transaction too,
+    which the rollback of the `session` fixture does not do.
+    """
+
+    def restart_savepoint(sess, transaction):
+        if transaction.nested and not transaction._parent.nested:
+            # A real commit expires all objects. A savepoint release does not.
+            sess.expire_all()
+            sess.begin_nested()
+
+    event.listen(session, "after_transaction_end", restart_savepoint)
+    # A fixture above this one may have committed already, and this used the savepoint.
+    session.begin_nested()
+    yield session, crypto_authority
+    event.remove(session, "after_transaction_end", restart_savepoint)
+    session.close()
+
+
+def test_failed_reissue_is_rolled_back_before_next_cert(env):
+    session, authority = env
+    dest_1 = _make_destination(session, "one")
+    dest_2 = _make_destination(session, "two")
+    first = _make_cert(session, authority, [dest_1])
+    second = _make_cert(session, authority, [dest_2])
+    first_id, first_name = first.id, first.name
+    second_id = second.id
+    old_names = {first.name, second.name}
+    state = {"failed": False}
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        # The first upload of a new certificate fails. All other uploads work.
+        if name not in old_names and not state["failed"]:
+            state["failed"] = True
+            raise RuntimeError("destination is down")
+
+    with patch(PLUGIN_UPLOAD, upload), patch(
+        "lemur.certificates.cli.metrics"
+    ) as metrics_mock, patch.object(current_app.logger, "error") as log_error, patch.object(
+        current_app.logger, "info"
+    ) as log_info:
+        request_reissue(first, False, True)
+        request_reissue(second, False, True)
+
+    # The failed replacement is not in the database.
+    assert Certificate.query.filter(Certificate.replaces.any(id=first_id)).count() == 0
+    assert Certificate.query.get(first_id).replaced == []
+    # The next reissue worked and kept its destination.
+    replacements = Certificate.query.filter(Certificate.replaces.any(id=second_id)).all()
+    assert len(replacements) == 1
+    assert [d.id for d in replacements[0].destinations] == [dest_2.id]
+
+    # The failure metric and the logs are still there.
+    tags = _reissue_metrics(metrics_mock)
+    assert tags[0] == {"status": FAILURE_METRIC_STATUS, "certificate": first_name}
+    assert tags[1]["status"] == SUCCESS_METRIC_STATUS
+    assert any("Reissue failed at this step" in m for m in _messages(log_error))
+    assert any("Rolling back database session" in m for m in _messages(log_info))
+    assert any("Rolling back destination" in m for m in _messages(log_info))
+
+    # The old certificate shows the failure in its description.
+    description = Certificate.query.get(first_id).description
+    assert "[Lemur reissue failed:" in description
+    assert f"upload to destination {dest_1.label}" in description
+    assert "error type: RuntimeError" in description
+    assert "destination is down" not in description  # the message is in the logs only
+
+
+def test_failed_upload_restores_modified_and_failed_destinations(env):
+    session, authority = env
+    dest_a = _make_destination(session, "A")
+    dest_b = _make_destination(session, "B")
+    dest_c = _make_destination(session, "C")
+    cert = _make_cert(session, authority, [dest_a, dest_b, dest_c])
+    old_name = cert.name
+    new_uploads = []
+    restores = []
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        if name == old_name:
+            restores.append(_tag(options))
+            return
+        new_uploads.append(_tag(options))
+        if _tag(options) == "B":
+            raise RuntimeError("destination B is down")
+
+    with patch(PLUGIN_UPLOAD, upload), patch("lemur.certificates.cli.metrics"):
+        request_reissue(cert, False, True)
+
+    # A worked and B failed. C was never reached, so it is not restored.
+    assert new_uploads == ["A", "B"]
+    assert sorted(restores) == ["A", "B"]
+
+
+def test_commit_failure_restores_all_destinations(env):
+    session, authority = env
+    dest_a = _make_destination(session, "A")
+    dest_b = _make_destination(session, "B")
+    cert = _make_cert(session, authority, [dest_a, dest_b])
+    old_name = cert.name
+    new_uploads = []
+    restores = []
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        (restores if name == old_name else new_uploads).append(_tag(options))
+
+    real_commit = database.commit
+
+    def failing_commit():
+        # Fail only when create() itself commits, not when a helper commits (new role).
+        caller = sys._getframe(1)
+        if caller.f_code.co_name == "create" and caller.f_code.co_filename.endswith(
+            "certificates/service.py"
+        ):
+            raise RuntimeError("commit failed")
+        return real_commit()
+
+    with patch(PLUGIN_UPLOAD, upload), patch("lemur.certificates.cli.metrics"), patch.object(
+        service.database, "commit", failing_commit
+    ):
+        request_reissue(cert, False, True)
+
+    # All uploads worked, then the commit failed. Every destination is restored.
+    assert sorted(new_uploads) == ["A", "B"]
+    assert sorted(restores) == ["A", "B"]
+    assert Certificate.query.filter(Certificate.replaces.any(id=cert.id)).count() == 0
+    assert "save of the new certificate to the database" in cert.description
+
+
+def test_failure_before_destinations_causes_no_restore(env):
+    session, authority = env
+    dest_a = _make_destination(session, "A")
+    cert = _make_cert(session, authority, [dest_a])
+    uploads = []
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        uploads.append(name)
+
+    with patch(PLUGIN_UPLOAD, upload), patch("lemur.certificates.cli.metrics"), patch(
+        "lemur.certificates.cli.reissue_certificate", side_effect=RuntimeError("CA down")
+    ), patch.object(current_app.logger, "info") as log_info:
+        request_reissue(cert, False, True)
+
+    assert uploads == []
+    assert any("No destination was changed" in m for m in _messages(log_info))
+    assert "issue of the new certificate, before any destination upload" in cert.description
+
+
+def test_failed_restore_does_not_stop_others_or_notification(env):
+    session, authority = env
+    dest_a = _make_destination(session, "A")
+    dest_b = _make_destination(session, "B")
+    cert = _make_cert(session, authority, [dest_a, dest_b])
+    cert.notify = True
+    session.commit()
+    old_name = cert.name
+    restores = []
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        if name == old_name:
+            restores.append(_tag(options))
+            if _tag(options) == "A":
+                raise RuntimeError("restore of A failed")
+            return
+        if _tag(options) == "B":
+            raise RuntimeError("destination B is down")
+
+    with patch(PLUGIN_UPLOAD, upload), patch(
+        "lemur.certificates.cli.metrics"
+    ) as metrics_mock, patch(
+        "lemur.certificates.cli.send_reissue_failed_notification"
+    ) as notify_mock:
+        request_reissue(cert, True, True)
+
+    assert sorted(restores) == ["A", "B"]
+    assert notify_mock.called
+    assert _reissue_metrics(metrics_mock)[0]["status"] == FAILURE_METRIC_STATUS
+
+
+def test_failure_note_is_replaced_and_not_copied_to_new_cert(env):
+    session, authority = env
+    cert = _make_cert(session, authority)
+    cert.description = "my cert"
+    session.commit()
+
+    service.mark_reissue_failure(cert, "first step", RuntimeError("one"))
+    service.mark_reissue_failure(cert, "second step", RuntimeError("two"))
+
+    # One note only. The new note replaces the old one.
+    assert cert.description.count("[Lemur reissue failed:") == 1
+    assert "second step" in cert.description
+    assert "first step" not in cert.description
+    assert cert.description.startswith("my cert ")
+
+    # The note does not pass to the new certificate.
+    new_cert = service.reissue_certificate(cert, replace=True)
+    assert "Lemur reissue failed" not in new_cert.description
+    assert new_cert.description.startswith(f"Reissued by Lemur for cert ID {cert.id}")
+
+
+def test_failure_note_stays_within_column_limit(env):
+    session, authority = env
+    cert = _make_cert(session, authority)
+    cert.description = "x" * 1024
+    session.commit()
+
+    assert service.mark_reissue_failure(cert, "step", RuntimeError("e" * 5000))
+    assert len(cert.description) <= 1024
+    assert "[Lemur reissue failed:" in cert.description
+    assert "error type: RuntimeError" in cert.description
+    assert "eeee" not in cert.description
+
+
+def test_modified_destinations_include_the_failed_destination(env):
+    """The list must be complete by itself, without help from the exception handler."""
+    from lemur.certificates.models import update_destinations
+
+    session, authority = env
+    dest_a = _make_destination(session, "A")
+    dest_b = _make_destination(session, "B")
+    cert = _make_cert(session, authority)
+
+    def upload(self, name, body, private_key, cert_chain, options, **kwargs):
+        if _tag(options) == "B":
+            raise RuntimeError("destination B is down")
+
+    with patch(PLUGIN_UPLOAD, upload):
+        update_destinations(cert, dest_a, None)
+        with pytest.raises(RuntimeError) as error:
+            update_destinations(cert, dest_b, None)
+
+    # The failed destination is in the list on the certificate and on the exception.
+    assert cert._modified_destinations == [dest_a, dest_b]
+    assert error.value.modified_destinations == [dest_a, dest_b]
+    assert error.value.failed_destination == dest_b
+
+
+def test_failure_note_is_removed_when_the_label_has_a_bracket(env):
+    session, authority = env
+    cert = _make_cert(session, authority)
+    cert.description = "my cert"
+    session.commit()
+
+    service.mark_reissue_failure(cert, "upload to destination a]b\nc", RuntimeError("x"))
+
+    assert "]" not in cert.description[: cert.description.rindex("]")]
+    assert service.strip_reissue_failure_note(cert.description) == "my cert"
