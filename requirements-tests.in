@@ -30,5 +30,5 @@ types-six
 types-tabulate
 
 # === Datadog-specific additions ===
-cryptography==43.0.1  # Must keep pinned for FIPS support (do not sync from upstream)
+cryptography==49.0.0  # Must keep pinned for FIPS support (do not sync from upstream)
 simplejson
