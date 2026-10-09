@@ -1401,6 +1401,10 @@ CERT_COST_PRICING = {
     "sectigo": {"OV": {"wildcard": 400, "fqdn": 135}, "DV": {"wildcard": 40, "fqdn": 40}, "EV": {"wildcard": 250, "fqdn": 250}},
     "letsencrypt": {"DV": {"wildcard": 0, "fqdn": 0}},
     "gov": {"OV": {"wildcard": 688, "fqdn": 338}, "DV": {"wildcard": 218, "fqdn": 218}, "EV": {"wildcard": 438, "fqdn": 438}},
+    # AWS/ACM-imported and unknown-internal authorities: counted but cost $0.
+    # Imported ACM certs are copies of already-tracked certs; pricing them as
+    # digicert would double-count spend. Free/private CAs cost nothing.
+    "aws": {"OV": {"wildcard": 0, "fqdn": 0}, "DV": {"wildcard": 0, "fqdn": 0}},
 }
 
 
@@ -1412,6 +1416,11 @@ def _cert_cost_ca(authority):
         return "letsencrypt"
     if any(k in name for k in ("gov", "fed", "ddog-gov")):
         return "gov"
+    # AWS/ACM/imported (and IAM/CloudFront) certs are destinations/copies of
+    # already-priced certs or free Amazon-issued certs: cost $0, still counted.
+    if any(k in name for k in ("aws", "acm", "iam", "cloudfront")):
+        return "aws"
+    # Everything else defaults to digicert (DigiCertCommercial, DigiCertCIS, ...).
     return "digicert"
 
 
