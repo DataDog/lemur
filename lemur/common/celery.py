@@ -1393,3 +1393,62 @@ def _check_dcv_expiration_deprecated():
     has drained (one deploy cycle).
     """
     _emit_dcv_expiration_metrics()
+
+
+# --- Certificate cost metrics (CA-agnostic): USD/yr per ca -> tier -> shape.
+CERT_COST_PRICING = {
+    "digicert": {"OV": {"wildcard": 688, "fqdn": 338}, "DV": {"wildcard": 218, "fqdn": 218}, "EV": {"wildcard": 438, "fqdn": 438}},
+    "sectigo": {"OV": {"wildcard": 400, "fqdn": 135}, "DV": {"wildcard": 40, "fqdn": 40}, "EV": {"wildcard": 250, "fqdn": 250}},
+    "letsencrypt": {"DV": {"wildcard": 0, "fqdn": 0}},
+    "gov": {"OV": {"wildcard": 688, "fqdn": 338}, "DV": {"wildcard": 218, "fqdn": 218}, "EV": {"wildcard": 438, "fqdn": 438}},
+    # AWS/ACM-imported and unknown-internal authorities: counted but cost $0.
+    # Imported ACM certs are copies of already-tracked certs; pricing them as
+    # digicert would double-count spend. Free/private CAs cost nothing.
+    "aws": {"OV": {"wildcard": 0, "fqdn": 0}, "DV": {"wildcard": 0, "fqdn": 0}},
+}
+
+
+def _cert_cost_ca(authority):
+    name = (authority or "").lower()
+    if "sectigo" in name or "comodo" in name:
+        return "sectigo"
+    if any(k in name for k in ("letsencrypt", "isrg", "acme")):
+        return "letsencrypt"
+    if any(k in name for k in ("gov", "fed", "ddog-gov")):
+        return "gov"
+    # AWS/ACM/imported (and IAM/CloudFront) certs are destinations/copies of
+    # already-priced certs or free Amazon-issued certs: cost $0, still counted.
+    if any(k in name for k in ("aws", "acm", "iam", "cloudfront")):
+        return "aws"
+    # Everything else defaults to digicert (DigiCertCommercial, DigiCertCIS, ...).
+    return "digicert"
+
+
+def _cert_cost_price(cert):
+    ca = _cert_cost_ca(cert.authority.name if cert.authority else None)
+    cn = (cert.cn or "").lower()
+    shape = "wildcard" if cn.startswith("*.") else "fqdn"
+    tier = "DV" if ca == "letsencrypt" else "OV"
+    return ca, CERT_COST_PRICING.get(ca, {}).get(tier, {}).get(shape, 0) or 0
+
+
+@celery_app.task(name="lemur.common.celery.publish_cert_cost_metrics", soft_time_limit=3600)
+def publish_cert_cost_metrics():
+    """Emit CA-agnostic cost/count/orphaned gauges for the active cert fleet.
+
+    Runs in-process (no Lemur HTTP client): prices each valid cert from the CA
+    pricing table and emits via metrics.send (statsd -> Datadog), tagged by CA.
+    """
+    monthly, count, orphaned = {}, {}, {}
+    for cert in certificate_service.get_all_valid_certs(None):  # None = all CAs, not expired/revoked
+        ca, price = _cert_cost_price(cert)
+        monthly[ca] = monthly.get(ca, 0) + price
+        count[ca] = count.get(ca, 0) + 1
+        if not cert.destinations and not getattr(cert, "endpoints", None) and not getattr(cert, "endpoints_assoc", None):
+            orphaned[ca] = orphaned.get(ca, 0) + price
+    for ca, total in monthly.items():
+        metrics.send("cert_cost.monthly", "gauge", round(total / 12, 2), metric_tags={"ca": ca})
+        metrics.send("cert_cost.count", "gauge", count[ca], metric_tags={"ca": ca})
+        if ca in orphaned:
+            metrics.send("cert_cost.orphaned", "gauge", round(orphaned[ca] / 12, 2), metric_tags={"ca": ca})
+    metrics.send("cert_cost.job", "counter", 1, metric_tags={"status": "success"})
