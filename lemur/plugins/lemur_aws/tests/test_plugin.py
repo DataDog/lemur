@@ -226,7 +226,11 @@ def test_get_elb_endpoints_v2_skips_gwlb_listeners():
         endpoints = get_elb_endpoints_v2(
             "123456789012",
             "us-east-1",
-            {"LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/gwy/gwlb/1", "LoadBalancerName": "gwlb", "DNSName": "gwlb.us-east-1.elb.amazonaws.com"},
+            {
+                "LoadBalancerArn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/gwy/gwlb/1",
+                "LoadBalancerName": "gwlb",
+                "DNSName": "gwlb.us-east-1.elb.amazonaws.com",
+            },
         )
 
     assert not mock_certs.called
@@ -236,11 +240,11 @@ def test_get_elb_endpoints_v2_skips_gwlb_listeners():
 def test_replace_sni_certificate_uses_old_certificate_path(app):
     from copy import deepcopy
 
-    from lemur.plugins.base import plugins
     from lemur.plugins.lemur_aws import elb as lemur_elb
+    from lemur.plugins.lemur_aws.plugin import AWSSourcePlugin
     from lemur.plugins.utils import set_plugin_option
 
-    aws_source = plugins.get("aws-source")
+    aws_source = AWSSourcePlugin()
     options = deepcopy(aws_source.options)
     set_plugin_option("accountNumber", "123456789012", options)
 
@@ -278,7 +282,7 @@ def test_replace_sni_certificate_uses_old_certificate_path(app):
         listener_arn="listener-arn",
         certificates=[
             {
-                "CertificateArn": "arn:aws:iam::123456789012:server-certificate/new-cert"
+                "CertificateArn": "arn:aws:iam::123456789012:server-certificate/cloudfront/new-cert"
             }
         ],
     )

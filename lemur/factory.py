@@ -307,6 +307,11 @@ def install_plugins(app):
         else:
             register(plugin)
 
+    if app.config.get("LEMUR_TEST_ENABLED", False):
+        from lemur.plugins.lemur_cryptography.plugin import CryptographyIssuerPlugin
+
+        register(CryptographyIssuerPlugin)
+
     # ensure that we have some way to notify
     with app.app_context():
         slug = app.config.get("LEMUR_DEFAULT_NOTIFICATION_PLUGIN", "email-notification")
