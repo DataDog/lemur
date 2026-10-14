@@ -20,7 +20,7 @@ from lemur import database
 from lemur.authorities.models import Authority
 from lemur.authorities.service import get as authorities_get_by_id
 from lemur.authorities.service import get_by_name as get_authority_by_name
-from lemur.certificates.models import Certificate
+from lemur.certificates.models import Certificate, _datacenter_from_description
 from lemur.certificates.schemas import CertificateOutputSchema
 from lemur.certificates.service import (
     reissue_certificate,
@@ -145,11 +145,13 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
     :return:
     """
     status = FAILURE_METRIC_STATUS
+    rotation_succeeded = False
     if commit:
         try:
             deployment_service.rotate_certificate(
                 endpoint, old_certificate, new_certificate
             )
+            rotation_succeeded = True
 
             if message:
                 send_rotation_notification(new_certificate)
@@ -177,6 +179,25 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
                     endpoint.name, new_certificate.name, e
                 )
             )
+
+    if commit:
+        # Stable tags let one successful retry clear earlier failures. Keep each
+        # predecessor separate so another SNI certificate cannot clear its alert.
+        check_tags = {
+            "endpoint": str(endpoint.dnsname),
+            "old_certificate_name": str(old_certificate.name),
+        }
+        if endpoint.source:
+            check_tags["source"] = str(endpoint.source.label)
+            datacenter = _datacenter_from_description(endpoint.source.description)
+            if datacenter:
+                check_tags["datacenter"] = datacenter
+        metrics.send(
+            "endpoint_rotation",
+            "service_check",
+            0 if rotation_succeeded else 2,
+            metric_tags=check_tags,
+        )
 
     metrics.send(
         "endpoint_rotation",
