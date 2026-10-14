@@ -52,7 +52,7 @@ from lemur.sources.cli import clean, sync, validate_sources
 fips.instance.must_enable_fips_if_needed()
 
 if current_app:
-    flask_app = current_app
+    flask_app = current_app._get_current_object()
 else:
     flask_app = create_app()
 
@@ -115,9 +115,9 @@ def report_worker_utilization(consumer):
 
 
 @worker_ready.connect
-def start_worker_utilization_reporting(sender, **kwargs):
+def start_worker_utilization_reporting(sender, interval=60, **kwargs):
     # Run in the parent process, not as a task that a full pool could block.
-    sender.timer.call_repeated(60, report_worker_utilization, (sender,))
+    sender.timer.call_repeatedly(interval, report_worker_utilization, (sender,))
 
 
 def is_task_active(fun, task_id, args):
