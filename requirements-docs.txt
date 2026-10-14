@@ -514,7 +514,7 @@ markdown-it-py==4.0.0
     # via
     #   -r requirements-tests.txt
     #   rich
-markupsafe==2.1.5
+markupsafe==3.0.3
     # via
     #   -r requirements-tests.txt
     #   jinja2
