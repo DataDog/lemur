@@ -117,7 +117,7 @@ def report_worker_utilization(consumer):
 @worker_ready.connect
 def start_worker_utilization_reporting(sender, **kwargs):
     # Run in the parent process, not as a task that a full pool could block.
-    sender.timer.call_repeated(60, report_worker_utilization, (sender,))
+    sender.timer.call_repeatedly(60, report_worker_utilization, (sender,))
 
 
 def is_task_active(fun, task_id, args):

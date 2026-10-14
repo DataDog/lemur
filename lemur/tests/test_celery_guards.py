@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from celery.exceptions import SoftTimeLimitExceeded
+from celery.utils.timer2 import Timer
 
 from lemur.dns_providers import cli as dns_cli
 
@@ -142,7 +143,8 @@ def test_worker_utilization_skips_empty_pool(celery_module):
 
 def test_worker_utilization_uses_parent_timer(celery_module):
     consumer = Mock()
+    consumer.timer = Mock(spec=Timer)
     celery_module.start_worker_utilization_reporting(consumer)
-    consumer.timer.call_repeated.assert_called_once_with(
+    consumer.timer.call_repeatedly.assert_called_once_with(
         60, celery_module.report_worker_utilization, (consumer,)
     )
