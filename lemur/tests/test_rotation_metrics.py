@@ -39,7 +39,7 @@ def test_rotation_gauge_follows_delivery_outcome(app, has_source):
     assert len([c for c in send.call_args_list if c.args[1] == "counter"]) == 6
 
 
-def test_rotation_dry_run_does_not_submit_gauge(app):
+def test_rotation_dry_run_reports_failure_without_upload(app):
     endpoint = SimpleNamespace(dnsname="test.invalid", source=None)
     with patch.object(
         cli.deployment_service, "rotate_certificate"
@@ -52,7 +52,15 @@ def test_rotation_dry_run_does_not_submit_gauge(app):
             False,
         )
     rotate.assert_not_called()
-    assert all(c.args[1] != "gauge" for c in send.call_args_list)
+    assert (
+        call(
+            "endpoint_rotation_failed",
+            "gauge",
+            1,
+            metric_tags={"endpoint": "test.invalid", "old_certificate_name": "old"},
+        )
+        in send.call_args_list
+    )
 
 
 def test_notification_failure_does_not_mark_delivery_failed(app):

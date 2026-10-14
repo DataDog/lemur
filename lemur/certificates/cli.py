@@ -180,21 +180,16 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
                 )
             )
 
-    if commit:
-        # Stable tags let one successful retry clear earlier failures. Keep each
-        # predecessor separate so another SNI certificate cannot clear its alert.
-        metric_tags = {
+    metrics.send(
+        "endpoint_rotation_failed",
+        "gauge",
+        0 if rotation_succeeded else 1,
+        metric_tags={
             "endpoint": str(endpoint.dnsname),
             "old_certificate_name": str(old_certificate.name),
-        }
-        if endpoint.source:
-            metric_tags["source"] = str(endpoint.source.label)
-        metrics.send(
-            "endpoint_rotation_failed",
-            "gauge",
-            0 if rotation_succeeded else 1,
-            metric_tags=metric_tags,
-        )
+            **({"source": str(endpoint.source.label)} if endpoint.source else {}),
+        },
+    )
 
     metrics.send(
         "endpoint_rotation",
