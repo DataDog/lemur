@@ -180,16 +180,17 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
                 )
             )
 
-    metrics.send(
-        "endpoint_rotation_failed",
-        "gauge",
-        0 if rotation_succeeded else 1,
-        metric_tags={
-            "endpoint": str(endpoint.dnsname),
-            "old_certificate_name": str(old_certificate.name),
-            **({"source": str(endpoint.source.label)} if endpoint.source else {}),
-        },
-    )
+    if commit:
+        metrics.send(
+            "endpoint_rotation_failed",
+            "gauge",
+            0 if rotation_succeeded else 1,
+            metric_tags={
+                "endpoint": str(endpoint.dnsname),
+                "old_certificate_name": str(old_certificate.name),
+                **({"source": str(endpoint.source.label)} if endpoint.source else {}),
+            },
+        )
 
     metrics.send(
         "endpoint_rotation",
