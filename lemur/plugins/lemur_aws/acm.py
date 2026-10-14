@@ -80,8 +80,11 @@ def get_imported_certificates(**kwargs):
 
 
 @sts_client("acm")
-def upload_cert(body, private_key, cert_chain=None, **kwargs):
-    """Import a certificate unless its fingerprint already exists in the region.
+def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
+    """Import new certificates, or reimport an explicit replacement at the same ARN.
+
+    Reimport deploys the renewal to all consumers of the ARN as AWS propagates it.
+    It does not wait for Lemur's endpoint rotation task.
 
     ACM list results are eventually consistent, so rapid concurrent or post-timeout
     retries can import duplicates before the first import becomes visible.
@@ -89,8 +92,35 @@ def upload_cert(body, private_key, cert_chain=None, **kwargs):
     assert isinstance(private_key, str)
     client = kwargs.pop("client")
     fingerprint = certificate_fingerprint(body)
+    if len(replaces) > 1:
+        raise ValueError(
+            "ACM reimport supports at most one predecessor certificate. "
+            "Multiple predecessors may map to different ACM ARNs, and this upload "
+            "can update only one ARN, so it cannot safely choose which to overwrite."
+        )
 
-    for certificate in _get_imported_certificates(client):
+    predecessor = certificate_fingerprint(replaces[0]) if replaces else None
+    matches = [
+        certificate
+        for certificate in _get_imported_certificates(client)
+        if certificate_fingerprint(certificate["body"]) in {fingerprint, predecessor}
+    ]
+    # Include both old and new fingerprints: a separately imported renewal must not
+    # hide the old ARN that is still attached to consumers.
+    if len(matches) > 1:
+        raise ValueError(
+            "Multiple ACM ARNs match the current or predecessor certificate. "
+            "Cannot safely choose which ARN to reuse; resolve the duplicate imports first."
+        )
+    if replaces and not matches:
+        raise ValueError(
+            "No ACM ARN matches the current or predecessor certificate in this account "
+            "and region. Cannot renew in place without an existing ARN; check the "
+            "destination and replacement link."
+        )
+
+    if matches:
+        certificate = matches[0]
         if certificate_fingerprint(certificate["body"]) == fingerprint:
             current_app.logger.info(
                 {
@@ -109,6 +139,9 @@ def upload_cert(body, private_key, cert_chain=None, **kwargs):
     }
     if cert_chain:
         params["CertificateChain"] = cert_chain.encode("utf-8")
+
+    if replaces:
+        params["CertificateArn"] = matches[0]["arn"]
 
     response = client.import_certificate(**params)
     metrics.send("upload_acm_cert", "counter", 1)
