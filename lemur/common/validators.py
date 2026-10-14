@@ -1,14 +1,15 @@
 import re
 
 from cryptography import x509
-from cryptography.exceptions import UnsupportedAlgorithm, InvalidSignature
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import NameOID
 from flask import current_app
 from marshmallow.exceptions import ValidationError
 
 from lemur.auth.permissions import SensitiveDomainPermission
-from lemur.common.utils import check_cert_signature, is_weekend
+from lemur.common.utils import is_weekend
 from lemur.plugins.base import plugins
 
 
@@ -170,40 +171,78 @@ def verify_private_key_match(key, cert, error_class=ValidationError):
         raise error_class("Private key does not match certificate.")
 
 
+def _is_direct_issuer(child, issuer, error_class):
+    if child.issuer != issuer.subject:
+        return False
+
+    try:
+        child.verify_directly_issued_by(issuer)
+    except InvalidSignature:
+        return False
+    except (TypeError, ValueError) as err:
+        raise error_class("Unable to validate certificate chain: {0}".format(err))
+
+    return True
+
+
 def verify_cert_chain(certs, error_class=ValidationError):
     """
-    Verifies that the certificates in the chain are correct.
+    Verifies that every certificate in the bundle is connected to the leaf
+    through direct issuer relationships.
 
-    We don't bother with full cert validation but just check that certs in the chain are signed by the next, to avoid
-    basic human errors -- such as pasting the wrong certificate.
-
-    :param certs: List of parsed certificates, use parse_cert_chain()
-    :param error_class: Exception class to raise on error
+    :param certs: List of parsed certificates; certs[0] must be the leaf.
+    :param error_class: Exception class to raise on error.
     """
-    cert = certs[0]
-    for issuer in certs[1:]:
-        # Use the current cert's public key to verify the previous signature.
-        # "certificate validation is a complex problem that involves much more than just signature checks"
-        try:
-            check_cert_signature(cert, issuer.public_key())
+    if len(certs) < 2:
+        return
 
-        except InvalidSignature:
-            # Avoid circular import.
-            from lemur.common import defaults
+    from lemur.common import defaults
 
+    fingerprints = [cert.fingerprint(hashes.SHA256()) for cert in certs]
+    if len(fingerprints) != len(set(fingerprints)):
+        raise error_class("Duplicate certificate in certificate chain.")
+
+    issuers = {
+        child_idx: {
+            issuer_idx
+            for issuer_idx, issuer in enumerate(certs)
+            if child_idx != issuer_idx
+            and _is_direct_issuer(child, issuer, error_class)
+        }
+        for child_idx, child in enumerate(certs)
+    }
+
+    reached = {0}
+    frontier = [0]
+
+    while frontier:
+        child_idx = frontier.pop()
+        for issuer_idx in issuers[child_idx] - reached:
+            reached.add(issuer_idx)
+            frontier.append(issuer_idx)
+
+    unreached = set(range(len(certs))) - reached
+    if unreached:
+        orphan_idx = min(unreached)
+        raise error_class(
+            "Incorrect chain certificate(s) provided: '%s' is not connected to the leaf"
+            % (defaults.common_name(certs[orphan_idx]) or "Unknown")
+        )
+
+    for issuer_idx in range(1, len(certs)):
+        if not any(
+            issuer_idx in issuers[child_idx]
+            for child_idx in range(issuer_idx)
+        ):
             raise error_class(
-                "Incorrect chain certificate(s) provided: '%s' is not signed by '%s'"
+                "Incorrect chain certificate(s) provided: "
+                "chain is not in leaf-to-root order: '%s' (position %d) "
+                "does not sign any preceding certificate"
                 % (
-                    defaults.common_name(cert) or "Unknown",
-                    defaults.common_name(issuer),
+                    defaults.common_name(certs[issuer_idx]) or "Unknown",
+                    issuer_idx,
                 )
             )
-
-        except UnsupportedAlgorithm as err:
-            current_app.logger.warning("Skipping chain validation: %s", err)
-
-        # Next loop will validate that *this issuer* cert is signed by the next chain cert.
-        cert = issuer
 
 
 def is_valid_owner(email):
