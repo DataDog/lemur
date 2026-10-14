@@ -1,3 +1,4 @@
+from threading import Event
 from unittest.mock import Mock, patch
 
 import pytest
@@ -148,3 +149,20 @@ def test_worker_utilization_uses_parent_timer(celery_module):
     consumer.timer.call_repeatedly.assert_called_once_with(
         60, celery_module.report_worker_utilization, (consumer,)
     )
+
+
+def test_worker_utilization_runs_repeatedly(celery_module):
+    consumer = Mock(hostname="celery@test-pod")
+    consumer.pool.num_processes = 3
+    consumer.timer = Timer(max_interval=0.01)
+    repeated = Event()
+    with patch.object(
+        celery_module.worker_state, "active_requests", {"test-task"}
+    ), patch.object(celery_module.metrics, "send") as send:
+        send.side_effect = lambda *args, **kwargs: repeated.set() if send.call_count >= 3 else None
+        try:
+            celery_module.start_worker_utilization_reporting(consumer, interval=0.01)
+            assert repeated.wait(5), "Worker utilization should be reported repeatedly"
+        finally:
+            consumer.timer.stop()
+        assert send.call_count >= 3
