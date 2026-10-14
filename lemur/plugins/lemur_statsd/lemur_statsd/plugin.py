@@ -21,7 +21,7 @@ class StatsdMetricPlugin(MetricPlugin):
     def submit(
         self, metric_name, metric_type, metric_value, metric_tags=None, options=None
     ):
-        valid_types = ["COUNTER", "GAUGE", "TIMER", "SERVICE_CHECK"]
+        valid_types = ["COUNTER", "GAUGE", "TIMER"]
         tags = []
 
         if metric_type.upper() not in valid_types:
@@ -45,13 +45,5 @@ class StatsdMetricPlugin(MetricPlugin):
             self.statsd.gauge(metric_name, metric_value, tags)
         elif metric_type.upper() == "TIMER":
             self.statsd.timing(metric_name, metric_value, tags)
-        elif metric_type.upper() == "SERVICE_CHECK":
-            # DogStatsD applies namespace to metrics, but not service checks.
-            check_name = (
-                f"{self.statsd.namespace}.{metric_name}"
-                if self.statsd.namespace
-                else metric_name
-            )
-            self.statsd.service_check(check_name, metric_value, tags=tags)
 
         return

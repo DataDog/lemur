@@ -183,20 +183,20 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
     if commit:
         # Stable tags let one successful retry clear earlier failures. Keep each
         # predecessor separate so another SNI certificate cannot clear its alert.
-        check_tags = {
+        metric_tags = {
             "endpoint": str(endpoint.dnsname),
             "old_certificate_name": str(old_certificate.name),
         }
         if endpoint.source:
-            check_tags["source"] = str(endpoint.source.label)
+            metric_tags["source"] = str(endpoint.source.label)
             datacenter = _datacenter_from_description(endpoint.source.description)
             if datacenter:
-                check_tags["datacenter"] = datacenter
+                metric_tags["datacenter"] = datacenter
         metrics.send(
-            "endpoint_rotation",
-            "service_check",
-            0 if rotation_succeeded else 2,
-            metric_tags=check_tags,
+            "endpoint_rotation_failed",
+            "gauge",
+            0 if rotation_succeeded else 1,
+            metric_tags=metric_tags,
         )
 
     metrics.send(
