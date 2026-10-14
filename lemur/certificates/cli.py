@@ -20,7 +20,7 @@ from lemur import database
 from lemur.authorities.models import Authority
 from lemur.authorities.service import get as authorities_get_by_id
 from lemur.authorities.service import get_by_name as get_authority_by_name
-from lemur.certificates.models import Certificate, _datacenter_from_description
+from lemur.certificates.models import Certificate
 from lemur.certificates.schemas import CertificateOutputSchema
 from lemur.certificates.service import (
     reissue_certificate,
@@ -189,9 +189,6 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
         }
         if endpoint.source:
             metric_tags["source"] = str(endpoint.source.label)
-            datacenter = _datacenter_from_description(endpoint.source.description)
-            if datacenter:
-                metric_tags["datacenter"] = datacenter
         metrics.send(
             "endpoint_rotation_failed",
             "gauge",

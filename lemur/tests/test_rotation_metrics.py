@@ -8,16 +8,14 @@ from lemur.certificates import cli
 
 @pytest.mark.parametrize("has_source", [True, False])
 def test_rotation_gauge_follows_delivery_outcome(app, has_source):
-    source = SimpleNamespace(
-        label="test-source", description='{"datacenter":"test-dc"}'
-    )
+    source = SimpleNamespace(label="test-source")
     endpoint = SimpleNamespace(
         name="test", dnsname="test.invalid", source=source if has_source else None
     )
     old, new = SimpleNamespace(name="old"), SimpleNamespace(name="new")
     tags = {"endpoint": "test.invalid", "old_certificate_name": "old"}
     if has_source:
-        tags.update(source="test-source", datacenter="test-dc")
+        tags["source"] = "test-source"
 
     with patch.object(
         cli.deployment_service, "rotate_certificate"
