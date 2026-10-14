@@ -170,40 +170,67 @@ def verify_private_key_match(key, cert, error_class=ValidationError):
         raise error_class("Private key does not match certificate.")
 
 
+def _is_issuer(issuer, child, issuer_pos, child_pos):
+    """
+    Return True if ``issuer`` is the issuer of ``child``: the names line up and
+    issuer's public key verifies child's signature.
+
+    The subject/issuer name check comes first so a certificate that merely
+    reuses a signing key (but names a different subject) is not accepted as a
+    valid issuer. That keeps the orphan check meaningful while still allowing
+    cross-signed certs, which keep the same subject across their variants.
+    """
+    if issuer.subject != child.issuer:
+        return False
+    try:
+        check_cert_signature(child, issuer.public_key())
+        return True
+    except InvalidSignature:
+        return False
+    except UnsupportedAlgorithm as err:
+        # COMPAT: we cannot verify this signature algorithm (e.g. RSASSA-PSS),
+        # so trust the presented order for the immediately-adjacent hop only.
+        # Drop this once the algorithm is natively supported.
+        # See: https://github.com/DataDog/lemur/pull/254#issuecomment-4265512236
+        if issuer_pos == child_pos + 1:
+            current_app.logger.warning(
+                "Skipping chain validation for adjacent pair (unsupported algorithm): %s",
+                err,
+            )
+            return True
+        return False
+
+
 def verify_cert_chain(certs, error_class=ValidationError):
     """
-    Verifies that the certificates in the chain are correct.
+    Verify that a certificate bundle is a well-formed, leaf-first chain.
 
-    We don't bother with full cert validation but just check that certs in the chain are signed by the next, to avoid
-    basic human errors -- such as pasting the wrong certificate.
+    Every certificate after the leaf (certs[0]) must be the issuer of at least
+    one certificate that appears before it. By induction this guarantees the
+    whole bundle chains back to the leaf, so it accepts linear chains and
+    non-linear bundles alike (e.g. a dual cross-signed intermediate such as
+    Sectigo R46 signed by both USERTrust and AAA, IR-50398), while rejecting
+    orphaned certs and out-of-order bundles. See RFC 8446 section 4.4.2 for
+    background on non-linear certificate messages.
 
-    :param certs: List of parsed certificates, use parse_cert_chain()
-    :param error_class: Exception class to raise on error
+    A certificate whose issuer is not in the bundle is a valid top-of-chain
+    termination point (its parent is a root CA not included in the bundle).
+
+    :param certs: List of parsed certificates, leaf first (see parse_cert_chain()).
+    :param error_class: Exception class to raise on error.
     """
-    cert = certs[0]
-    for issuer in certs[1:]:
-        # Use the current cert's public key to verify the previous signature.
-        # "certificate validation is a complex problem that involves much more than just signature checks"
-        try:
-            check_cert_signature(cert, issuer.public_key())
+    # Avoid circular import.
+    from lemur.common import defaults
 
-        except InvalidSignature:
-            # Avoid circular import.
-            from lemur.common import defaults
-
+    for i in range(1, len(certs)):
+        candidate = certs[i]
+        if not any(_is_issuer(candidate, certs[j], i, j) for j in range(i)):
             raise error_class(
-                "Incorrect chain certificate(s) provided: '%s' is not signed by '%s'"
-                % (
-                    defaults.common_name(cert) or "Unknown",
-                    defaults.common_name(issuer),
-                )
+                "Incorrect chain certificate(s) provided: '%s' (position %d) "
+                "does not sign any preceding certificate. The chain must be in "
+                "leaf-to-root order with every certificate connected to the leaf."
+                % (defaults.common_name(candidate) or "Unknown", i)
             )
-
-        except UnsupportedAlgorithm as err:
-            current_app.logger.warning("Skipping chain validation: %s", err)
-
-        # Next loop will validate that *this issuer* cert is signed by the next chain cert.
-        cert = issuer
 
 
 def is_valid_owner(email):
