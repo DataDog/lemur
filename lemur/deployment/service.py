@@ -11,6 +11,9 @@ def rotate_certificate(endpoint, old_cert, new_cert):
     :param new_cert:
     :return:
     """
+    if endpoint.type == "fabric-envoy":
+        # TODO: Envoy updates are owned by fabric. Lemur is only involved in discovery.
+        return
     sni_rotation = old_cert in endpoint.sni_certificates
     if sni_rotation and endpoint.primary_certificate == old_cert:
         current_app.logger.warn(
