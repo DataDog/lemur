@@ -1397,10 +1397,14 @@ def _check_dcv_expiration_deprecated():
 
 # --- Certificate cost metrics (CA-agnostic): USD/yr per ca -> tier -> shape.
 CERT_COST_PRICING = {
-    "digicert": {"OV": {"wildcard": 688, "fqdn": 338}, "DV": {"wildcard": 218, "fqdn": 218}, "EV": {"wildcard": 438, "fqdn": 438}},
+    # DigiCert OV = signed 2026 contract unit rates (PO #446): wildcard $561.35, fqdn $146.26.
+    # DV/EV rows below are unused by _cert_cost_price (tier is forced to OV for
+    # digicert/sectigo/gov) and kept only for reference.
+    "digicert": {"OV": {"wildcard": 561.35, "fqdn": 146.26}, "DV": {"wildcard": 218, "fqdn": 218}, "EV": {"wildcard": 438, "fqdn": 438}},
     "sectigo": {"OV": {"wildcard": 400, "fqdn": 135}, "DV": {"wildcard": 40, "fqdn": 40}, "EV": {"wildcard": 250, "fqdn": 250}},
     "letsencrypt": {"DV": {"wildcard": 0, "fqdn": 0}},
-    "gov": {"OV": {"wildcard": 688, "fqdn": 338}, "DV": {"wildcard": 218, "fqdn": 218}, "EV": {"wildcard": 438, "fqdn": 438}},
+    # gov mirrors DigiCert contract rates (commercial-equivalent pricing).
+    "gov": {"OV": {"wildcard": 561.35, "fqdn": 146.26}, "DV": {"wildcard": 218, "fqdn": 218}, "EV": {"wildcard": 438, "fqdn": 438}},
     # AWS/ACM-imported and unknown-internal authorities: counted but cost $0.
     # Imported ACM certs are copies of already-tracked certs; pricing them as
     # digicert would double-count spend. Free/private CAs cost nothing.
