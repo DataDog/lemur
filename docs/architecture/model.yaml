@@ -1,0 +1,315 @@
+# The Certificate Architecture — diagrams and behaviour flows, as data. See README.md.
+# This is the interactive reference for Datadog TLS certificate management: the systems
+# around Lemur, how a certificate gets issued and delivered, and the flows that follow one
+# triggered behaviour. It is seeded from the "Certificate Management — Organizational
+# North Star" investigation. Claims not confirmed against code are marked unverified in the
+# prose; a refresh pass re-verifies them against this and the cited repositories.
+
+# ---------------------------------------------------------------- the page
+site:
+  title: Certificate Architecture
+  app: certificate-architecture
+  theme: {default: system}
+  markdown: lemur-certificate-architecture.md
+  source_url: "https://github.com/DataDog/lemur/tree/master/docs/architecture"
+  # External repositories cited in the prose resolve through these aliases.
+  source_repositories:
+    dd-source: "https://github.com/DataDog/dd-source/tree/main/"
+    vault-platform: "https://github.com/DataDog/vault-platform/tree/main/"
+    k8s-platform-resources: "https://github.com/DataDog/k8s-platform-resources/tree/master/"
+  # Optional RUM; left null until hosting and an app id are approved.
+  rum: null
+
+# ---------------------------------------------------------------- visual grammar
+# Colour says which connection family an edge belongs to. Boxes are not coloured by family.
+flows:
+  issuance: {label: Certificate Issuance, color: "#1c7ed6", dark_color: "#70b7ff"}
+  delivery: {label: Delivery & Distribution, color: "#0c8599", dark_color: "#59cbd6"}
+  bootstrap: {label: Bootstrap & Trust, color: "#5f3dc4", dark_color: "#ba9dff"}
+  config: {label: Management & Config, color: "#868e96", dark_color: "#b4bdc7"}
+
+# Line style says what kind of interaction it is.
+kinds:
+  call: {label: "Write or call — arrow points from caller to callee"}
+  read: {label: "Watch, subscribe or poll — arrow points the way data flows"}
+  traffic: {label: Request Traffic}
+
+# Box shape says what kind of thing it is.
+shapes:
+  service: {label: Datadog Service}
+  external: {label: "Other Team's Service, Person or File"}
+  store: {label: Data Store}
+  object: {label: Object Type}
+  workload: {label: Your Workload}
+
+frame_kinds: {}
+frames: {}
+
+# ---------------------------------------------------------------- boxes
+# label (a second line is a subtitle), shape (default: service), doc (the Markdown h3 slug
+# for its side panel; default: the box id).
+
+nodes:
+  # --- Lemur itself
+  lemur: {label: "Lemur\nAPI + UI + Celery", doc: lemur}
+  lemur_db: {label: "Lemur inventory\nPostgreSQL", shape: store, doc: lemur-inventory}
+
+  # --- Clients of Lemur (things that call Lemur)
+  coa: {label: "COA\nCert Orchestration Adapter", doc: coa}
+  ra_agent: {label: "certificate-bootstrapping-agent\n(release-actions)", doc: certificate-bootstrapping-agent}
+  ddcert: {label: "ddcert CLI", shape: external, doc: ddcert-cli}
+  webui: {label: "Lemur Web UI", shape: external, doc: lemur-web-ui}
+  dcreg: {label: "dc registry", shape: external, doc: dc-registry}
+  nom: {label: "NOM (legacy)", shape: external, doc: nom}
+
+  # --- Certificate authorities (upstream)
+  digicert: {label: "DigiCert", shape: external, doc: digicert}
+  letsencrypt: {label: "Let's Encrypt\n(ACME)", shape: external, doc: lets-encrypt}
+  sectigo: {label: "Sectigo", shape: external, doc: sectigo}
+  entrust: {label: "Entrust", shape: external, doc: entrust}
+  gcpca: {label: "GCP CA", shape: external, doc: gcp-ca}
+  cfssl: {label: "CFSSL", shape: external, doc: cfssl}
+
+  # --- Destinations (downstream)
+  coavault: {label: "COA → Vault KV", doc: coa-to-vault-kv}
+  aws: {label: "AWS IAM / CloudFront", doc: aws-iam-cloudfront}
+  gcp: {label: "GCP Load Balancer", doc: gcp-load-balancer}
+  azure: {label: "Azure Key Vault", doc: azure-key-vault}
+  buildvault: {label: "Build Vault", doc: build-vault}
+
+  # --- Ancillary / consumer systems
+  certmanager: {label: "cert-manager", doc: cert-manager}
+  certdist: {label: "cert-distribute", doc: cert-distribute}
+  envoy: {label: "Envoy\n(edge TLS terminator)", shape: external, doc: envoy}
+  dedicated_vault: {label: "dedicated-vault\n(k8s)", shape: store, doc: dedicated-vault}
+  vault_server: {label: "Vault server\nTLS target", shape: store, doc: vault-server}
+
+# ---------------------------------------------------------------- views
+# group: the run of tabs it sits in. Its panel text is the Markdown h2 section with a
+# `<!-- view: <id> -->` comment. A view with id `complete` shows every edge.
+
+views:
+  - id: overview
+    title: Overview
+    category: architecture
+    group: Certificate Architecture
+  - id: complete
+    title: Complete
+    category: architecture
+    group: Certificate Architecture
+  - id: landscape
+    title: System Landscape
+    category: architecture
+    group: Certificate Architecture
+
+  - id: flow-dc-turnup-phase0
+    title: DC Turnup — Phase 0 (Pre-Vault)
+    category: flow
+    group: DC Turnup
+    scenario:
+      actor: certmanager
+      trigger: A new datacenter is turned up before any Vault is available.
+      preconditions: [Route53 is reachable, Let's Encrypt is reachable, no Vault/Lemur dependency]
+      end_state: The dedicated-vault bootstrap TLS certificate is written as a Kubernetes Secret and Vault can start and unseal.
+      limitations: [Seeded from the north-star doc; runtime sequence not yet code-verified]
+      architecture_view: landscape
+    steps:
+      - from: certmanager
+        to: letsencrypt
+        label: "ACME / DNS01 validate"
+        verification: unverified
+        note: cert-manager's only external deps at bootstrap are Route53 and Let's Encrypt.
+        sources: []
+      - from: letsencrypt
+        to: certmanager
+        label: "sign TLS cert"
+        verification: unverified
+        note: Direction of the ACME response not yet code-verified.
+        sources: []
+      - from: certmanager
+        to: dedicated_vault
+        label: "write TLS cert Secret"
+        verification: unverified
+        note: Written as a Kubernetes Secret before Vault unseals.
+        sources: []
+
+  - id: flow-dc-turnup-phase1
+    title: DC Turnup — Phase 1 (Post-Vault)
+    category: flow
+    group: DC Turnup
+    scenario:
+      actor: ra_agent
+      trigger: Vault is up and the DC turnup continues; Edge / ISP certificates are needed.
+      preconditions: [Vault is reachable, release-actions agent can authenticate to Lemur]
+      end_state: Edge and ISP certificates are created in Lemur and delivered to their destinations.
+      limitations: [Seeded from the north-star doc; runtime sequence not yet code-verified]
+      architecture_view: landscape
+    steps:
+      - from: ra_agent
+        to: lemur
+        label: "create certs & destinations"
+        verification: unverified
+        note: The bootstrapping agent requests certs and destinations from the Lemur API.
+        sources: []
+      - from: lemur
+        to: digicert
+        label: "issue (DigiCert)"
+        verification: unverified
+        note: DigiCert is the current default CA for turnup.
+        sources: []
+      - from: lemur
+        to: coavault
+        label: "deliver Edge/ISP cert"
+        verification: unverified
+        note: Delivered to the COA destination into Vault KV.
+        sources: []
+
+  - id: flow-issuance
+    title: Issue a Certificate
+    category: flow
+    group: Core Flows
+    scenario:
+      actor: ddcert
+      trigger: A caller requests a certificate through Lemur.
+      preconditions: [Lemur API is reachable]
+      end_state: The issued certificate is stored in Lemur's inventory and delivered to its destination.
+      limitations: [Seeded from the north-star doc; exact CA selection not shown]
+      architecture_view: landscape
+    steps:
+      - from: ddcert
+        to: lemur
+        label: "request certificate"
+        verification: unverified
+        note: The ddcert CLI calls the Lemur API to request a cert.
+        sources: []
+      - from: lemur
+        to: letsencrypt
+        label: "issue via CA plugin"
+        verification: unverified
+        note: CA choice depends on the authority configured for the cert.
+        sources: []
+      - from: lemur
+        to: lemur_db
+        label: "record in inventory"
+        verification: unverified
+        note: Stored in Lemur's PostgreSQL inventory.
+        sources: []
+      - from: lemur
+        to: coavault
+        label: "deliver to destination"
+        verification: unverified
+        note: Shown with the COA destination for internal services.
+        sources: []
+
+  - id: flow-le-migration
+    title: Let's Encrypt Migration
+    category: flow
+    group: Core Flows
+    scenario:
+      actor: lemur
+      trigger: Datadog migrates certificates from DigiCert to Let's Encrypt (ACME).
+      preconditions: [LE quota is available, destinations trust the ISRG Root X1]
+      end_state: Certificates are issued by Let's Encrypt and consumers trust its root.
+      limitations: [Migration is in progress; Envoy trust-bundle check is per-DC]
+      architecture_view: landscape
+    steps:
+      - from: lemur
+        to: letsencrypt
+        label: "issue via ACME/LE"
+        verification: unverified
+        note: LE issues DV certificates; shared quota per registered domain.
+        sources: []
+      - from: lemur
+        to: coavault
+        label: "deliver LE cert"
+        verification: unverified
+        note: Delivered to the COA destination into Vault KV.
+        sources: []
+      - from: coavault
+        to: envoy
+        label: "consume Edge cert"
+        verification: unverified
+        note: Envoy terminates TLS for edge endpoints and consumes the Edge certs.
+        sources: []
+      - from: envoy
+        to: letsencrypt
+        label: "trust ISRG Root X1"
+        verification: unverified
+        note: Envoy's trust bundle must include LE's root (one-time per-DC check).
+        sources: []
+
+  - id: flow-distribution
+    title: cert-distribute Distribution
+    category: flow
+    group: Core Flows
+    scenario:
+      actor: certdist
+      trigger: Vault server TLS certificates must reach the Vault service endpoints.
+      preconditions: [cert-distribute can authenticate to Lemur and read the Build Vault]
+      end_state: Certificates are read from the Build Vault and distributed via buckets to each target Vault.
+      limitations: [Seeded from the north-star doc; runtime sequence not yet code-verified]
+      architecture_view: landscape
+    steps:
+      - from: certdist
+        to: lemur
+        label: "request certs"
+        verification: unverified
+        note: cert-distribute requests Vault server TLS certs from Lemur.
+        sources: []
+      - from: lemur
+        to: buildvault
+        label: "deliver to Build Vault"
+        verification: unverified
+        note: Lemur delivers the cert to the Build Vault destination.
+        sources: []
+      - from: certdist
+        to: buildvault
+        label: "read certs"
+        verification: unverified
+        note: cert-distribute reads the certs from the Build Vault.
+        sources: []
+      - from: certdist
+        to: vault_server
+        label: "distribute via buckets"
+        verification: unverified
+        note: Distributed to each target Vault via cert buckets.
+        sources: []
+
+# ---------------------------------------------------------------- edges
+# from, to (a box), label, kind (call | read | traffic), flow, views.
+# Architecture membership comes from `views:`; a flow-only edge lists no views.
+
+edges:
+  # --- Clients of Lemur
+  - {from: coa, to: lemur, label: "push / query certs", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: ra_agent, to: lemur, label: "create certs & destinations", kind: call, flow: issuance, views: [landscape, complete]}
+  - {from: ddcert, to: lemur, label: "list / manage", kind: call, flow: config, views: [landscape]}
+  - {from: webui, to: lemur, label: "manage", kind: call, flow: config, views: [landscape]}
+  - {from: dcreg, to: lemur, label: "create cert + destination", kind: call, flow: issuance, views: [landscape, complete]}
+  - {from: nom, to: lemur, label: "legacy provisioning", kind: call, flow: config, views: [landscape]}
+
+  # --- Lemur -> CAs (issue)
+  - {from: lemur, to: digicert, label: "issue", kind: call, flow: issuance, views: [landscape, complete]}
+  - {from: lemur, to: letsencrypt, label: "issue (ACME)", kind: call, flow: issuance, views: [overview, landscape, complete]}
+  - {from: lemur, to: sectigo, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur, to: entrust, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur, to: gcpca, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur, to: cfssl, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur, to: lemur_db, label: "record in inventory", kind: call, flow: issuance, views: []}
+  - {from: letsencrypt, to: certmanager, label: "sign / respond", kind: call, flow: bootstrap, views: []}
+
+  # --- Lemur -> Destinations (deliver)
+  - {from: lemur, to: coavault, label: "deliver", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: lemur, to: aws, label: "deliver", kind: call, flow: delivery, views: [complete]}
+  - {from: lemur, to: gcp, label: "deliver", kind: call, flow: delivery, views: [complete]}
+  - {from: lemur, to: azure, label: "deliver", kind: call, flow: delivery, views: [complete]}
+  - {from: lemur, to: buildvault, label: "deliver", kind: call, flow: delivery, views: [complete]}
+
+  # --- Ancillary / consumers
+  - {from: certmanager, to: letsencrypt, label: "ACME / DNS01", kind: read, flow: bootstrap, views: [overview, landscape, complete]}
+  - {from: certmanager, to: dedicated_vault, label: "write TLS cert Secret", kind: call, flow: bootstrap, views: []}
+  - {from: certdist, to: lemur, label: "requests certs", kind: call, flow: delivery, views: [landscape, complete]}
+  - {from: certdist, to: buildvault, label: "reads certs", kind: read, flow: delivery, views: [landscape, complete]}
+  - {from: certdist, to: vault_server, label: "distribute via buckets", kind: call, flow: delivery, views: []}
+  - {from: coavault, to: envoy, label: "Edge certs", kind: read, flow: delivery, views: [overview, landscape, complete]}
+  - {from: envoy, to: letsencrypt, label: "trusts ISRG Root X1", kind: read, flow: bootstrap, views: []}
