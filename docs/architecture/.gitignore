@@ -1,0 +1,8 @@
+# Generated artifacts — never commit. Regenerate with ./generate-diagram.py.
+dist/
+__pycache__/
+*.pyc
+*.d2
+*.svg
+architecture-data.json
+local-preview/
