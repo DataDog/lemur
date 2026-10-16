@@ -1,8 +1,8 @@
 # The Certificate Architecture — diagrams and behaviour flows, as data. See README.md.
 # This is the interactive reference for Datadog TLS certificate management: the systems
-# around Lemur, how a certificate gets issued and delivered, and the flows that follow one
-# triggered behaviour. It is seeded from the "Certificate Management — Organizational
-# North Star" investigation. Claims not confirmed against code are marked unverified in the
+# around Lemur, how a certificate gets issued, delivered and trusted, and how datacenters
+# are bootstrapped. It is seeded from the "Certificate Management — Organizational North
+# Star" investigation. Claims not confirmed against code are marked unverified in the
 # prose; a refresh pass re-verifies them against this and the cited repositories.
 
 # ---------------------------------------------------------------- the page
@@ -21,7 +21,8 @@ site:
   rum: null
 
 # ---------------------------------------------------------------- visual grammar
-# Colour says which connection family an edge belongs to. Boxes are not coloured by family.
+# Colour says which connection family an edge belongs to. Boxes are NOT coloured by flow;
+# they are coloured by their owning team (see `owners:` below). Edges keep flow colours.
 flows:
   issuance: {label: Certificate Issuance, color: "#1c7ed6", dark_color: "#70b7ff"}
   delivery: {label: Delivery & Distribution, color: "#0c8599", dark_color: "#59cbd6"}
@@ -34,7 +35,14 @@ kinds:
   read: {label: "Watch, subscribe or poll — arrow points the way data flows"}
   traffic: {label: Request Traffic}
 
-# Box shape says what kind of thing it is.
+# Box fill is its owning team. Shape still says the kind of thing (service/store/external).
+owners:
+  resource-management: {label: Resource Management, color: "#d64541", dark_color: "#e89892"}
+  compute: {label: Compute, color: "#2f7fb8", dark_color: "#8db9e0"}
+  cloud-foundations: {label: Cloud Foundations, color: "#2e8b57", dark_color: "#8ccfa4"}
+  pplat-identity: {label: "PPLAT / Identity Core", color: "#8e6bb0", dark_color: "#c6a9dc"}
+  external-ca: {label: External CAs, color: "#7f8c8d", dark_color: "#b6bec0"}
+
 shapes:
   service: {label: Datadog Service}
   external: {label: "Other Team's Service, Person or File"}
@@ -42,47 +50,54 @@ shapes:
   object: {label: Object Type}
   workload: {label: Your Workload}
 
-frame_kinds: {}
-frames: {}
+frame_kinds:
+  boundary: {label: Datacenter}
+
+# ---------------------------------------------------------------- frames (where it runs)
+# A frame is drawn only when a box inside it is. `ddbuild` is the control-plane where
+# Lemur lives; `site` is a generic site datacenter that certificates flow into.
+frames:
+  ddbuild: {label: "ddbuild · Control-Plane Datacenters", kind: boundary, doc: ddbuild}
+  site: {label: "A Site Datacenter (generic)", kind: boundary, doc: site-datacenter}
 
 # ---------------------------------------------------------------- boxes
-# label (a second line is a subtitle), shape (default: service), doc (the Markdown h3 slug
-# for its side panel; default: the box id).
+# label (a second line is a subtitle), shape (default: service), frame (where it runs),
+# owner (owning team), doc (the Markdown h3 slug for its side panel).
 
 nodes:
-  # --- Lemur itself
-  lemur: {label: "Lemur\nAPI + UI + Celery", doc: lemur}
-  lemur_db: {label: "Lemur inventory\nPostgreSQL", shape: store, doc: lemur-inventory}
+  # --- Lemur (lives in ddbuild)
+  lemur: {label: "Lemur\nAPI + UI + Celery", frame: ddbuild, owner: resource-management, doc: lemur}
+  lemur_db: {label: "Lemur inventory\nPostgreSQL", shape: store, frame: ddbuild, owner: resource-management, doc: lemur-inventory}
 
   # --- Clients of Lemur (things that call Lemur)
-  coa: {label: "COA\nCert Orchestration Adapter", doc: coa}
-  ra_agent: {label: "certificate-bootstrapping-agent\n(release-actions)", doc: certificate-bootstrapping-agent}
-  ddcert: {label: "ddcert CLI", shape: external, doc: ddcert-cli}
-  webui: {label: "Lemur Web UI", shape: external, doc: lemur-web-ui}
-  dcreg: {label: "dc registry", shape: external, doc: dc-registry}
-  nom: {label: "NOM (legacy)", shape: external, doc: nom}
+  coa: {label: "COA\nCert Orchestration Adapter", owner: resource-management, doc: coa}
+  ra_agent: {label: "certificate-bootstrapping-agent\n(release-actions)", owner: resource-management, doc: certificate-bootstrapping-agent}
+  ddcert: {label: "ddcert CLI", shape: external, owner: resource-management, doc: ddcert-cli}
+  webui: {label: "Lemur Web UI", shape: external, owner: resource-management, doc: lemur-web-ui}
+  dcreg: {label: "dc registry", shape: external, owner: resource-management, doc: dc-registry}
+  nom: {label: "NOM (legacy)", shape: external, owner: resource-management, doc: nom}
 
-  # --- Certificate authorities (upstream)
-  digicert: {label: "DigiCert", shape: external, doc: digicert}
-  letsencrypt: {label: "Let's Encrypt\n(ACME)", shape: external, doc: lets-encrypt}
-  sectigo: {label: "Sectigo", shape: external, doc: sectigo}
-  entrust: {label: "Entrust", shape: external, doc: entrust}
-  gcpca: {label: "GCP CA", shape: external, doc: gcp-ca}
-  cfssl: {label: "CFSSL", shape: external, doc: cfssl}
+  # --- Certificate authorities (upstream, external)
+  digicert: {label: "DigiCert", shape: external, owner: external-ca, doc: digicert}
+  letsencrypt: {label: "Let's Encrypt\n(ACME)", shape: external, owner: external-ca, doc: lets-encrypt}
+  sectigo: {label: "Sectigo", shape: external, owner: external-ca, doc: sectigo}
+  entrust: {label: "Entrust", shape: external, owner: external-ca, doc: entrust}
+  gcpca: {label: "GCP CA", shape: external, owner: external-ca, doc: gcp-ca}
+  cfssl: {label: "CFSSL", shape: external, owner: external-ca, doc: cfssl}
 
-  # --- Destinations (downstream)
-  coavault: {label: "COA → Vault KV", doc: coa-to-vault-kv}
-  aws: {label: "AWS IAM / CloudFront", doc: aws-iam-cloudfront}
-  gcp: {label: "GCP Load Balancer", doc: gcp-load-balancer}
-  azure: {label: "Azure Key Vault", doc: azure-key-vault}
-  buildvault: {label: "Build Vault", doc: build-vault}
+  # --- Destinations  (delivery into a site datacenter or a CSP)
+  coavault: {label: "COA → Vault KV", frame: site, owner: resource-management, doc: coa-to-vault-kv}
+  aws: {label: "AWS IAM / CloudFront", owner: cloud-foundations, doc: aws-iam-cloudfront}
+  gcp: {label: "GCP Load Balancer", owner: resource-management, doc: gcp-load-balancer}
+  azure: {label: "Azure Key Vault", owner: resource-management, doc: azure-key-vault}
+  buildvault: {label: "Build Vault", shape: store, frame: ddbuild, owner: pplat-identity, doc: build-vault}
 
   # --- Ancillary / consumer systems
-  certmanager: {label: "cert-manager", doc: cert-manager}
-  certdist: {label: "cert-distribute", doc: cert-distribute}
-  envoy: {label: "Envoy\n(edge TLS terminator)", shape: external, doc: envoy}
-  dedicated_vault: {label: "dedicated-vault\n(k8s)", shape: store, doc: dedicated-vault}
-  vault_server: {label: "Vault server\nTLS target", shape: store, doc: vault-server}
+  certmanager: {label: "cert-manager", frame: site, owner: compute, doc: cert-manager}
+  certdist: {label: "cert-distribute", frame: ddbuild, owner: pplat-identity, doc: cert-distribute}
+  envoy: {label: "Envoy\n(edge TLS terminator)", shape: external, frame: site, doc: envoy}
+  dedicated_vault: {label: "dedicated-vault\n(k8s)", shape: store, frame: site, owner: pplat-identity, doc: dedicated-vault}
+  vault_server: {label: "Vault server\nTLS target", shape: store, frame: site, owner: pplat-identity, doc: vault-server}
 
 # ---------------------------------------------------------------- views
 # group: the run of tabs it sits in. Its panel text is the Markdown h2 section with a
@@ -108,7 +123,7 @@ views:
     group: DC Turnup
     scenario:
       actor: certmanager
-      trigger: A new datacenter is turned up before any Vault is available.
+      trigger: A new site datacenter is turned up before any Vault in it is available.
       preconditions: [Route53 is reachable, Let's Encrypt is reachable, no Vault/Lemur dependency]
       end_state: The dedicated-vault bootstrap TLS certificate is written as a Kubernetes Secret and Vault can start and unseal.
       limitations: [Seeded from the north-star doc; runtime sequence not yet code-verified]
@@ -130,7 +145,7 @@ views:
         to: dedicated_vault
         label: "write TLS cert Secret"
         verification: unverified
-        note: Written as a Kubernetes Secret before Vault unseals.
+        note: Written as a Kubernetes Secret in the new site datacenter before Vault unseals.
         sources: []
 
   - id: flow-dc-turnup-phase1
@@ -139,9 +154,9 @@ views:
     group: DC Turnup
     scenario:
       actor: ra_agent
-      trigger: Vault is up and the DC turnup continues; Edge / ISP certificates are needed.
-      preconditions: [Vault is reachable, release-actions agent can authenticate to Lemur]
-      end_state: Edge and ISP certificates are created in Lemur and delivered to their destinations.
+      trigger: The new site datacenter's Vault is up; Edge / ISP certificates are needed and created in ddbuild.
+      preconditions: [Vault in the site is reachable, release-actions agent can authenticate to Lemur in ddbuild]
+      end_state: Edge and ISP certificates are created in Lemur (ddbuild) and delivered out to the site datacenter's destinations.
       limitations: [Seeded from the north-star doc; runtime sequence not yet code-verified]
       architecture_view: landscape
     steps:
@@ -149,7 +164,7 @@ views:
         to: lemur
         label: "create certs & destinations"
         verification: unverified
-        note: The bootstrapping agent requests certs and destinations from the Lemur API.
+        note: The bootstrapping agent requests certs and destinations from Lemur in ddbuild.
         sources: []
       - from: lemur
         to: digicert
@@ -159,9 +174,9 @@ views:
         sources: []
       - from: lemur
         to: coavault
-        label: "deliver Edge/ISP cert"
+        label: "deliver Edge/ISP cert to site DC"
         verification: unverified
-        note: Delivered to the COA destination into Vault KV.
+        note: The cert leaves ddbuild and is delivered to the COA destination in the site datacenter, into Vault KV.
         sources: []
 
   - id: flow-issuance
@@ -192,13 +207,13 @@ views:
         to: lemur_db
         label: "record in inventory"
         verification: unverified
-        note: Stored in Lemur's PostgreSQL inventory.
+        note: Stored in Lemur's PostgreSQL inventory in ddbuild.
         sources: []
       - from: lemur
         to: coavault
         label: "deliver to destination"
         verification: unverified
-        note: Shown with the COA destination for internal services.
+        note: Shown with the COA destination for internal services in a site datacenter.
         sources: []
 
   - id: flow-le-migration
@@ -223,13 +238,13 @@ views:
         to: coavault
         label: "deliver LE cert"
         verification: unverified
-        note: Delivered to the COA destination into Vault KV.
+        note: Delivered from ddbuild to the COA destination in the site datacenter, into Vault KV.
         sources: []
       - from: coavault
         to: envoy
         label: "consume Edge cert"
         verification: unverified
-        note: Envoy terminates TLS for edge endpoints and consumes the Edge certs.
+        note: Envoy terminates TLS for edge endpoints in the site datacenter and consumes the Edge certs.
         sources: []
       - from: envoy
         to: letsencrypt
@@ -244,7 +259,7 @@ views:
     group: Core Flows
     scenario:
       actor: certdist
-      trigger: Vault server TLS certificates must reach the Vault service endpoints.
+      trigger: Vault server TLS certificates must reach the Vault service endpoints in each site datacenter.
       preconditions: [cert-distribute can authenticate to Lemur and read the Build Vault]
       end_state: Certificates are read from the Build Vault and distributed via buckets to each target Vault.
       limitations: [Seeded from the north-star doc; runtime sequence not yet code-verified]
@@ -260,7 +275,7 @@ views:
         to: buildvault
         label: "deliver to Build Vault"
         verification: unverified
-        note: Lemur delivers the cert to the Build Vault destination.
+        note: Delivered in ddbuild.
         sources: []
       - from: certdist
         to: buildvault
@@ -272,11 +287,11 @@ views:
         to: vault_server
         label: "distribute via buckets"
         verification: unverified
-        note: Distributed to each target Vault via cert buckets.
+        note: Distributed out of ddbuild to each site datacenter's Vault server via cert buckets.
         sources: []
 
 # ---------------------------------------------------------------- edges
-# from, to (a box), label, kind (call | read | traffic), flow, views.
+# from, to (a box or frame), label, kind (call | read | traffic), flow, views.
 # Architecture membership comes from `views:`; a flow-only edge lists no views.
 
 edges:
@@ -298,7 +313,7 @@ edges:
   - {from: lemur, to: lemur_db, label: "record in inventory", kind: call, flow: issuance, views: []}
   - {from: letsencrypt, to: certmanager, label: "sign / respond", kind: call, flow: bootstrap, views: []}
 
-  # --- Lemur -> Destinations (deliver)
+  # --- Lemur -> Destinations (deliver out of ddbuild into site datacenters / CSPs)
   - {from: lemur, to: coavault, label: "deliver", kind: call, flow: delivery, views: [overview, landscape, complete]}
   - {from: lemur, to: aws, label: "deliver", kind: call, flow: delivery, views: [complete]}
   - {from: lemur, to: gcp, label: "deliver", kind: call, flow: delivery, views: [complete]}

@@ -340,6 +340,12 @@ export function App(): React.ReactElement {
             theme === 'dark' ? flow.dark_color : flow.color,
         ]),
     ) as React.CSSProperties;
+    const ownerColors = Object.fromEntries(
+        Object.entries(model.legend.owners ?? {}).map(([id, owner]) => [
+            `--fa-owner-${id}`,
+            theme === 'dark' ? owner.dark_color : owner.color,
+        ]),
+    ) as React.CSSProperties;
     const activeStep = stepHover ?? stepSelection;
     const resizePanel = (width: number) =>
         setPanelWidth(Math.max(260, Math.min(panelMax, width)));
@@ -482,6 +488,7 @@ export function App(): React.ReactElement {
             style={
                 {
                     ...flowColors,
+                    ...ownerColors,
                     '--fa-header-height': `${headerHeight}px`,
                     '--fa-panel-width': `${panelWidth}px`,
                     '--fa-nav-width': `${navigationWidth}px`,

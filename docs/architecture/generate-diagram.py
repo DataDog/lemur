@@ -260,6 +260,25 @@ def load_model() -> dict[str, Any]:
             ):
                 errors.append(f"flows.{fid}.{color} must be a six-digit hex color")
 
+    for oid, owner in (model.get("owners") or {}).items():
+        if (
+            not re.fullmatch(r"[a-z][a-z0-9-]*", str(oid))
+            or not isinstance(owner, dict)
+            or not isinstance(owner.get("label"), str)
+            or not owner["label"]
+        ):
+            errors.append(f"owners.{oid}: invalid id or missing label")
+            continue
+        if set(owner) != {"label", "color", "dark_color"}:
+            errors.append(
+                f"owners.{oid}: expected only label, color and dark_color"
+            )
+        for color in ("color", "dark_color"):
+            if not isinstance(owner.get(color), str) or not re.fullmatch(
+                r"#[0-9a-fA-F]{6}", owner[color]
+            ):
+                errors.append(f"owners.{oid}.{color} must be a six-digit hex color")
+
     # an unquoted comma in a {flow: mapping} silently starts a new, empty key
     def empty_keys(value: Any, where: str) -> None:
         if isinstance(value, dict):
@@ -292,6 +311,8 @@ def load_model() -> dict[str, Any]:
             errors.append(f"box {nid}: unknown shape {node['shape']}")
         if node.get("frame") and node["frame"] not in frames:
             errors.append(f"box {nid}: unknown frame {node['frame']}")
+        if node.get("owner") and node["owner"] not in (model.get("owners") or {}):
+            errors.append(f"box {nid}: unknown owner {node['owner']}")
         # the page draws a label's second line as a smaller, grey subtitle
         if re.search(r"-\n", node["label"]):
             errors.append(
@@ -574,6 +595,13 @@ def view_seeds(model: dict[str, Any], view: str) -> list[int]:
     return [spec["seed"]] if "seed" in spec else list(SEEDS)
 
 
+def node_class(node: dict[str, Any]) -> str:
+    """D2 class list for a box: its shape, plus an owner fill class when set."""
+    shape = node["shape"]
+    owner = node.get("owner")
+    return f"[{shape}; owner-{owner}]" if owner else shape
+
+
 def build_d2(
     model: dict[str, Any], view: str, node_widths: dict[str, float] | None = None
 ) -> str:
@@ -624,6 +652,8 @@ def build_d2(
     ]
     for fid, flow in flows.items():
         lines.append(f'  flow-{fid}: {{style.stroke: "{flow["color"]}"}}')
+    for oid, owner in (model.get("owners") or {}).items():
+        lines.append(f'  owner-{oid}: {{style: {{fill: "{owner["color"]}"}}}}')
     lines.append("}")
 
     def emit_frame(fid: str, indent: str) -> None:
@@ -645,7 +675,7 @@ def build_d2(
                 )
                 lines.append(
                     f"{indent}{nid}: {d2_string(node['label'])} "
-                    f"{{class: {node['shape']}{width}}}"
+                    f"{{class: {node_class(node)}{width}}}"
                 )
         for fid, frame in frames.items():
             if fid in boxed and frame.get("parent") == parent:
@@ -2250,7 +2280,12 @@ def main() -> int:
                 for fid, frame in model["frames"].items()
             },
             **{
-                nid: {"label": node["label"], "shape": node["shape"], "isFrame": False}
+                nid: {
+                    "label": node["label"],
+                    "shape": node["shape"],
+                    "isFrame": False,
+                    "owner": node.get("owner"),
+                }
                 for nid, node in model["nodes"].items()
             },
         },
@@ -2261,6 +2296,8 @@ def main() -> int:
             "flows": model["flows"],
             "kinds": model["kinds"],
             "shapes": model["shapes"],
+            "owners": model.get("owners")
+            or {},
             "frames": {
                 kind: entry
                 for kind, entry in (model.get("frame_kinds") or {}).items()

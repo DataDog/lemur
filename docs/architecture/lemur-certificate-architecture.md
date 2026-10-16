@@ -18,9 +18,11 @@ files it relies on; anything outside this repository or not confirmed says so.
 **Lemur** is the broker and inventory for TLS certificates: clients request
 certificates, Lemur delegates issuance to a certificate authority through a CA plugin,
 records the result in PostgreSQL, and pushes the issued certificate to a destination
-plugin. Certificate delivery to Vault KV goes through the **COA** (Cert Orchestration
-Adapter). Alongside Lemur, **cert-manager** issues the pre-Vault bootstrap certificate
-that dedicated-vault needs to start, and **cert-distribute** handles Vault server TLS.
+plugin. **Lemur runs in ddbuild** (the control-plane datacenters); certificates are
+delivered **out of ddbuild** into each site datacenter (COA → Vault KV, Envoy) and to
+CSP destinations. Alongside Lemur, **cert-manager** issues the pre-Vault bootstrap
+certificate that dedicated-vault needs to start, and **cert-distribute** handles Vault
+server TLS.
 
 Source: `lemur/certificates/service.py`
 
@@ -264,6 +266,31 @@ Destination used by cert-distribute for Vault server TLS.
 Source: `lemur/plugins/lemur_vault_dest/`
 
 ## Ancillary systems
+
+### ddbuild
+
+<!-- catalog: no-service -->
+
+**ddbuild** is the control-plane datacenter site where **Lemur** and its PostgreSQL
+inventory live, along with **cert-distribute** and the **Build Vault**. This is where
+certificates are issued and recorded; they then flow **out of ddbuild** to site
+datacenters and CSP destinations.
+
+Source: `lemur/certificates/service.py`
+
+### Site Datacenter
+
+<!-- catalog: no-service -->
+
+Every commercial site datacenter (us1, us3, us5, eu1, eu3, ap1, ap3, …) is the place
+certificates are delivered into: **COA → Vault KV** holds the Edge/ISP certs that
+**Envoy** terminates TLS with, and each datacenter's **dedicated-vault / Vault server**
+gets its bootstrap and server TLS via cert-manager and cert-distribute respectively.
+A DC turnup bootstraps a new site datacenter before its own Vault is reachable (Phase 0
+via cert-manager), then continues with post-Vault certificate creation from ddbuild
+(Phase 1 via the certificate-bootstrapping-agent → Lemur → COA).
+
+Source: `lemur/certificates/service.py`
 
 ### cert-manager
 

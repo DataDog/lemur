@@ -498,37 +498,53 @@ export function Diagram({
                             ['Lines', model.legend.kinds, 'line'],
                             ['Boxes · Ownership', model.legend.shapes, 'shape'],
                             [
+                                'Colour · Team Ownership',
+                                model.legend.owners,
+                                'owner',
+                            ],
+                            [
                                 'Frames · Where It Runs',
                                 model.legend.frames,
                                 'frame',
                             ],
-                        ].map(([title, entries, kind]) => (
-                            <Flex
-                                key={title as string}
-                                direction="column"
-                                alignItems="stretch"
-                                gap="sm"
-                                className="fa-key-group"
-                            >
-                                <Text weight="bold" size="sm">
-                                    {title as string}
-                                </Text>
-                                {Object.entries(
-                                    entries as Record<
-                                        string,
-                                        { label: string }
-                                    >,
-                                ).map(([id, item]) => (
-                                    <Flex key={id} gap="sm">
-                                        <span
-                                            aria-hidden="true"
-                                            className={`fa-key-${kind} fa-key-${kind}-${id}`}
-                                        />
-                                        <Text size="sm">{item.label}</Text>
-                                    </Flex>
-                                ))}
-                            </Flex>
-                        ))}
+                        ]
+                            .filter(([, entries]) =>
+                                Object.keys(entries as object).length > 0,
+                            )
+                            .map(([title, entries, kind]) => (
+                                <Flex
+                                    key={title as string}
+                                    direction="column"
+                                    alignItems="stretch"
+                                    gap="sm"
+                                    className="fa-key-group"
+                                >
+                                    <Text weight="bold" size="sm">
+                                        {title as string}
+                                    </Text>
+                                    {Object.entries(
+                                        entries as Record<
+                                            string,
+                                            { label: string; color?: string }
+                                        >,
+                                    ).map(([id, item]) => (
+                                        <Flex key={id} gap="sm">
+                                            <span
+                                                aria-hidden="true"
+                                                className={`fa-key-${kind} fa-key-${kind}-${id}`}
+                                                style={
+                                                    kind === 'owner'
+                                                        ? {
+                                                              background: `var(--fa-owner-${id})`,
+                                                          }
+                                                        : undefined
+                                                }
+                                            />
+                                            <Text size="sm">{item.label}</Text>
+                                        </Flex>
+                                    ))}
+                                </Flex>
+                            ))}
                     </Flex>
                 </Accordion>
             </Panel>

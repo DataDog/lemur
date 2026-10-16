@@ -86,6 +86,7 @@ export type Data = {
                 | 'workload'
                 | null;
             isFrame: boolean;
+            owner: string | null;
         }
     >;
     docOf: Record<string, string>;
@@ -106,6 +107,10 @@ export type Data = {
         >;
         kinds: Record<string, { label: string }>;
         shapes: Record<string, { label: string }>;
+        owners: Record<
+            string,
+            { label: string; color: string; dark_color: string }
+        >;
         frames: Record<string, { label: string }>;
     };
     diagrams: Record<string, string>;
