@@ -63,7 +63,7 @@ frame_kinds:
 frames:
   ddbuild: {label: "ddbuild · Control-Plane Datacenters", kind: boundary, doc: ddbuild}
   site: {label: "A Site Datacenter (generic)", kind: boundary, doc: site-datacenter}
-  lemur: {label: "Lemur", kind: component, parent: ddbuild, doc: lemur}
+  lemur: {label: "Lemur", kind: component, parent: ddbuild, owner: resource-management, doc: lemur}
 
 # ---------------------------------------------------------------- boxes
 # label (a second line is a subtitle), shape (default: service), frame (where it runs),
@@ -71,9 +71,11 @@ frames:
 
 nodes:
   # --- Lemur (lives in ddbuild). The lemur frame groups the three Lemur sub-processes.
-  lemur_api: {label: "Flask API + Web UI\n(sync entrypoint)", frame: lemur, owner: resource-management, doc: lemur-api}
-  lemur_celery: {label: "Celery worker pool + beat\n(async issuance, delivery, rotation)", frame: lemur, owner: resource-management, doc: lemur-celery}
-  lemur_db: {label: "Lemur inventory\nPostgreSQL", shape: store, frame: lemur, owner: resource-management, doc: lemur-inventory}
+  # Children of the lemur frame intentionally carry no owner so they render white
+  # inside the red Lemur frame instead of all three glowing red.
+  lemur_api: {label: "Flask API + Web UI\n(sync entrypoint)", frame: lemur, doc: lemur-api}
+  lemur_celery: {label: "Celery worker pool + beat\n(async issuance, delivery, rotation)", frame: lemur, doc: lemur-celery}
+  lemur_db: {label: "Lemur inventory\nPostgreSQL", shape: store, frame: lemur, doc: lemur-inventory}
 
   # --- Clients of Lemur (things that call Lemur)
   coa: {label: "COA\nCert Orchestration Adapter", owner: resource-management, doc: coa}

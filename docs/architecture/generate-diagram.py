@@ -303,6 +303,8 @@ def load_model() -> dict[str, Any]:
             )
         if frame.get("parent") and frame["parent"] not in frames:
             errors.append(f"frame {fid}: unknown parent {frame['parent']}")
+        if frame.get("owner") and frame["owner"] not in (model.get("owners") or {}):
+            errors.append(f"frame {fid}: unknown owner {frame['owner']}")
         if fid in nodes:
             errors.append(f"{fid} is both a frame and a box")
     for nid, node in nodes.items():
@@ -1385,6 +1387,10 @@ def normalize_svg(
                 fill_role, fill_fallback, stroke_role, stroke_fallback = fills_by_frame[
                     kind
                 ]
+                owner_id = model["frames"][item].get("owner") if item in model["frames"] else None
+                if owner_id and owner_id in (model.get("owners") or {}):
+                    fill_role = f"owner-{owner_id}"
+                    fill_fallback = model["owners"][owner_id]["color"]
             else:
                 fill_role, fill_fallback, stroke_role, stroke_fallback = fills[shape]
                 owner_id = (
