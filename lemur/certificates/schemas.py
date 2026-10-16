@@ -186,6 +186,20 @@ class CertificateInputSchema(CertificateCreationSchema):
 
     @pre_load
     def load_data(self, data):
+        if "SANs" in data:
+            sans = fields.List(fields.String()).deserialize(data.pop("SANs"))
+            names = [{"nameType": "DNSName", "value": name} for name in sans]
+            extensions = data.setdefault("extensions", {})
+            if not isinstance(extensions, dict):
+                raise ValidationError("Invalid extensions.", ["extensions"])
+            sub_alt_names = extensions.setdefault("subAltNames", {})
+            if not isinstance(sub_alt_names, dict):
+                raise ValidationError("Invalid subAltNames.", ["extensions"])
+            if "names" in sub_alt_names and sub_alt_names["names"] != names:
+                raise ValidationError(
+                    "SANs conflicts with extensions.subAltNames.names.", ["SANs"]
+                )
+            sub_alt_names["names"] = names
         if data.get("replacements"):
             data["replaces"] = data[
                 "replacements"
