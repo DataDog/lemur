@@ -727,7 +727,7 @@ TARGET_ASPECT = 1.6
 
 def aligned_node_widths(model: dict[str, Any], svg: str) -> dict[str, float]:
     """Size nodes in each populated frame to its widest label after D2 measures it."""
-    root = ET.fromstring(svg)
+    root = ET.fromstring(svg)  # nosec B314 — parses d2-generated SVG, not user input
     ns = f"{{{SVG_NS}}}"
     widths: dict[str, float] = {}
     for group in root.iter(f"{ns}g"):
@@ -1214,7 +1214,7 @@ def normalize_svg(
     """Match d2 groups against the model, then discard d2's untrusted styling/fonts."""
     if "<!DOCTYPE" in source or "<!ENTITY" in source:
         raise DiagramError(f"view {view}: SVG contains a DTD")
-    root = ET.fromstring(source)
+    root = ET.fromstring(source)  # nosec B314 — parses d2-generated SVG, DTD already rejected above
     tag = lambda name: f"{{{SVG_NS}}}{name}"
     if root.tag != tag("svg") or "viewBox" not in root.attrib:
         raise DiagramError(f"view {view}: d2 did not emit an SVG viewBox")
