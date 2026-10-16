@@ -1387,6 +1387,14 @@ def normalize_svg(
                 ]
             else:
                 fill_role, fill_fallback, stroke_role, stroke_fallback = fills[shape]
+                owner_id = (
+                    model["nodes"][item].get("owner")
+                    if item in model["nodes"]
+                    else None
+                )
+                if owner_id and owner_id in (model.get("owners") or {}):
+                    fill_role = f"owner-{owner_id}"
+                    fill_fallback = model["owners"][owner_id]["color"]
             for form in group.findall(f"{tag('g')}/{tag('rect')}") + group.findall(
                 f"{tag('g')}/{tag('path')}"
             ):
