@@ -17,6 +17,8 @@ site:
     dd-source: "https://github.com/DataDog/dd-source/tree/main/"
     vault-platform: "https://github.com/DataDog/vault-platform/tree/main/"
     k8s-platform-resources: "https://github.com/DataDog/k8s-platform-resources/tree/master/"
+    service-discovery-platform: "https://github.com/DataDog/service-discovery-platform/tree/master/"
+    cloud-inventory: "https://github.com/DataDog/cloud-inventory/tree/main/"
   # Optional RUM; left null until hosting and an app id are approved.
   rum: null
 
@@ -42,6 +44,7 @@ owners:
   cloud-foundations: {label: Cloud Foundations, color: "#2e8b57", dark_color: "#8ccfa4"}
   pplat-identity: {label: "PPLAT / Identity Core", color: "#8e6bb0", dark_color: "#c6a9dc"}
   external-ca: {label: External CAs, color: "#7f8c8d", dark_color: "#b6bec0"}
+  fabric: {label: "Service Discovery Platform", color: "#c89f3c", dark_color: "#e5c87a"}
 
 shapes:
   service: {label: Datadog Service}
@@ -52,6 +55,7 @@ shapes:
 
 frame_kinds:
   boundary: {label: Datacenter}
+  component: {label: "Composite Service (sub-processes shown inside)"}
 
 # ---------------------------------------------------------------- frames (where it runs)
 # A frame is drawn only when a box inside it is. `ddbuild` is the control-plane where
@@ -59,15 +63,17 @@ frame_kinds:
 frames:
   ddbuild: {label: "ddbuild · Control-Plane Datacenters", kind: boundary, doc: ddbuild}
   site: {label: "A Site Datacenter (generic)", kind: boundary, doc: site-datacenter}
+  lemur: {label: "Lemur", kind: component, parent: ddbuild, doc: lemur}
 
 # ---------------------------------------------------------------- boxes
 # label (a second line is a subtitle), shape (default: service), frame (where it runs),
 # owner (owning team), doc (the Markdown h3 slug for its side panel).
 
 nodes:
-  # --- Lemur (lives in ddbuild)
-  lemur: {label: "Lemur\nAPI + UI + Celery", frame: ddbuild, owner: resource-management, doc: lemur}
-  lemur_db: {label: "Lemur inventory\nPostgreSQL", shape: store, frame: ddbuild, owner: resource-management, doc: lemur-inventory}
+  # --- Lemur (lives in ddbuild). The lemur frame groups the three Lemur sub-processes.
+  lemur_api: {label: "Flask API + Web UI\n(sync entrypoint)", frame: lemur, owner: resource-management, doc: lemur-api}
+  lemur_celery: {label: "Celery worker pool + beat\n(async issuance, delivery, rotation)", frame: lemur, owner: resource-management, doc: lemur-celery}
+  lemur_db: {label: "Lemur inventory\nPostgreSQL", shape: store, frame: lemur, owner: resource-management, doc: lemur-inventory}
 
   # --- Clients of Lemur (things that call Lemur)
   coa: {label: "COA\nCert Orchestration Adapter", owner: resource-management, doc: coa}
@@ -75,9 +81,9 @@ nodes:
   ddcert: {label: "ddcert CLI", shape: external, owner: resource-management, doc: ddcert-cli}
   webui: {label: "Lemur Web UI", shape: external, owner: resource-management, doc: lemur-web-ui}
   dcreg: {label: "dc registry", shape: external, owner: resource-management, doc: dc-registry}
-  nom: {label: "NOM (legacy)", shape: external, owner: resource-management, doc: nom}
 
   # --- Certificate authorities (upstream, external)
+  ca: {label: "Certificate Authority\n(upstream, via plugin)", shape: external, owner: external-ca, doc: certificate-authority-generic}
   digicert: {label: "DigiCert", shape: external, owner: external-ca, doc: digicert}
   letsencrypt: {label: "Let's Encrypt\n(ACME)", shape: external, owner: external-ca, doc: lets-encrypt}
   sectigo: {label: "Sectigo", shape: external, owner: external-ca, doc: sectigo}
@@ -86,11 +92,19 @@ nodes:
   cfssl: {label: "CFSSL", shape: external, owner: external-ca, doc: cfssl}
 
   # --- Destinations  (delivery into a site datacenter or a CSP)
-  coavault: {label: "COA → Vault KV", frame: site, owner: resource-management, doc: coa-to-vault-kv}
+  coavault: {label: "Site Vault KV\n(delivered via COA)", frame: site, shape: store, owner: pplat-identity, doc: coa-to-vault-kv}
   aws: {label: "AWS IAM / CloudFront", owner: cloud-foundations, doc: aws-iam-cloudfront}
+  acm: {label: "AWS ACM", shape: external, owner: cloud-foundations, doc: aws-acm}
   gcp: {label: "GCP Load Balancer", owner: resource-management, doc: gcp-load-balancer}
   azure: {label: "Azure Key Vault", owner: resource-management, doc: azure-key-vault}
   buildvault: {label: "Build Vault", shape: store, frame: ddbuild, owner: pplat-identity, doc: build-vault}
+
+  # --- DCV / DNS plumbing (shared by cert-manager and Lemur-DCV)
+  route53: {label: "Route 53\nhosted zones", shape: store, owner: cloud-foundations, doc: route-53}
+  cloudinv: {label: "cloud-inventory\nTerraform (persistent TXT/CNAME)", shape: external, owner: cloud-foundations, doc: cloud-inventory-dns}
+  sdp: {label: "SDP / Fabric\n(hosted-zone subset via SDP terraform)", shape: external, owner: fabric, doc: sdp-dns}
+  lemur_managed_iam: {label: "lemur.managed\nIAM boundary (planned, IR-57191)", shape: external, owner: resource-management, doc: lemur-managed-iam}
+  vault_pki: {label: "cert-distribute vault-pki\n(sidecar on each Vault node)", frame: site, owner: pplat-identity, doc: cert-distribute-vault-pki}
 
   # --- Ancillary / consumer systems
   certmanager: {label: "cert-manager", frame: site, owner: compute, doc: cert-manager}
@@ -98,6 +112,7 @@ nodes:
   envoy: {label: "Envoy\n(edge TLS terminator)", shape: external, frame: site, doc: envoy}
   dedicated_vault: {label: "dedicated-vault\n(k8s)", shape: store, frame: site, owner: pplat-identity, doc: dedicated-vault}
   vault_server: {label: "Vault server\nTLS target", shape: store, frame: site, owner: pplat-identity, doc: vault-server}
+  cert_bucket: {label: "cert bucket\n(per-site CSP bucket)", shape: store, frame: site, owner: pplat-identity, doc: cert-bucket}
 
 # ---------------------------------------------------------------- views
 # group: the run of tabs it sits in. Its panel text is the Markdown h2 section with a
@@ -161,22 +176,28 @@ views:
       architecture_view: landscape
     steps:
       - from: ra_agent
-        to: lemur
+        to: lemur_api
         label: "create certs & destinations"
         verification: unverified
         note: The bootstrapping agent requests certs and destinations from Lemur in ddbuild.
         sources: []
-      - from: lemur
+      - from: lemur_celery
         to: digicert
         label: "issue (DigiCert)"
         verification: unverified
         note: DigiCert is the current default CA for turnup.
         sources: []
-      - from: lemur
-        to: coavault
-        label: "deliver Edge/ISP cert to site DC"
+      - from: lemur_celery
+        to: coa
+        label: "push cert to COA (gRPC / xDCGW)"
         verification: unverified
-        note: The cert leaves ddbuild and is delivered to the COA destination in the site datacenter, into Vault KV.
+        note: Lemur's COA destination plugin pushes the Edge/ISP cert out of ddbuild to the site datacenter's COA.
+        sources: []
+      - from: coa
+        to: coavault
+        label: "write to Site Vault KV"
+        verification: unverified
+        note: COA validates the cert and stores it in the local Site Vault KV via Emissary.
         sources: []
 
   - id: flow-issuance
@@ -192,28 +213,34 @@ views:
       architecture_view: landscape
     steps:
       - from: ddcert
-        to: lemur
+        to: lemur_api
         label: "request certificate"
         verification: unverified
         note: The ddcert CLI calls the Lemur API to request a cert.
         sources: []
-      - from: lemur
-        to: letsencrypt
+      - from: lemur_celery
+        to: ca
         label: "issue via CA plugin"
         verification: unverified
-        note: CA choice depends on the authority configured for the cert.
+        note: "The CA plugin used (lemur_digicert / lemur_acme / lemur_sectigo / lemur_entrust / lemur_gcp / lemur_cfssl) depends on the authority configured for the cert; the flow is intentionally generic here."
         sources: []
-      - from: lemur
+      - from: lemur_celery
         to: lemur_db
         label: "record in inventory"
         verification: unverified
         note: Stored in Lemur's PostgreSQL inventory in ddbuild.
         sources: []
-      - from: lemur
-        to: coavault
-        label: "deliver to destination"
+      - from: lemur_celery
+        to: coa
+        label: "push cert to COA"
         verification: unverified
-        note: Shown with the COA destination for internal services in a site datacenter.
+        note: The COA destination plugin pushes the cert over gRPC/xDCGW to the target site's COA.
+        sources: []
+      - from: coa
+        to: coavault
+        label: "store in Site Vault KV"
+        verification: unverified
+        note: COA validates and stores the cert in the local Site Vault KV via Emissary.
         sources: []
 
   - id: flow-le-migration
@@ -221,24 +248,30 @@ views:
     category: flow
     group: Core Flows
     scenario:
-      actor: lemur
+      actor: lemur_celery
       trigger: Datadog migrates certificates from DigiCert to Let's Encrypt (ACME).
       preconditions: [LE quota is available, destinations trust the ISRG Root X1]
       end_state: Certificates are issued by Let's Encrypt and consumers trust its root.
       limitations: [Migration is in progress; Envoy trust-bundle check is per-DC]
       architecture_view: landscape
     steps:
-      - from: lemur
+      - from: lemur_celery
         to: letsencrypt
         label: "issue via ACME/LE"
         verification: unverified
         note: LE issues DV certificates; shared quota per registered domain.
         sources: []
-      - from: lemur
-        to: coavault
-        label: "deliver LE cert"
+      - from: lemur_celery
+        to: coa
+        label: "push LE cert to COA"
         verification: unverified
-        note: Delivered from ddbuild to the COA destination in the site datacenter, into Vault KV.
+        note: Lemur's COA destination plugin pushes the LE-issued cert out of ddbuild to the site datacenter's COA.
+        sources: []
+      - from: coa
+        to: coavault
+        label: "store LE cert in Site Vault KV"
+        verification: unverified
+        note: COA validates and stores the cert in the local Site Vault KV via Emissary.
         sources: []
       - from: coavault
         to: envoy
@@ -251,6 +284,41 @@ views:
         label: "trust ISRG Root X1"
         verification: unverified
         note: Envoy's trust bundle must include LE's root (one-time per-DC check).
+        sources: []
+
+  - id: flow-automated-dcv
+    title: Automated DCV (RDNA-1000, planned)
+    category: flow
+    group: Core Flows
+    scenario:
+      actor: lemur_celery
+      trigger: "PLANNED (RDNA-1000, in-flight): on each DigiCert renewal, Lemur initiates Domain Control Validation automatically against the persistent TXT already present in Route 53."
+      preconditions:
+        - "Persistent _dnsauth CNAME + _validation-persist TXT records exist for the domain (applied by cloud-inventory TF, verified)"
+        - "Lemur can reach the DigiCert REST API (verified: get_dcv_expiration_data() in lemur_digicert already calls DigiCert v2/domain)"
+      end_state: "DigiCert confirms domain control from the persistent TXT and signs the renewed certificate; no per-renewal DNS write."
+      limitations:
+        - "RDNA-1000 is NOT YET SHIPPED in main. Current lemur_digicert plugin only reads DCV token expiration for monitoring (lemur/plugins/lemur_digicert/plugin.py:500-533, `get_dcv_expiration_data`); no active request_dcv/check_dcv method exists."
+        - "CLOUDR-2118 attribution for the canonical form is not referenced in cloud-inventory code; the canonical records are present but not tagged to the ticket."
+      architecture_view: landscape
+    steps:
+      - from: lemur_celery
+        to: digicert
+        label: "request DCV on renewal (planned)"
+        verification: unverified
+        note: "PLANNED PATH. Current main has only monitoring (`get_dcv_expiration_data`); the active request on renewal is RDNA-1000 and not shipped."
+        sources: []
+      - from: digicert
+        to: route53
+        label: "read persistent TXT"
+        verification: unverified
+        note: "VERIFIED in cloud-inventory (`terraform-modules/aws-dns/main.tf:2-12`): `_dnsauth.<domain>` CNAME + `_validation-persist.<domain>` TXT. Step is marked `unverified` here because the generator only accepts lemur-local source paths; see prose for the cross-repo citation."
+        sources: []
+      - from: digicert
+        to: lemur_celery
+        label: "sign renewed cert"
+        verification: unverified
+        note: "DigiCert returns the signed certificate once DCV passes; Celery `certificate_rotate` records it. The automated-renewal glue is still RDNA-1000 scope."
         sources: []
 
   - id: flow-distribution
@@ -266,28 +334,40 @@ views:
       architecture_view: landscape
     steps:
       - from: certdist
-        to: lemur
-        label: "request certs"
+        to: lemur_api
+        label: "request certs (POST /auth/login, GET /api/1/certificates)"
         verification: unverified
-        note: cert-distribute requests Vault server TLS certs from Lemur.
+        note: "VERIFIED in vault-platform (`cmd/cert-distribute/internal/lemur/client.go:52` login, `:86-99` list certs, `:71-78` GET /certificates/{id}/key)."
         sources: []
-      - from: lemur
+      - from: lemur_celery
         to: buildvault
-        label: "deliver to Build Vault"
+        label: "deliver cert body + key"
         verification: unverified
-        note: Delivered in ddbuild.
+        note: "Build Vault = KV path `kv/data/managed-certificates/k8s/vault-platform/cert-distribute/{vault_host}_*` with `crt` and `key` fields. Verified in vault-platform `cmd/cert-distribute/internal/cert/vault.go:13-14,27,56,69-76`."
         sources: []
       - from: certdist
         to: buildvault
-        label: "read certs"
+        label: "read certs from kv/managed-certificates/k8s/vault-platform/cert-distribute"
         verification: unverified
-        note: cert-distribute reads the certs from the Build Vault.
+        note: "VERIFIED in vault-platform (`cmd/cert-distribute/internal/cert/vault.go:56`)."
         sources: []
       - from: certdist
+        to: cert_bucket
+        label: "write cert to CSP bucket"
+        verification: unverified
+        note: "VERIFIED in vault-platform (`cmd/cert-distribute/internal/distribute/bucket.go:110-116` for bucket naming `certs.{vault_host}`; `cmd/cert-distribute/internal/distribute/remote_cert_manager.go:26-70` for the S3 / GCS / Azure branches). cert-distribute never writes to the Vault server directly."
+        sources: []
+      - from: vault_pki
+        to: cert_bucket
+        label: "pull cert (polled, ~2h)"
+        verification: unverified
+        note: "VERIFIED in vault-platform. The pull is done by the `cert-distribute vault-pki` sidecar (NOT the Vault server itself). Systemd unit at `ansible/roles/vault/templates/systemd/cert-distribute.service` runs `cert-distribute service vault-pki`; maintainer loop polls on an interval (`cmd/cert-distribute/internal/maintainer/maintainer.go:38-67`, default 2h; 1 min on error)."
+        sources: []
+      - from: vault_pki
         to: vault_server
-        label: "distribute via buckets"
+        label: "write /var/lib/vault/pki + SIGHUP"
         verification: unverified
-        note: Distributed out of ddbuild to each site datacenter's Vault server via cert buckets.
+        note: "VERIFIED in vault-platform (`cmd/cert-distribute/internal/maintainer/maintainer.go:69-110` fetchAndUpdate; `:182-201` reload via SIGHUP or `systemctl reload vault.service`). Vault reloads from local disk; it never fetches from the bucket itself."
         sources: []
 
 # ---------------------------------------------------------------- edges
@@ -295,36 +375,58 @@ views:
 # Architecture membership comes from `views:`; a flow-only edge lists no views.
 
 edges:
-  # --- Clients of Lemur
-  - {from: coa, to: lemur, label: "push / query certs", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: ra_agent, to: lemur, label: "create certs & destinations", kind: call, flow: issuance, views: [landscape, complete]}
-  - {from: ddcert, to: lemur, label: "list / manage", kind: call, flow: config, views: [landscape]}
-  - {from: webui, to: lemur, label: "manage", kind: call, flow: config, views: [landscape]}
-  - {from: dcreg, to: lemur, label: "create cert + destination", kind: call, flow: issuance, views: [landscape, complete]}
-  - {from: nom, to: lemur, label: "legacy provisioning", kind: call, flow: config, views: [landscape]}
+  # --- Clients of Lemur (all land on the Flask API/UI)
+  - {from: ra_agent, to: lemur_api, label: "create certs & destinations", kind: call, flow: issuance, views: [overview, landscape, complete]}
+  - {from: ddcert, to: lemur_api, label: "list / manage", kind: call, flow: config, views: [overview, landscape]}
+  - {from: webui, to: lemur_api, label: "manage", kind: call, flow: config, views: [overview, landscape]}
+  - {from: dcreg, to: lemur_api, label: "create cert + destination", kind: call, flow: issuance, views: [overview, landscape, complete]}
 
-  # --- Lemur -> CAs (issue)
-  - {from: lemur, to: digicert, label: "issue", kind: call, flow: issuance, views: [landscape, complete]}
-  - {from: lemur, to: letsencrypt, label: "issue (ACME)", kind: call, flow: issuance, views: [overview, landscape, complete]}
-  - {from: lemur, to: sectigo, label: "issue", kind: call, flow: issuance, views: [complete]}
-  - {from: lemur, to: entrust, label: "issue", kind: call, flow: issuance, views: [complete]}
-  - {from: lemur, to: gcpca, label: "issue", kind: call, flow: issuance, views: [complete]}
-  - {from: lemur, to: cfssl, label: "issue", kind: call, flow: issuance, views: [complete]}
-  - {from: lemur, to: lemur_db, label: "record in inventory", kind: call, flow: issuance, views: []}
+  # --- Internal: API -> Celery -> DB
+  - {from: lemur_api, to: lemur_celery, label: "enqueue issuance / delivery task", kind: call, flow: issuance, views: [overview, landscape, complete]}
+  - {from: lemur_api, to: lemur_db, label: "query / update inventory", kind: call, flow: config, views: [overview, landscape, complete]}
+  - {from: lemur_celery, to: lemur_db, label: "write issuance + rotation results", kind: call, flow: issuance, views: [overview, landscape, complete]}
+
+  # --- Celery <-> COA (Lemur's destination plugin drives COA; cert data flows into Vault KV)
+  # NB: lemur_vault_dest in public main uses HTTP via hvac. gRPC / xDCGW path to COA
+  # noted in the north-star notebook is not in the public plugin — likely in a
+  # fork / private path. Edge kept at the architectural level.
+  - {from: lemur_celery, to: coa, label: "push / query certs (destination plugin)", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: coa, to: coavault, label: "validate + store in Vault KV", kind: call, flow: delivery, views: [overview, landscape, complete]}
+
+  # --- Celery -> CAs (issue)
+  - {from: lemur_celery, to: ca, label: "issue (via CA plugin)", kind: call, flow: issuance, views: [overview]}
+  - {from: lemur_celery, to: digicert, label: "issue", kind: call, flow: issuance, views: [landscape, complete]}
+  - {from: lemur_celery, to: letsencrypt, label: "issue (ACME)", kind: call, flow: issuance, views: [landscape, complete]}
+  - {from: lemur_celery, to: sectigo, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur_celery, to: entrust, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur_celery, to: gcpca, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur_celery, to: cfssl, label: "issue", kind: call, flow: issuance, views: [complete]}
   - {from: letsencrypt, to: certmanager, label: "sign / respond", kind: call, flow: bootstrap, views: []}
 
-  # --- Lemur -> Destinations (deliver out of ddbuild into site datacenters / CSPs)
-  - {from: lemur, to: coavault, label: "deliver", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: lemur, to: aws, label: "deliver", kind: call, flow: delivery, views: [complete]}
-  - {from: lemur, to: gcp, label: "deliver", kind: call, flow: delivery, views: [complete]}
-  - {from: lemur, to: azure, label: "deliver", kind: call, flow: delivery, views: [complete]}
-  - {from: lemur, to: buildvault, label: "deliver", kind: call, flow: delivery, views: [complete]}
+  # --- Celery -> Destinations (deliver out of ddbuild into site datacenters / CSPs)
+  - {from: lemur_celery, to: lemur_managed_iam, label: "assume lemur.managed role", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: lemur_managed_iam, to: aws, label: "update CloudFront cert", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: lemur_celery, to: aws, label: "deliver (legacy direct path)", kind: call, flow: delivery, views: [complete]}
+  - {from: lemur_celery, to: acm, label: "deliver (ACM dest plugin, CLOUDR-2056)", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: lemur_celery, to: gcp, label: "deliver", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: lemur_celery, to: azure, label: "deliver", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: lemur_celery, to: buildvault, label: "deliver", kind: call, flow: delivery, views: [complete]}
+
+  # --- DCV / DNS plumbing (Automated DCV + cert-manager DNS01)
+  - {from: certmanager, to: route53, label: "DNS01 challenge write", kind: call, flow: bootstrap, views: [landscape, complete]}
+  - {from: cloudinv, to: route53, label: "apply _dnsauth CNAME + _validation-persist TXT", kind: call, flow: config, views: [landscape, complete]}
+  - {from: sdp, to: route53, label: "apply hosted-zone subset (SDP terraform)", kind: call, flow: config, views: [landscape, complete]}
+  - {from: cloudinv, to: sdp, label: "NS-delegate transit subzones", kind: call, flow: config, views: [landscape, complete]}
+  - {from: digicert, to: route53, label: "verify DCV TXT", kind: read, flow: issuance, views: [landscape, complete]}
+  - {from: digicert, to: lemur_celery, label: "signed cert", kind: call, flow: issuance, views: []}
 
   # --- Ancillary / consumers
   - {from: certmanager, to: letsencrypt, label: "ACME / DNS01", kind: read, flow: bootstrap, views: [overview, landscape, complete]}
   - {from: certmanager, to: dedicated_vault, label: "write TLS cert Secret", kind: call, flow: bootstrap, views: []}
-  - {from: certdist, to: lemur, label: "requests certs", kind: call, flow: delivery, views: [landscape, complete]}
+  - {from: certdist, to: lemur_api, label: "requests certs", kind: call, flow: delivery, views: [landscape, complete]}
   - {from: certdist, to: buildvault, label: "reads certs", kind: read, flow: delivery, views: [landscape, complete]}
-  - {from: certdist, to: vault_server, label: "distribute via buckets", kind: call, flow: delivery, views: []}
+  - {from: certdist, to: cert_bucket, label: "write cert to CSP bucket (S3 / GCS / Azure)", kind: call, flow: delivery, views: [landscape, complete]}
+  - {from: vault_pki, to: cert_bucket, label: "pull cert (polled)", kind: read, flow: delivery, views: [landscape, complete]}
+  - {from: vault_pki, to: vault_server, label: "write /var/lib/vault/pki + SIGHUP", kind: call, flow: delivery, views: [landscape, complete]}
   - {from: coavault, to: envoy, label: "Edge certs", kind: read, flow: delivery, views: [overview, landscape, complete]}
   - {from: envoy, to: letsencrypt, label: "trusts ISRG Root X1", kind: read, flow: bootstrap, views: []}
