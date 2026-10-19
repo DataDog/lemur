@@ -141,12 +141,11 @@ class SectigoIssuerPlugin(IssuerPlugin):
         Returns a list of dicts with a schema shared by all issuer plugins that
         implement this method (see lemur_digicert):
           - domain: str
-          - dcv_expiration: str (ISO date) | None  -- always None for Sectigo
-            (prod does not return expirationDate)
           - validation_type: str  -- "dv" (Sectigo)
           - org_id: str
-          - dcv_method: str  -- e.g. CNAME, PERSISTENT_TXT
-          - dcv_status: str  -- active / pending / expired (Sectigo)
+          - dcv_method: str  -- normalized: dns-cname-token / dns-txt-token /
+            http-token / email / persistent-txt
+          - dcv_status: str  -- normalized: active / pending / expired
         """
         url = f"{self.client.base_url}/dcv/v1/validation"
         response = self.client.session.get(url)
