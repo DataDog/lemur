@@ -236,6 +236,7 @@ def request_reissue(certificate, notify, commit):
         1,
         metric_tags={"status": status, "certificate": certificate.name},
     )
+    return status == SUCCESS_METRIC_STATUS
 
 
 @manager.option(
@@ -476,14 +477,18 @@ def reissue(old_certificate_name, notify, commit):
     try:
         old_cert = validate_certificate(old_certificate_name)
 
+        failed = 0
         if not old_cert:
             for certificate in get_all_pending_reissue():
-                request_reissue(certificate, notify, commit)
+                if not request_reissue(certificate, notify, commit):
+                    failed += 1
         else:
-            request_reissue(old_cert, notify, commit)
+            if not request_reissue(old_cert, notify, commit):
+                failed += 1
 
-        status = SUCCESS_METRIC_STATUS
-        print("[+] Done!")
+        if not failed:
+            status = SUCCESS_METRIC_STATUS
+            print("[+] Done!")
     except Exception as e:
         capture_exception()
         current_app.logger.exception("Error reissuing certificate.", exc_info=True)
@@ -492,6 +497,9 @@ def reissue(old_certificate_name, notify, commit):
     metrics.send(
         "certificate_reissue_job", "counter", 1, metric_tags={"status": status}
     )
+    if status == FAILURE_METRIC_STATUS:
+        # Let Celery report a failed task after processing the remaining certificates.
+        raise RuntimeError("Certificate reissuance failed; see certificate errors above.")
 
 
 @manager.option(

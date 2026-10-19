@@ -31,6 +31,7 @@ from sentry_sdk import capture_exception
 
 from lemur.authorities.service import get as get_authority
 from lemur.certificates import cli as cli_certificate
+from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.dns_providers import cli as cli_dns_providers
@@ -51,7 +52,7 @@ from lemur.sources.cli import clean, sync, validate_sources
 fips.instance.must_enable_fips_if_needed()
 
 if current_app:
-    flask_app = current_app
+    flask_app = current_app._get_current_object()
 else:
     flask_app = create_app()
 
@@ -114,9 +115,9 @@ def report_worker_utilization(consumer):
 
 
 @worker_ready.connect
-def start_worker_utilization_reporting(sender, **kwargs):
+def start_worker_utilization_reporting(sender, interval=60, **kwargs):
     # Run in the parent process, not as a task that a full pool could block.
-    sender.timer.call_repeated(60, report_worker_utilization, (sender,))
+    sender.timer.call_repeatedly(interval, report_worker_utilization, (sender,))
 
 
 def is_task_active(fun, task_id, args):
@@ -1204,6 +1205,42 @@ def identify_expiring_deployed_certificates():
         metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
         return
 
+    metrics.send(f"{function}.success", "counter", 1)
+    return log_data
+
+
+@celery_app.task(soft_time_limit=3600)
+def certificate_health_check():
+    """Evaluate certificate health independently of expiration telemetry."""
+    function = f"{__name__}.{sys._getframe().f_code.co_name}"
+    task_id = None
+    if celery_app.current_task:
+        task_id = celery_app.current_task.request.id
+    log_data = {
+        "function": function,
+        "message": "sending certificate health metrics",
+        "task_id": task_id,
+    }
+    if task_id and is_task_active(function, task_id, None):
+        log_data["message"] = "Skipping task: Task is already active"
+        current_app.logger.debug(log_data)
+        return
+
+    try:
+        log_data.update(certificate_health.send_certificate_health_metrics())
+    except SoftTimeLimitExceeded:
+        log_data["message"] = "Time limit exceeded."
+        current_app.logger.error(log_data)
+        capture_exception()
+        metrics.send("celery.timeout", "counter", 1, metric_tags={"function": function})
+        raise
+    except Exception:
+        current_app.logger.exception("Error sending certificate health metrics")
+        capture_exception()
+        metrics.send(f"{function}.error", "counter", 1)
+        raise
+
+    current_app.logger.info(log_data)
     metrics.send(f"{function}.success", "counter", 1)
     return log_data
 
