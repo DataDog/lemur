@@ -17,7 +17,6 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from flask import current_app
-from marshmallow.exceptions import ValidationError
 from sentry_sdk import capture_exception
 from sqlalchemy import and_, func, or_, not_, cast, Integer
 from sqlalchemy.orm import selectinload
@@ -511,7 +510,7 @@ def create(**kwargs):
         names = kwargs.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
         for predecessor in kwargs["replaces"]:
             if common_name != (predecessor.cn or ""):
-                raise ValidationError(
+                raise Exception(
                     f"Replacement CN must match certificate {predecessor.id}: {predecessor.cn}"
                 )
             try:
@@ -523,7 +522,7 @@ def create(**kwargs):
             missing = set(previous_names) - set(names)
             if missing:
                 values = sorted(f"{type(name).__name__}:{name.value}" for name in missing)
-                raise ValidationError(
+                raise Exception(
                     f"Replacement cannot remove SANs from certificate {predecessor.id}: {values}"
                 )
 
