@@ -1678,15 +1678,24 @@ def inline_text(tokens: list[Token]) -> str:
 
 
 def repo_hrefs(tokens: list[Token]) -> list[str]:
-    return [
-        href
-        for token in tokens
-        if token.type == "link_open"
-        for href in [token.attrGet("href")]
-        if isinstance(href, str)
-        and "github.com/" in href
-        and ("/tree/" in href or "/blob/" in href)
-    ]
+    """Collect Github repo tree/blob hrefs from a list of Markdown tokens.
+
+    The host is validated via url parsing (not a substring check) so a URL like
+    ``https://example.com/github.com/...`` is not treated as a Github link.
+    """
+    results: list[str] = []
+    for token in tokens:
+        if token.type != "link_open":
+            continue
+        href = token.attrGet("href")
+        if not isinstance(href, str):
+            continue
+        host = urlsplit(href).netloc.lower()
+        if host != "github.com" and not host.endswith(".github.com"):
+            continue
+        if "/tree/" in href or "/blob/" in href:
+            results.append(href)
+    return results
 
 
 def parse_comment(content: str, line: int) -> tuple[str, dict[str, str]] | None:
