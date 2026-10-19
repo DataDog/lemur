@@ -155,7 +155,7 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
     emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    vs_calls = [c for c in gauge_calls if c.args[0] == "dcv.health"]
     assert len(vs_calls) == 1
     assert vs_calls[0].args[2] == 1  # active -> healthy
     tags = vs_calls[0].kwargs["metric_tags"]
@@ -207,7 +207,7 @@ def test_emit_dcv_expiration_metrics_validation_status_mapping(
     emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    vs_calls = [c for c in gauge_calls if c.args[0] == "dcv.health"]
     assert len(vs_calls) == len(status_by_domain)
     by_domain = {c.kwargs["metric_tags"]["domain"]: c for c in vs_calls}
     # only active is healthy; pending/expired/unknown/empty are not.
@@ -261,7 +261,7 @@ def test_emit_dcv_expiration_metrics_does_not_hide_expired_behind_active(
     emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    vs_calls = [c for c in gauge_calls if c.args[0] == "dcv.health"]
     # one gauge per validation type (OV and EV), not collapsed to a single row.
     assert len(vs_calls) == 2
     by_type = {c.kwargs["metric_tags"]["validation_type"]: c for c in vs_calls}
@@ -269,7 +269,7 @@ def test_emit_dcv_expiration_metrics_does_not_hide_expired_behind_active(
     assert by_type["ev"].args[2] == 0  # expired EV -> NOT healthy (not hidden)
     assert by_type["ev"].kwargs["metric_tags"]["dcv_status"] == "expired"
     # broken_domains counts the domain once because one validation is expired.
-    broken = [c for c in gauge_calls if "dcv.broken_domains" in c.args[0]]
+    broken = [c for c in gauge_calls if "dcv.health.broken" in c.args[0]]
     assert broken and broken[0].args[2] == 1
 
 
@@ -305,7 +305,7 @@ def test_emit_dcv_expiration_metrics_matches_wildcard_domain(
     emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    vs_calls = [c for c in gauge_calls if c.args[0] == "dcv.health"]
     assert len(vs_calls) == 1
     assert vs_calls[0].kwargs["metric_tags"]["domain"] == "lemur-sandbox.datad0g.com"
     assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "active"
@@ -320,7 +320,7 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
     # Sectigo prod does not return expirationDate, so dcv_expiration is absent;
-    # dcv.validation_status must still be emitted from dcv_status.
+    # dcv.health must still be emitted from dcv_status.
     mock_get_all_domains.return_value = {"sectigo-issuer": {"datad0g.com"}}
     fake_plugin = MagicMock()
     fake_plugin.slug = "sectigo-issuer"
@@ -341,7 +341,7 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    vs_calls = [c for c in gauge_calls if c.args[0] == "dcv.health"]
     assert len(vs_calls) == 1
     assert vs_calls[0].args[2] == 1  # active -> healthy
     assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "active"
@@ -381,7 +381,7 @@ def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
         for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2
         and c.args[1] == "gauge"
-        and "dcv.validation_status" in c.args[0]
+        and c.args[0] == "dcv.health"
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "good.com"
@@ -426,7 +426,7 @@ def test_emit_dcv_expiration_metrics_malformed_entry_emits_error(
 
     # The well-formed entry still emits a gauge.
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    vs_calls = [c for c in gauge_calls if c.args[0] == "dcv.health"]
     assert len(vs_calls) == 1
     assert vs_calls[0].kwargs["metric_tags"]["domain"] == "example.com"
 
@@ -465,7 +465,7 @@ def test_emit_dcv_expiration_metrics_empty_data_no_metric(
         for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2
         and c.args[1] == "gauge"
-        and "dcv.validation_status" in c.args[0]
+        and c.args[0] == "dcv.health"
     ]
     assert len(dcv_calls) == 0
 
@@ -531,7 +531,7 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
         for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2
         and c.args[1] == "gauge"
-        and "dcv.validation_status" in c.args[0]
+        and c.args[0] == "dcv.health"
     ]
     assert len(dcv_calls) == 1
     assert dcv_calls[0].kwargs["metric_tags"]["domain"] == "lemur-sandbox.datad0g.com"
@@ -562,7 +562,7 @@ def test_emit_dcv_expiration_metrics_flags_uncovered_domain(
     emit_dcv_expiration_metrics()
 
     gauge_calls = [c for c in mock_metrics.send.call_args_list if c.args[1] == "gauge"]
-    vs_calls = [c for c in gauge_calls if "dcv.validation_status" in c.args[0]]
+    vs_calls = [c for c in gauge_calls if c.args[0] == "dcv.health"]
     by_domain = {c.kwargs["metric_tags"]["domain"]: c for c in vs_calls}
     assert set(by_domain) == {"inuse.com", "reported.com"}
     assert by_domain["reported.com"].args[2] == 1
@@ -592,7 +592,7 @@ def test_emit_dcv_expiration_metrics_skips_non_monitored_ca(
         for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2
         and c.args[1] == "gauge"
-        and "dcv.validation_status" in c.args[0]
+        and c.args[0] == "dcv.health"
     ]
     assert vs_calls == []
 
@@ -644,7 +644,7 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
         for c in mock_metrics.send.call_args_list
         if len(c.args) >= 2
         and c.args[1] == "gauge"
-        and "dcv.broken_domains" in c.args[0]
+        and "dcv.health.broken" in c.args[0]
     ]
     assert len(broken_calls) == 1
     assert broken_calls[0].args[2] == 2  # expired + uncovered
