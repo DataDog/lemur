@@ -457,7 +457,6 @@ def mint(**kwargs):
         private_key = None
         csr_imported.send(authority=authority, csr=csr)
 
-    cert_utils.validate_replacement_names(dict(kwargs, csr=csr))
     cert_body, cert_chain, external_id = issuer.create_certificate(csr, kwargs)
     return cert_body, private_key, cert_chain, external_id, csr
 
@@ -506,6 +505,8 @@ def create(**kwargs):
     """
     Creates a new certificate.
     """
+    cert_utils.validate_replacement_names(kwargs)
+
     # Validate destinations do not overlap accounts for the same plugin and path
     if "destinations" in kwargs:
         dest_plugin_accounts = {}

@@ -2,7 +2,7 @@ import datetime
 import ipaddress
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from cryptography import x509
@@ -123,22 +123,22 @@ def test_csr_is_authoritative(replacement_material, change):
 
 
 @pytest.mark.parametrize("provided_csr", [False, True])
-def test_rejects_before_calling_issuer(replacement_material, provided_csr):
+def test_create_rejects_before_mint(replacement_material, provided_csr):
     old, _ = replacement_material()
     _, csr = replacement_material(names=["example.com"])
-    issuer = Mock()
-    data = {"authority": SimpleNamespace(plugin_name="test"), "replaces": [old]}
+    data = {
+        "common_name": old.cn,
+        "extensions": {"sub_alt_names": {"names": [x509.DNSName(old.cn)]}},
+        "replaces": [old],
+    }
     if provided_csr:
         data["csr"] = csr
     with (
-        patch.object(service.plugins, "get", return_value=issuer),
-        patch.object(service, "create_csr", return_value=(csr, SAN_CERT_KEY)),
-        patch.object(service.csr_created, "send"),
-        patch.object(service.csr_imported, "send"),
+        patch.object(service, "mint") as mint,
         pytest.raises(ValidationError, match="www.example.com"),
     ):
-        service.mint(**data)
-    issuer.create_certificate.assert_not_called()
+        service.create(**data)
+    mint.assert_not_called()
 
 
 @pytest.mark.parametrize("change", ["cn", "sans"])
