@@ -10,9 +10,23 @@ from cryptography.hazmat.primitives import hashes, serialization
 from marshmallow import ValidationError
 
 from lemur.certificates import service
-from lemur.certificates.utils import validate_replacement_names
 from lemur.common.utils import parse_private_key
 from lemur.tests.vectors import SAN_CERT_KEY, VALID_ADMIN_HEADER_TOKEN
+
+
+@pytest.fixture
+def validate_replacement_names(app):
+    def validate(data):
+        with patch.object(
+            service, "mint", side_effect=RuntimeError("mint reached")
+        ) as mint:
+            try:
+                service.create(authority=SimpleNamespace(name="test"), **data)
+            except RuntimeError as error:
+                assert str(error) == "mint reached"
+                mint.assert_called_once()
+
+    return validate
 
 
 @pytest.fixture
@@ -59,7 +73,9 @@ def replacement_material():
         ("example.com", ["*.example.com", "example.com"], "www.example.com"),
     ],
 )
-def test_replacement_names(replacement_material, common_name, names, error):
+def test_replacement_names(
+    replacement_material, validate_replacement_names, common_name, names, error
+):
     old, _ = replacement_material()
     data = {
         "common_name": common_name,
@@ -77,16 +93,16 @@ def test_replacement_names(replacement_material, common_name, names, error):
         validate_replacement_names(data)
 
 
-def test_no_replacement_is_unaffected():
+def test_no_replacement_is_unaffected(validate_replacement_names):
     validate_replacement_names({})
 
 
-def test_predecessor_without_sans(replacement_material):
+def test_predecessor_without_sans(replacement_material, validate_replacement_names):
     old, _ = replacement_material(names=[])
     validate_replacement_names({"common_name": old.cn, "replaces": [old]})
 
 
-def test_checks_every_predecessor(replacement_material):
+def test_checks_every_predecessor(replacement_material, validate_replacement_names):
     first, _ = replacement_material(names=["example.com"])
     second, _ = replacement_material()
     with pytest.raises(ValidationError, match="www.example.com"):
@@ -99,7 +115,7 @@ def test_checks_every_predecessor(replacement_material):
         )
 
 
-def test_preserves_non_dns_sans(replacement_material):
+def test_preserves_non_dns_sans(replacement_material, validate_replacement_names):
     old, csr = replacement_material(
         names=[x509.IPAddress(ipaddress.ip_address("192.0.2.1"))]
     )
@@ -109,7 +125,7 @@ def test_preserves_non_dns_sans(replacement_material):
 
 
 @pytest.mark.parametrize("change", ["cn", "sans"])
-def test_csr_is_authoritative(replacement_material, change):
+def test_csr_is_authoritative(replacement_material, validate_replacement_names, change):
     old, original_csr = replacement_material()
     _, changed_csr = replacement_material(
         common_name="other.example.com" if change == "cn" else old.cn,

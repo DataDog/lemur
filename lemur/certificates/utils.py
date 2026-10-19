@@ -16,43 +16,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from lemur.common.utils import get_key_type_from_ec_curve
 
 
-def validate_replacement_names(data):
-    """Require replacements to retain each predecessor's CN and SANs."""
-    if not data.get("replaces"):
-        return
-
-    common_name = data.get("common_name") or ""
-    names = data.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
-    if data.get("csr"):
-        request = x509.load_pem_x509_csr(data["csr"].encode(), default_backend())
-        common_names = request.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
-        common_name = common_names[0].value if common_names else ""
-        try:
-            names = request.extensions.get_extension_for_class(
-                x509.SubjectAlternativeName
-            ).value
-        except x509.ExtensionNotFound:
-            names = []
-
-    for predecessor in data["replaces"]:
-        if common_name != (predecessor.cn or ""):
-            raise ValidationError(
-                f"Replacement CN must match certificate {predecessor.id}: {predecessor.cn}"
-            )
-        try:
-            previous_names = predecessor.parsed_cert.extensions.get_extension_for_class(
-                x509.SubjectAlternativeName
-            ).value
-        except x509.ExtensionNotFound:
-            previous_names = []
-        missing = set(previous_names) - set(names)
-        if missing:
-            values = sorted(f"{type(name).__name__}:{name.value}" for name in missing)
-            raise ValidationError(
-                f"Replacement cannot remove SANs from certificate {predecessor.id}: {values}"
-            )
-
-
 def get_sans_from_csr(data):
     """
     Fetches SubjectAlternativeNames from CSR.

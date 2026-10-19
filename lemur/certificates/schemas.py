@@ -167,10 +167,6 @@ class CertificateInputSchema(CertificateCreationSchema):
     def validate_dates(self, data):
         validators.dates(data)
 
-    @validates_schema(skip_on_field_errors=True)
-    def validate_replacement_names(self, data):
-        cert_utils.validate_replacement_names(data)
-
     @post_load
     def validate_common_name(self, data):
         if (

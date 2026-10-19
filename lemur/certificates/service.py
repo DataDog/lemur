@@ -17,6 +17,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from flask import current_app
+from marshmallow.exceptions import ValidationError
 from sentry_sdk import capture_exception
 from sqlalchemy import and_, func, or_, not_, cast, Integer
 from sqlalchemy.orm import selectinload
@@ -25,7 +26,6 @@ from sqlalchemy.sql.expression import false, true
 
 from lemur import database
 from lemur.authorities.models import Authority
-from lemur.certificates import utils as cert_utils
 from lemur.certificates.models import Certificate, CertificateAssociation
 from lemur.certificates.schemas import CertificateOutputSchema, CertificateInputSchema
 from lemur.common.utils import (
@@ -505,7 +505,38 @@ def create(**kwargs):
     """
     Creates a new certificate.
     """
-    cert_utils.validate_replacement_names(kwargs)
+    # Validate replacements.
+    if kwargs.get("replaces"):
+        common_name = kwargs.get("common_name") or ""
+        names = kwargs.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
+        if kwargs.get("csr"):
+            request = x509.load_pem_x509_csr(kwargs["csr"].encode(), default_backend())
+            common_names = request.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
+            common_name = common_names[0].value if common_names else ""
+            try:
+                names = request.extensions.get_extension_for_class(
+                    x509.SubjectAlternativeName
+                ).value
+            except x509.ExtensionNotFound:
+                names = []
+
+        for predecessor in kwargs["replaces"]:
+            if common_name != (predecessor.cn or ""):
+                raise ValidationError(
+                    f"Replacement CN must match certificate {predecessor.id}: {predecessor.cn}"
+                )
+            try:
+                previous_names = predecessor.parsed_cert.extensions.get_extension_for_class(
+                    x509.SubjectAlternativeName
+                ).value
+            except x509.ExtensionNotFound:
+                previous_names = []
+            missing = set(previous_names) - set(names)
+            if missing:
+                values = sorted(f"{type(name).__name__}:{name.value}" for name in missing)
+                raise ValidationError(
+                    f"Replacement cannot remove SANs from certificate {predecessor.id}: {values}"
+                )
 
     # Validate destinations do not overlap accounts for the same plugin and path
     if "destinations" in kwargs:

@@ -11,6 +11,7 @@ from builtins import str
 
 from flask import Blueprint, make_response, jsonify, g, current_app
 from flask_restful import reqparse, Api, inputs
+from marshmallow.exceptions import ValidationError
 
 from lemur.common import validators
 from lemur.plugins.bases.authorization import UnauthorizedError
@@ -540,7 +541,10 @@ class CertificatesList(AuthenticatedResource):
         except UnauthorizedError as e:
             return dict(message=str(e)), 403
         else:
-            cert = service.create(**data)
+            try:
+                cert = service.create(**data)
+            except ValidationError as error:
+                return dict(message=str(error)), 400
             if isinstance(cert, Certificate):
                 # only log if created, not pending
                 log_service.create(g.user, "create_cert", certificate=cert)
