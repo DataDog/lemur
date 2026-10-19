@@ -503,23 +503,12 @@ def upload(**kwargs):
 
 def create(**kwargs):
     """
-    Creates a new certificate.
+    Creates a new certificate from schema-normalized input.
     """
     # Validate replacements preserves the predecessor CN and all existing SANs.
     if kwargs.get("replaces"):
         common_name = kwargs.get("common_name") or ""
         names = kwargs.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
-        if kwargs.get("csr"):
-            request = x509.load_pem_x509_csr(kwargs["csr"].encode(), default_backend())
-            common_names = request.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
-            common_name = common_names[0].value if common_names else ""
-            try:
-                names = request.extensions.get_extension_for_class(
-                    x509.SubjectAlternativeName
-                ).value
-            except x509.ExtensionNotFound:
-                names = []
-
         for predecessor in kwargs["replaces"]:
             if common_name != (predecessor.cn or ""):
                 raise ValidationError(

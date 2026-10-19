@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from marshmallow import ValidationError
 
 from lemur.certificates import service
+from lemur.certificates.schemas import CertificateInputSchema
 from lemur.common.utils import parse_private_key
 from lemur.tests.vectors import SAN_CERT_KEY, VALID_ADMIN_HEADER_TOKEN
 
@@ -17,16 +18,42 @@ from lemur.tests.vectors import SAN_CERT_KEY, VALID_ADMIN_HEADER_TOKEN
 @pytest.fixture
 def validate_replacement_names(app):
     def validate(data):
+        data = dict(data)
+        data.setdefault("authority", SimpleNamespace(name="test"))
         with patch.object(
             service, "mint", side_effect=RuntimeError("mint reached")
         ) as mint:
             try:
-                service.create(authority=SimpleNamespace(name="test"), **data)
+                service.create(**data)
             except RuntimeError as error:
                 assert str(error) == "mint reached"
                 mint.assert_called_once()
 
     return validate
+
+
+@pytest.fixture
+def normalize_csr(authority, logged_in_admin):
+    def normalize(csr, common_name="ignored.example.com"):
+        data, errors = CertificateInputSchema().load(
+            {
+                "commonName": common_name,
+                "owner": "jim@example.com",
+                "authority": {"id": authority.id},
+                "csr": csr,
+                "extensions": {
+                    "subAltNames": {
+                        "names": [
+                            {"nameType": "DNSName", "value": "ignored.example.com"}
+                        ]
+                    }
+                },
+            }
+        )
+        assert not errors, errors
+        return data
+
+    return normalize
 
 
 @pytest.fixture
@@ -115,40 +142,42 @@ def test_checks_every_predecessor(replacement_material, validate_replacement_nam
         )
 
 
-def test_preserves_non_dns_sans(replacement_material, validate_replacement_names):
+def test_preserves_non_dns_sans(
+    replacement_material, validate_replacement_names, normalize_csr
+):
     old, csr = replacement_material(
         names=[x509.IPAddress(ipaddress.ip_address("192.0.2.1"))]
     )
-    validate_replacement_names({"csr": csr, "replaces": [old]})
+    data = normalize_csr(csr)
+    validate_replacement_names(dict(data, replaces=[old]))
     with pytest.raises(ValidationError, match="IPAddress:192.0.2.1"):
         validate_replacement_names({"common_name": old.cn, "replaces": [old]})
 
 
 @pytest.mark.parametrize("change", ["cn", "sans"])
-def test_csr_is_authoritative(replacement_material, validate_replacement_names, change):
+def test_csr_is_authoritative(
+    replacement_material, validate_replacement_names, normalize_csr, change
+):
     old, original_csr = replacement_material()
     _, changed_csr = replacement_material(
         common_name="other.example.com" if change == "cn" else old.cn,
         names=["example.com"],
     )
-    data = {"common_name": old.cn, "replaces": [old], "csr": changed_csr}
+    data = normalize_csr(changed_csr, common_name=old.cn)
+    data["replaces"] = [old]
     with pytest.raises(ValidationError):
         validate_replacement_names(data)
-    data.update(common_name="ignored.example.com", csr=original_csr)
-    validate_replacement_names(data)
+    data = normalize_csr(original_csr)
+    validate_replacement_names(dict(data, replaces=[old]))
 
 
-@pytest.mark.parametrize("provided_csr", [False, True])
-def test_create_rejects_before_mint(replacement_material, provided_csr):
+def test_create_rejects_before_mint(replacement_material):
     old, _ = replacement_material()
-    _, csr = replacement_material(names=["example.com"])
     data = {
         "common_name": old.cn,
         "extensions": {"sub_alt_names": {"names": [x509.DNSName(old.cn)]}},
         "replaces": [old],
     }
-    if provided_csr:
-        data["csr"] = csr
     with (
         patch.object(service, "mint") as mint,
         pytest.raises(ValidationError, match="www.example.com"),
@@ -158,8 +187,9 @@ def test_create_rejects_before_mint(replacement_material, provided_csr):
 
 
 @pytest.mark.parametrize("change", ["cn", "sans"])
+@pytest.mark.parametrize("provided_csr", [False, True])
 def test_api_rejects_invalid_replacement_before_mint(
-    client, session, authority, replacement_material, change
+    client, session, authority, replacement_material, change, provided_csr
 ):
     from lemur.tests.factories import CertificateFactory
 
@@ -178,6 +208,11 @@ def test_api_rejects_invalid_replacement_before_mint(
             "subAltNames": {"names": [{"nameType": "DNSName", "value": "example.com"}]}
         },
     }
+    if provided_csr:
+        _, payload["csr"] = replacement_material(
+            common_name=payload["commonName"], names=["example.com"]
+        )
+        payload["commonName"] = old.cn
     with patch.object(service, "mint") as mint:
         response = client.post(
             "/api/1/certificates",
