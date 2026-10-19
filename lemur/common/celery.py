@@ -443,9 +443,7 @@ def fetch_acme_cert(id, notify_reissue_cert_id=None):
             error_log["dns_provider_id"] = pending_cert.dns_provider_id
             last_error = cert.get("last_error")
             error_log["last_error"] = (
-                str(last_error)
-                if last_error is not None
-                else "No error message provided by CA"
+                str(last_error) if last_error is not None else "No error message provided by CA"
             )
             # Every failed issuance consumes the CA's ACME rate limit (e.g. Let's
             # Encrypt: 5 duplicate certs / failed validations per week per domain).
@@ -1288,10 +1286,7 @@ def certificate_expirations_metrics():
         current_app.logger.exception("Error sending source/destination pairing metrics")
         capture_exception()
         metrics.send(
-            "source_destination_pairing_metrics.error",
-            "counter",
-            1,
-            metric_tags={"function": function},
+            "source_destination_pairing_metrics.error", "counter", 1, metric_tags={"function": function}
         )
 
     # Folded in from the former standalone check_dcv_expiration task (EVBL-51):
@@ -1338,16 +1333,21 @@ def _active_domains_by_ca():
 
 def emit_dcv_expiration_metrics():
     """
-    Report dcv.validation_status for every domain with an active certificate,
-    driven by the in-use (active-cert) domain set rather than the CA's reported
-    list. This closes the coverage gap where a domain is in use but not reported
-    by a CA: such domains are emitted with dcv_status='uncovered' (0).
+    Report a single unified dcv.health gauge for every domain with an active
+    certificate, driven by the in-use (active-cert) domain set rather than the
+    CA's reported list. This closes the coverage gap where a domain is in use
+    but not reported by a CA: such domains are emitted with dcv_status='uncovered'
+    (0).
+
+    Unified health signal: dcv.health{domain, ca, dcv_method, dcv_status,
+    validation_type} == 1 when any listed validation is 'active', else 0.
+    pending is surfaced via the dcv_status tag as a warning (gauge 0 but not
+    counted as broken); a domain is counted broken (dcv.health.broken per CA)
+    only when it has any non-active/non-pending validation (e.g. expired).
+    The DNS-native persist-record component is folded in by a later PR (#388).
 
     Only CAs that implement get_dcv_expiration_data() (DigiCert, Sectigo) are
     monitored; ACME/unknown authorities are skipped (they handle their own DCV).
-
-    Returns nothing; the DNS-native check computes its own domain set from the
-    lemur database (active certs), not from the CA return.
     """
     # CA-reported status lookup: {domain: {ca_plugin: [entry, ...]}}.
     ca_status_by_domain = {}
@@ -1415,20 +1415,20 @@ def emit_dcv_expiration_metrics():
                     validation_type = entry.get("validation_type", "unknown")
                     # Don't hide an expired validation behind an active one (e.g.
                     # EV expired behind OV active): a domain is counted broken if
-                    # ANY validation is non-active. pending is a warning (gauge 0
-                    # + status tag), not a break.
+                    # ANY validation is expired. pending is a warning (gauge 0 +
+                    # status tag), not a break.
                     status_norm = dcv_status.strip().lower()
                     if status_norm != "active" and status_norm != "pending":
                         domain_broken = True
                     metrics.send(
-                        "dcv.validation_status",
+                        "dcv.health",
                         "gauge",
                         1 if status_norm == "active" else 0,
                         metric_tags={
                             "domain": domain,
                             "ca": ca_name,
-                            "dcv_status": dcv_status,
                             "dcv_method": dcv_method,
+                            "dcv_status": dcv_status,
                             "validation_type": validation_type,
                         },
                     )
@@ -1438,7 +1438,7 @@ def emit_dcv_expiration_metrics():
                 # Active cert for this monitored CA but the CA didn't report the
                 # domain: a coverage gap. Flag it (0) so it's not silently missed.
                 metrics.send(
-                    "dcv.validation_status",
+                    "dcv.health",
                     "gauge",
                     0,
                     metric_tags={
@@ -1460,7 +1460,7 @@ def emit_dcv_expiration_metrics():
         # Complementary dashboard signal: count of broken (expired/missing)
         # domains per CA.
         metrics.send(
-            "dcv.broken_domains",
+            "dcv.health.broken",
             "gauge",
             broken_by_ca.get(ca_name, 0),
             metric_tags={"ca": ca_name},
