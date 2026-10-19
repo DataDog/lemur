@@ -25,6 +25,7 @@ from sqlalchemy.sql.expression import false, true
 
 from lemur import database
 from lemur.authorities.models import Authority
+from lemur.certificates import utils as cert_utils
 from lemur.certificates.models import Certificate, CertificateAssociation
 from lemur.certificates.schemas import CertificateOutputSchema, CertificateInputSchema
 from lemur.common.utils import (
@@ -456,6 +457,7 @@ def mint(**kwargs):
         private_key = None
         csr_imported.send(authority=authority, csr=csr)
 
+    cert_utils.validate_replacement_names(dict(kwargs, csr=csr))
     cert_body, cert_chain, external_id = issuer.create_certificate(csr, kwargs)
     return cert_body, private_key, cert_chain, external_id, csr
 
