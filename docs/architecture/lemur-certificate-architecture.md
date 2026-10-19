@@ -150,10 +150,10 @@ PostgreSQL inventory:
   returns from a CA on the request path.
 
 Lemur does not issue certificates itself. CA plugins (`lemur_digicert`,
-`lemur_acme`, `lemur_sectigo`, `lemur_entrust`, `lemur_gcp`, `lemur_cfssl`) wrap each
-upstream CA; destination plugins (`lemur_vault_dest`, `lemur_aws`, `lemur_gcp`,
-`lemur_azure`) deliver the issued body + chain + key to each target. CA and
-destination choice is per-cert configuration.
+`lemur_acme`, `lemur_sectigo`) wrap each upstream CA; destination plugins
+(`lemur_vault_dest`, `lemur_aws`, `lemur_gcp`, `lemur_azure`) deliver the issued
+body + chain + key to each target. CA and destination choice is per-cert
+configuration.
 
 Source: `lemur/certificates/service.py`, `lemur/factory.py`,
 `lemur/common/celery.py`, `lemur/plugins/`
@@ -253,10 +253,9 @@ Source: `lemur/certificates/service.py`
 
 Placeholder for the upstream CA chosen for a given certificate. Lemur's CA plugins
 wrap each supported authority — `lemur_digicert`, `lemur_acme` (Let's Encrypt),
-`lemur_sectigo`, `lemur_entrust`, `lemur_gcp` and `lemur_cfssl` — and the per-cert
-configuration decides which plugin is used. Overview and the Issue a Certificate
-flow use this generic box to stay independent of CA choice; the Landscape and
-Complete views enumerate every real CA.
+`lemur_sectigo` — and the per-cert configuration decides which plugin is used.
+Overview and the Issue a Certificate flow use this generic box to stay independent
+of CA choice; the Landscape and Complete views enumerate every real CA.
 
 Source: `lemur/plugins/`
 
@@ -283,30 +282,6 @@ Source: `lemur/plugins/lemur_acme/`
 Premium certificate authority (OV/EV).
 
 Source: `lemur/plugins/lemur_sectigo/`
-
-### Entrust
-
-<!-- catalog: no-service -->
-
-Premium certificate authority (OV/EV).
-
-Source: `lemur/plugins/lemur_entrust/`
-
-### GCP CA
-
-<!-- catalog: no-service -->
-
-GCP certificate authority.
-
-Source: `lemur/plugins/lemur_gcp/`
-
-### CFSSL
-
-<!-- catalog: no-service -->
-
-Certificate authority.
-
-Source: `lemur/plugins/lemur_cfssl/`
 
 ## Destinations
 

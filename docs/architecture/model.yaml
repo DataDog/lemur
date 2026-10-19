@@ -89,9 +89,6 @@ nodes:
   digicert: {label: "DigiCert", shape: external, owner: external-ca, doc: digicert}
   letsencrypt: {label: "Let's Encrypt\n(ACME)", shape: external, owner: external-ca, doc: lets-encrypt}
   sectigo: {label: "Sectigo", shape: external, owner: external-ca, doc: sectigo}
-  entrust: {label: "Entrust", shape: external, owner: external-ca, doc: entrust}
-  gcpca: {label: "GCP CA", shape: external, owner: external-ca, doc: gcp-ca}
-  cfssl: {label: "CFSSL", shape: external, owner: external-ca, doc: cfssl}
 
   # --- Destinations  (delivery into a site datacenter or a CSP)
   coavault: {label: "Site Vault KV\n(delivered via COA)", frame: site, shape: store, owner: pplat-identity, doc: coa-to-vault-kv}
@@ -224,7 +221,7 @@ views:
         to: ca
         label: "issue via CA plugin"
         verification: unverified
-        note: "The CA plugin used (lemur_digicert / lemur_acme / lemur_sectigo / lemur_entrust / lemur_gcp / lemur_cfssl) depends on the authority configured for the cert; the flow is intentionally generic here."
+        note: "The CA plugin used (lemur_digicert / lemur_acme / lemur_sectigo) depends on the authority configured for the cert; the flow is intentionally generic here."
         sources: []
       - from: lemur_celery
         to: lemur_db
@@ -400,9 +397,6 @@ edges:
   - {from: lemur_celery, to: digicert, label: "issue", kind: call, flow: issuance, views: [landscape, complete]}
   - {from: lemur_celery, to: letsencrypt, label: "issue (ACME)", kind: call, flow: issuance, views: [landscape, complete]}
   - {from: lemur_celery, to: sectigo, label: "issue", kind: call, flow: issuance, views: [complete]}
-  - {from: lemur_celery, to: entrust, label: "issue", kind: call, flow: issuance, views: [complete]}
-  - {from: lemur_celery, to: gcpca, label: "issue", kind: call, flow: issuance, views: [complete]}
-  - {from: lemur_celery, to: cfssl, label: "issue", kind: call, flow: issuance, views: [complete]}
   - {from: letsencrypt, to: certmanager, label: "sign / respond", kind: call, flow: bootstrap, views: []}
 
   # --- Celery -> Destinations (deliver out of ddbuild into site datacenters / CSPs)
