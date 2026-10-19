@@ -9,6 +9,8 @@ from sentry_sdk import capture_exception
 
 from lemur.extensions import metrics
 
+DNS_TIMEOUT = 5
+
 
 class DNSError(Exception):
     """Base class for DNS Exceptions."""
@@ -61,7 +63,7 @@ def get_authoritative_nameserver(domain):
         sub = s[1]
 
         query = dns.message.make_query(sub, dns.rdatatype.NS)
-        response = dns.query.udp(query, nameserver)
+        response = dns.query.udp(query, nameserver, timeout=DNS_TIMEOUT)
 
         rcode = response.rcode()
         if rcode != dns.rcode.NOERROR:
@@ -80,20 +82,23 @@ def get_authoritative_nameserver(domain):
         rr = rrset[0]
         if rr.rdtype != dns.rdatatype.SOA:
             authority = rr.target
-            nameserver = default.query(authority).rrset[0].to_text()
+            nameserver = (
+                default.resolve(authority, lifetime=DNS_TIMEOUT).rrset[0].to_text()
+            )
 
         depth += 1
 
     return nameserver
 
 
-def get_dns_records(domain, rdtype, nameserver):
+def get_dns_records(domain, rdtype, nameserver=None):
     """Retrieves the DNS records matching the name and type and returns a list of records"""
     records = []
     try:
         dns_resolver = dns.resolver.Resolver()
-        dns_resolver.nameservers = [nameserver]
-        dns_response = dns_resolver.query(domain, rdtype)
+        if nameserver:
+            dns_resolver.nameservers = [nameserver]
+        dns_response = dns_resolver.resolve(domain, rdtype, lifetime=DNS_TIMEOUT)
         for rdata in dns_response:
             for record in rdata.strings:
                 records.append(record.decode("utf-8"))
