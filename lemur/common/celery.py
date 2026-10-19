@@ -35,6 +35,7 @@ from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.common.utils import normalize_domain_name
+from lemur.common.dcv_dns import verify_persist_records
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -1293,6 +1294,7 @@ def certificate_expirations_metrics():
     # emit DCV token expiry gauges from the same consolidated expiry-metrics task.
     try:
         emit_dcv_expiration_metrics()
+        emit_persist_record_metrics()
     except SoftTimeLimitExceeded:
         log_data["message"] = "Time limit exceeded."
         current_app.logger.error(log_data)
@@ -1472,3 +1474,65 @@ def emit_dcv_expiration_metrics():
         f"emit_dcv_expiration_metrics: done. domains_checked={total_domains}, "
         f"cas_with_data={ca_domains_by_ca}"
     )
+
+
+def emit_persist_record_metrics():
+    """
+    Verify _validation-persist.<domain> records directly from DNS and emit the
+    persist-record component of the unified dcv.health gauge.
+
+    DNS-native complement to emit_dcv_expiration_metrics(): instead of trusting
+    only the CA's reported status, check the persistent record we publish.
+    Both feed the same dcv.health metric family -- this function emits
+    dcv.health{domain, ca, persist_record_status} == 1 when the record is ok,
+    0 when missing / wrong / unparseable / expired / dns_error -- so a single
+    monitor on dcv.health aggregates the CA component (from
+    emit_dcv_expiration_metrics) and this DNS component.
+
+    The domain set is computed from the lemur database (active certificates) via
+    the domain-scoped _active_domains_by_ca(), so no cross-environment records
+    are queried. Expected account URIs come from DCV_PERSIST_ACCOUNT_URIS in the
+    deployment config (not default.conf, which configure_app does not layer over);
+    if unset, verification is skipped.
+    """
+    expected_uris = current_app.config.get("DCV_PERSIST_ACCOUNT_URIS", {})
+    if not expected_uris:
+        current_app.logger.info(
+            "emit_persist_record_metrics: no DCV_PERSIST_ACCOUNT_URIS configured; skipping"
+        )
+        return
+    # Domain-scoped set from the lemur DB (active certs), not the CA return.
+    persist_domains = set()
+    for domains in _active_domains_by_ca().values():
+        persist_domains.update(domains)
+    if not persist_domains:
+        return
+
+    results = verify_persist_records(persist_domains, expected_uris)
+    # Seed the per-CA rollup from the configured issuers so a 0 (recovery) sample
+    # is emitted for every CA, even when healthy (avoids stale/no-data rollups).
+    ca_names = list(expected_uris)
+    broken_by_ca = {ca: 0 for ca in ca_names}
+    for r in results:
+        ok = 1 if r["status"] == "ok" else 0
+        if not ok:
+            broken_by_ca[r["ca"]] = broken_by_ca.get(r["ca"], 0) + 1
+        metrics.send(
+            "dcv.health",
+            "gauge",
+            ok,
+            metric_tags={
+                "domain": r["domain"],
+                "ca": r["ca"],
+                "persist_record_status": r["status"],
+            },
+        )
+    # Always emit the per-CA broken rollup (0 when healthy) so a resolved failure
+    # emits a recovery sample instead of going stale / no-data.
+    for ca in ca_names:
+        metrics.send(
+            "dcv.health.persist_broken",
+            "gauge",
+            broken_by_ca[ca],
+            metric_tags={"ca": ca},
+        )
