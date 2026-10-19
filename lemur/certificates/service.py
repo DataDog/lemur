@@ -505,7 +505,7 @@ def create(**kwargs):
     """
     Creates a new certificate.
     """
-    # Validate replacements.
+    # Require replacements to preserve the predecessor CN and all existing SANs.
     if kwargs.get("replaces"):
         common_name = kwargs.get("common_name") or ""
         names = kwargs.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
