@@ -177,3 +177,106 @@ def test_destination_list_patch(client, token, status):
         client.patch(api.url_for(DestinationsList), data={}, headers=token).status_code
         == status
     )
+
+
+def _aws_destination_options(path="/"):
+    return [
+        {"name": "accountNumber", "type": "str", "value": "123456789012"},
+        {"name": "path", "type": "str", "value": path},
+    ]
+
+
+def test_update_destination_renames_paired_source(session):
+    import copy
+    from lemur.destinations import service as destination_service
+    from lemur.plugins.utils import get_plugin_option, set_plugin_option
+    from lemur.sources import service as source_service
+    from lemur.sources.models import Source
+
+    destination = destination_service.create(
+        "rename-old", "aws-destination", _aws_destination_options(), "old"
+    )
+    source = source_service.get_by_label("rename-old")
+    # source-only options are not on the destination and must survive the rename
+    options = copy.deepcopy(source.options)
+    set_plugin_option("regions", "us-east-1", options)
+    source_service.update(
+        source.id, source.label, source.plugin_name, options, source.description
+    )
+    source_count = session.query(Source).count()
+
+    destination_service.update(
+        destination.id,
+        "rename-new",
+        "aws-destination",
+        _aws_destination_options(path="/new/"),
+        "new",
+    )
+
+    assert session.query(Source).count() == source_count
+    assert not source_service.get_by_label("rename-old")
+    renamed = source_service.get_by_label("rename-new")
+    assert renamed.id == source.id
+    assert renamed.description == "new"
+    assert get_plugin_option("path", renamed.options) == "/new/"
+    assert get_plugin_option("regions", renamed.options) == "us-east-1"
+
+
+def test_update_destination_creates_missing_source(session):
+    from lemur.destinations import service as destination_service
+    from lemur.sources import service as source_service
+    from lemur.tests.factories import DestinationFactory
+
+    destination = DestinationFactory(
+        label="unpaired-old",
+        plugin_name="aws-destination",
+        options=_aws_destination_options(),
+    )
+    session.commit()
+
+    destination_service.update(
+        destination.id, "unpaired-new", "aws-destination", _aws_destination_options(), None
+    )
+
+    assert not source_service.get_by_label("unpaired-old")
+    assert source_service.get_by_label("unpaired-new").plugin_name == "aws-source"
+
+
+def test_update_destination_after_source_renamed(session):
+    from lemur.destinations import service as destination_service
+    from lemur.sources import service as source_service
+    from lemur.sources.models import Source
+
+    destination = destination_service.create(
+        "manual-old", "aws-destination", _aws_destination_options()
+    )
+    source = source_service.get_by_label("manual-old")
+    source_service.update(
+        source.id, "manual-new", source.plugin_name, source.options, source.description
+    )
+    source_count = session.query(Source).count()
+
+    destination_service.update(
+        destination.id, "manual-new", "aws-destination", _aws_destination_options(), None
+    )
+
+    assert session.query(Source).count() == source_count
+    assert source_service.get_by_label("manual-new").id == source.id
+
+
+def test_update_destination_keeps_source_of_other_destination(session):
+    from lemur.destinations import service as destination_service
+    from lemur.sources import service as source_service
+
+    destination = destination_service.create(
+        "shared-label", "aws-destination", _aws_destination_options()
+    )
+    destination_service.create("shared-label", "aws-destination", _aws_destination_options())
+    shared_source = source_service.get_by_label("shared-label")
+
+    destination_service.update(
+        destination.id, "split-label", "aws-destination", _aws_destination_options(), None
+    )
+
+    assert source_service.get_by_label("shared-label").id == shared_source.id
+    assert source_service.get_by_label("split-label").id != shared_source.id
