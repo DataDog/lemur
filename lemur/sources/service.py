@@ -560,7 +560,20 @@ def add_destination_to_sources(dst):
     if dst.label in source_labels:
         return False
 
-    destination_plugin = plugins.get(dst.plugin_name)
+    create(
+        label=dst.label,
+        plugin_name=destination_plugin.sync_as_source_name,
+        options=_source_options_from_destination(dst, destination_plugin),
+        description=dst.description,
+    )
+    return True
+
+
+def _source_options_from_destination(dst, destination_plugin):
+    """
+    Build the options for the source synced from a destination: a copy of the source plugin's
+    options, with each value taken from the destination's options.
+    """
     src_options = copy.deepcopy(
         plugins.get(destination_plugin.sync_as_source_name).options
     )
@@ -568,13 +581,7 @@ def add_destination_to_sources(dst):
         set_plugin_option(
             option['name'], get_plugin_option(option['name'], dst.options), src_options
         )
-    create(
-        label=dst.label,
-        plugin_name=destination_plugin.sync_as_source_name,
-        options=src_options,
-        description=dst.description,
-    )
-    return True
+    return src_options
 
 
 def update_destination_source(dst, previous_label):
@@ -582,8 +589,8 @@ def update_destination_source(dst, previous_label):
     Given an updated destination, keep its paired source in step, creating one only if none exists.
     Sources and destinations are paired by label, so when a destination is renamed its source is
     looked up under previous_label and renamed along with it, instead of a second source being
-    created and the original left unpaired. Source-only options (e.g. regions) are kept; options
-    the destination also defines are copied from it.
+    created and the original left unpaired. The source's options are rebuilt from the destination
+    the same way add_destination_to_sources creates them.
     :return: "created" or "updated" if the source was changed, otherwise None
     """
     destination_plugin = plugins.get(dst.plugin_name)
@@ -613,15 +620,7 @@ def update_destination_source(dst, previous_label):
     if source.plugin_name != destination_plugin.sync_as_source_name:
         return None
 
-    source_plugin = plugins.get(destination_plugin.sync_as_source_name)
-    src_options = copy.deepcopy(source.options or source_plugin.options)
-    dst_option_names = {option.get("name") for option in dst.options or []}
-    for option in source_plugin.options:
-        if option["name"] in dst_option_names:
-            set_plugin_option(
-                option["name"], get_plugin_option(option["name"], dst.options), src_options
-            )
-
+    src_options = _source_options_from_destination(dst, destination_plugin)
     if (source.label, source.options, source.description) == (
         dst.label,
         src_options,

@@ -187,9 +187,8 @@ def _aws_destination_options(path="/"):
 
 
 def test_update_destination_renames_paired_source(session):
-    import copy
     from lemur.destinations import service as destination_service
-    from lemur.plugins.utils import get_plugin_option, set_plugin_option
+    from lemur.plugins.utils import get_plugin_option
     from lemur.sources import service as source_service
     from lemur.sources.models import Source
 
@@ -197,12 +196,6 @@ def test_update_destination_renames_paired_source(session):
         "rename-old", "aws-destination", _aws_destination_options(), "old"
     )
     source = source_service.get_by_label("rename-old")
-    # source-only options are not on the destination and must survive the rename
-    options = copy.deepcopy(source.options)
-    set_plugin_option("regions", "us-east-1", options)
-    source_service.update(
-        source.id, source.label, source.plugin_name, options, source.description
-    )
     source_count = session.query(Source).count()
 
     destination_service.update(
@@ -219,7 +212,11 @@ def test_update_destination_renames_paired_source(session):
     assert renamed.id == source.id
     assert renamed.description == "new"
     assert get_plugin_option("path", renamed.options) == "/new/"
-    assert get_plugin_option("regions", renamed.options) == "us-east-1"
+    # options match what syncing the destination as a new source would have produced
+    created = destination_service.create(
+        "rename-fresh", "aws-destination", _aws_destination_options(path="/new/")
+    )
+    assert renamed.options == source_service.get_by_label(created.label).options
 
 
 def test_update_destination_creates_missing_source(session):
