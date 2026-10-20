@@ -15,7 +15,7 @@ from lemur.destinations.models import Destination
 from lemur.certificates.models import Certificate
 from lemur.certificates import service as certificate_service
 from lemur.logs import service as log_service
-from lemur.sources.service import add_destination_to_sources
+from lemur.sources.service import add_destination_to_sources, update_destination_source
 
 
 def create(label, plugin_name, options, description=None):
@@ -60,6 +60,8 @@ def update(destination_id, label, plugin_name, options, description):
     :return:
     """
     destination = get(destination_id)
+    # the paired source is matched by label, so keep the old one to find it after a rename
+    previous_label = destination.label
 
     destination.label = label
     destination.plugin_name = plugin_name
@@ -73,11 +75,12 @@ def update(destination_id, label, plugin_name, options, description):
     log_service.audit_log(
         "update_destination", destination.label, "Updating destination"
     )
-    updated = database.update(destination)
-    # add the destination as source, to avoid new destinations that are not in source, as long as an AWS destination
-    if add_destination_to_sources(updated):
-        current_app.logger.info("Source: %s created", label)
-    return updated
+    # update (or create) the paired source before committing, so both changes are committed together
+    # and a failure can't leave a renamed destination without its source
+    source_change = update_destination_source(destination, previous_label)
+    if source_change:
+        current_app.logger.info("Source: %s %s", label, source_change)
+    return database.update(destination)
 
 
 def delete(destination_id):
