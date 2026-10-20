@@ -74,4 +74,8 @@ RUN clean-apt install python3 python3-distutils haveged curl postgresql-client o
 
 ENV FIPS_ENABLED=$FIPS_ENABLED
 
+# Incident 62343: distrust the emSign root in the OS bundle used by Requests and gRPC.
+RUN sed -i '\|^mozilla/emSign_ECC_Root_CA_-_G3.crt$|s|^|!|' /etc/ca-certificates.conf && \
+    update-ca-certificates
+
 USER dog
