@@ -212,11 +212,38 @@ def test_update_destination_renames_paired_source(session):
     assert renamed.id == source.id
     assert renamed.description == "new"
     assert get_plugin_option("path", renamed.options) == "/new/"
-    # options match what syncing the destination as a new source would have produced
-    created = destination_service.create(
-        "rename-fresh", "aws-destination", _aws_destination_options(path="/new/")
+
+
+def test_update_destination_keeps_source_only_options(session):
+    import copy
+    from lemur.destinations import service as destination_service
+    from lemur.plugins.utils import get_plugin_option, set_plugin_option
+    from lemur.sources import service as source_service
+
+    destination = destination_service.create(
+        "edit_aws_cloudfront", "aws-destination", _aws_destination_options("/cloudfront/")
     )
-    assert renamed.options == source_service.get_by_label(created.label).options
+    source = source_service.get_by_label("edit_aws_cloudfront")
+    # set up like the enable_cloudfront command: endpointType and regions exist only on the source
+    options = copy.deepcopy(source.options)
+    set_plugin_option("endpointType", "cloudfront", options)
+    set_plugin_option("regions", "us-east-1", options)
+    source_service.update(
+        source.id, source.label, source.plugin_name, options, source.description
+    )
+
+    destination_service.update(
+        destination.id,
+        "edit_aws_cloudfront",
+        "aws-destination",
+        _aws_destination_options("/cloudfront/"),
+        "edited",
+    )
+
+    edited = source_service.get_by_label("edit_aws_cloudfront")
+    assert edited.description == "edited"
+    assert get_plugin_option("endpointType", edited.options) == "cloudfront"
+    assert get_plugin_option("regions", edited.options) == "us-east-1"
 
 
 def test_update_destination_creates_missing_source(session):
