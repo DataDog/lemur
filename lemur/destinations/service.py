@@ -15,7 +15,7 @@ from lemur.destinations.models import Destination
 from lemur.certificates.models import Certificate
 from lemur.certificates import service as certificate_service
 from lemur.logs import service as log_service
-from lemur.sources.service import add_destination_to_sources, update_destination_source
+from lemur.sources.service import add_destination_to_sources
 
 
 def create(label, plugin_name, options, description=None):
@@ -77,7 +77,7 @@ def update(destination_id, label, plugin_name, options, description):
     )
     # update (or create) the paired source before committing, so both changes are committed together
     # and a failure can't leave a renamed destination without its source
-    source_change = update_destination_source(destination, previous_label)
+    source_change = add_destination_to_sources(destination, previous_label)
     if source_change:
         current_app.logger.info("Source: %s %s", label, source_change)
     return database.update(destination)
