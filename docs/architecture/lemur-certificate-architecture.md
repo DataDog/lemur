@@ -26,15 +26,6 @@ server TLS.
 
 Source: `lemur/certificates/service.py`
 
-## Complete
-
-<!-- view: complete -->
-
-Every component and connection on one board. Use the legend above the diagram to hide
-the connection families you don't care about; hovering a box highlights its neighbours.
-
-Source: `lemur/certificates/service.py`
-
 ## System Landscape
 
 <!-- view: landscape -->
@@ -255,7 +246,7 @@ Placeholder for the upstream CA chosen for a given certificate. Lemur's CA plugi
 wrap each supported authority — `lemur_digicert`, `lemur_acme` (Let's Encrypt),
 `lemur_sectigo` — and the per-cert configuration decides which plugin is used.
 Overview and the Issue a Certificate flow use this generic box to stay independent
-of CA choice; the Landscape and Complete views enumerate every real CA.
+of CA choice; the System Landscape view enumerates every real CA.
 
 Source: `lemur/plugins/`
 

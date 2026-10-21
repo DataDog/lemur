@@ -115,15 +115,12 @@ nodes:
 
 # ---------------------------------------------------------------- views
 # group: the run of tabs it sits in. Its panel text is the Markdown h2 section with a
-# `<!-- view: <id> -->` comment. A view with id `complete` shows every edge.
+# `<!-- view: <id> -->` comment. Overview keeps a curated subset; System Landscape
+# shows the full connection set (every edge lists it in its `views:`).
 
 views:
   - id: overview
     title: Overview
-    category: architecture
-    group: Certificate Architecture
-  - id: complete
-    title: Complete
     category: architecture
     group: Certificate Architecture
   - id: landscape
@@ -375,54 +372,54 @@ views:
 
 edges:
   # --- Clients of Lemur (all land on the Flask API/UI)
-  - {from: ra_agent, to: lemur_api, label: "create certs & destinations", kind: call, flow: issuance, views: [overview, landscape, complete]}
+  - {from: ra_agent, to: lemur_api, label: "create certs & destinations", kind: call, flow: issuance, views: [overview, landscape]}
   - {from: ddcert, to: lemur_api, label: "list / manage", kind: call, flow: config, views: [overview, landscape]}
   - {from: webui, to: lemur_api, label: "manage", kind: call, flow: config, views: [overview, landscape]}
-  - {from: dcreg, to: lemur_api, label: "create cert + destination", kind: call, flow: issuance, views: [overview, landscape, complete]}
+  - {from: dcreg, to: lemur_api, label: "create cert + destination", kind: call, flow: issuance, views: [overview, landscape]}
 
   # --- Internal: API -> Celery -> DB
-  - {from: lemur_api, to: lemur_celery, label: "enqueue issuance / delivery task", kind: call, flow: issuance, views: [overview, landscape, complete]}
-  - {from: lemur_api, to: lemur_db, label: "query / update inventory", kind: call, flow: config, views: [overview, landscape, complete]}
-  - {from: lemur_celery, to: lemur_db, label: "write issuance + rotation results", kind: call, flow: issuance, views: [overview, landscape, complete]}
+  - {from: lemur_api, to: lemur_celery, label: "enqueue issuance / delivery task", kind: call, flow: issuance, views: [overview, landscape]}
+  - {from: lemur_api, to: lemur_db, label: "query / update inventory", kind: call, flow: config, views: [overview, landscape]}
+  - {from: lemur_celery, to: lemur_db, label: "write issuance + rotation results", kind: call, flow: issuance, views: [overview, landscape]}
 
   # --- Celery <-> COA (Lemur's destination plugin drives COA; cert data flows into Vault KV)
   # NB: lemur_vault_dest in public main uses HTTP via hvac. gRPC / xDCGW path to COA
   # noted in the north-star notebook is not in the public plugin — likely in a
   # fork / private path. Edge kept at the architectural level.
-  - {from: lemur_celery, to: coa, label: "push / query certs (destination plugin)", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: coa, to: coavault, label: "validate + store in Vault KV", kind: call, flow: delivery, views: [overview, landscape, complete]}
+  - {from: lemur_celery, to: coa, label: "push / query certs (destination plugin)", kind: call, flow: delivery, views: [overview, landscape]}
+  - {from: coa, to: coavault, label: "validate + store in Vault KV", kind: call, flow: delivery, views: [overview, landscape]}
 
   # --- Celery -> CAs (issue)
   - {from: lemur_celery, to: ca, label: "issue (via CA plugin)", kind: call, flow: issuance, views: [overview]}
-  - {from: lemur_celery, to: digicert, label: "issue", kind: call, flow: issuance, views: [landscape, complete]}
-  - {from: lemur_celery, to: letsencrypt, label: "issue (ACME)", kind: call, flow: issuance, views: [landscape, complete]}
-  - {from: lemur_celery, to: sectigo, label: "issue", kind: call, flow: issuance, views: [complete]}
+  - {from: lemur_celery, to: digicert, label: "issue", kind: call, flow: issuance, views: [landscape]}
+  - {from: lemur_celery, to: letsencrypt, label: "issue (ACME)", kind: call, flow: issuance, views: [landscape]}
+  - {from: lemur_celery, to: sectigo, label: "issue", kind: call, flow: issuance, views: [landscape]}
   - {from: letsencrypt, to: certmanager, label: "sign / respond", kind: call, flow: bootstrap, views: []}
 
   # --- Celery -> Destinations (deliver out of ddbuild into site datacenters / CSPs)
-  - {from: lemur_celery, to: lemur_managed_iam, label: "assume lemur.managed role", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: lemur_managed_iam, to: aws, label: "update CloudFront cert", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: lemur_celery, to: aws, label: "deliver (legacy direct path)", kind: call, flow: delivery, views: [complete]}
-  - {from: lemur_celery, to: acm, label: "deliver (ACM dest plugin, CLOUDR-2056)", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: lemur_celery, to: gcp, label: "deliver", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: lemur_celery, to: azure, label: "deliver", kind: call, flow: delivery, views: [overview, landscape, complete]}
-  - {from: lemur_celery, to: buildvault, label: "deliver", kind: call, flow: delivery, views: [complete]}
+  - {from: lemur_celery, to: lemur_managed_iam, label: "assume lemur.managed role", kind: call, flow: delivery, views: [overview, landscape]}
+  - {from: lemur_managed_iam, to: aws, label: "update CloudFront cert", kind: call, flow: delivery, views: [overview, landscape]}
+  - {from: lemur_celery, to: aws, label: "deliver (legacy direct path)", kind: call, flow: delivery, views: [landscape]}
+  - {from: lemur_celery, to: acm, label: "deliver (ACM dest plugin, CLOUDR-2056)", kind: call, flow: delivery, views: [overview, landscape]}
+  - {from: lemur_celery, to: gcp, label: "deliver", kind: call, flow: delivery, views: [overview, landscape]}
+  - {from: lemur_celery, to: azure, label: "deliver", kind: call, flow: delivery, views: [overview, landscape]}
+  - {from: lemur_celery, to: buildvault, label: "deliver", kind: call, flow: delivery, views: [landscape]}
 
   # --- DCV / DNS plumbing (Automated DCV + cert-manager DNS01)
-  - {from: certmanager, to: route53, label: "DNS01 challenge write", kind: call, flow: bootstrap, views: [landscape, complete]}
-  - {from: cloudinv, to: route53, label: "apply _dnsauth CNAME + _validation-persist TXT", kind: call, flow: config, views: [landscape, complete]}
-  - {from: sdp, to: route53, label: "apply hosted-zone subset (SDP terraform)", kind: call, flow: config, views: [landscape, complete]}
-  - {from: cloudinv, to: sdp, label: "NS-delegate transit subzones", kind: call, flow: config, views: [landscape, complete]}
-  - {from: digicert, to: route53, label: "verify DCV TXT", kind: read, flow: issuance, views: [landscape, complete]}
+  - {from: certmanager, to: route53, label: "DNS01 challenge write", kind: call, flow: bootstrap, views: [landscape]}
+  - {from: cloudinv, to: route53, label: "apply _dnsauth CNAME + _validation-persist TXT", kind: call, flow: config, views: [landscape]}
+  - {from: sdp, to: route53, label: "apply hosted-zone subset (SDP terraform)", kind: call, flow: config, views: [landscape]}
+  - {from: cloudinv, to: sdp, label: "NS-delegate transit subzones", kind: call, flow: config, views: [landscape]}
+  - {from: digicert, to: route53, label: "verify DCV TXT", kind: read, flow: issuance, views: [landscape]}
   - {from: digicert, to: lemur_celery, label: "signed cert", kind: call, flow: issuance, views: []}
 
   # --- Ancillary / consumers
-  - {from: certmanager, to: letsencrypt, label: "ACME / DNS01", kind: read, flow: bootstrap, views: [overview, landscape, complete]}
+  - {from: certmanager, to: letsencrypt, label: "ACME / DNS01", kind: read, flow: bootstrap, views: [overview, landscape]}
   - {from: certmanager, to: dedicated_vault, label: "write TLS cert Secret", kind: call, flow: bootstrap, views: []}
-  - {from: certdist, to: lemur_api, label: "requests certs", kind: call, flow: delivery, views: [landscape, complete]}
-  - {from: certdist, to: buildvault, label: "reads certs", kind: read, flow: delivery, views: [landscape, complete]}
-  - {from: certdist, to: cert_bucket, label: "write cert to CSP bucket (S3 / GCS / Azure)", kind: call, flow: delivery, views: [landscape, complete]}
-  - {from: vault_pki, to: cert_bucket, label: "pull cert (polled)", kind: read, flow: delivery, views: [landscape, complete]}
-  - {from: vault_pki, to: vault_server, label: "write /var/lib/vault/pki + SIGHUP", kind: call, flow: delivery, views: [landscape, complete]}
-  - {from: coavault, to: envoy, label: "Edge certs", kind: read, flow: delivery, views: [overview, landscape, complete]}
+  - {from: certdist, to: lemur_api, label: "requests certs", kind: call, flow: delivery, views: [landscape]}
+  - {from: certdist, to: buildvault, label: "reads certs", kind: read, flow: delivery, views: [landscape]}
+  - {from: certdist, to: cert_bucket, label: "write cert to CSP bucket (S3 / GCS / Azure)", kind: call, flow: delivery, views: [landscape]}
+  - {from: vault_pki, to: cert_bucket, label: "pull cert (polled)", kind: read, flow: delivery, views: [landscape]}
+  - {from: vault_pki, to: vault_server, label: "write /var/lib/vault/pki + SIGHUP", kind: call, flow: delivery, views: [landscape]}
+  - {from: coavault, to: envoy, label: "Edge certs", kind: read, flow: delivery, views: [overview, landscape]}
   - {from: envoy, to: letsencrypt, label: "trusts ISRG Root X1", kind: read, flow: bootstrap, views: []}
