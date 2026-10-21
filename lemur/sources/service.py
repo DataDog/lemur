@@ -17,6 +17,7 @@ from sqlalchemy import cast
 from sqlalchemy_utils import ArrowType
 
 from lemur import database
+from lemur.extensions import db
 from lemur.sources.models import Source
 from lemur.certificates.models import Certificate
 from lemur.certificates import service as certificate_service
@@ -564,8 +565,9 @@ def add_destination_to_sources(dst, previous_label=None):
     A source is paired to its destination by label. Given a destination, the paired source is
     located by its current label (or by the previous label when the destination was renamed),
     updated in place so it keeps its id, endpoints and certificate links, and only created when
-    no paired source exists. If a rename leaves a source orphaned under the previous label and no
-    other destination uses that label, the orphan is removed so we never leave unpaired sources.
+    no paired source exists. If a rename leaves a source orphaned under the previous label, no other
+    destination uses that label, and the orphan has no certificates or endpoints, it is removed.
+    If the orphan has data, it is left for an operator to handle manually.
 
     :param dst: the destination, with label/options/description already set to their new values
     :param previous_label: the destination's label before it changed (only relevant on rename)
@@ -650,6 +652,16 @@ def add_destination_to_sources(dst, previous_label=None):
                 .first()
             )
             if not still_used:
-                delete(orphan.id)
+                # Only delete the orphan if it carries no real data — no certificate
+                # associations and no endpoints. A source with certs or endpoints was
+                # likely created or populated independently and should not be silently
+                # removed by a destination rename; an operator should handle it manually.
+                orphan_has_data = (
+                    bool(getattr(orphan, "certificate", None))
+                    or bool(orphan.endpoints)
+                )
+                if not orphan_has_data:
+                    log_service.audit_log("delete_source", orphan.label, "Deleting source")
+                    db.session.delete(orphan)
 
     return changed
