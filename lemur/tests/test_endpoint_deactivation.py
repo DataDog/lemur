@@ -5,7 +5,9 @@ from sqlalchemy import inspect
 
 from lemur.auth.service import create_token
 from lemur.endpoints.views import EndpointDeactivate, Endpoints, api
+from lemur.models import roles_users
 from lemur.roles import service as role_service
+from lemur.roles.models import Role
 from lemur.tests.factories import (
     ApiKeyFactory,
     CertificateFactory,
@@ -13,6 +15,22 @@ from lemur.tests.factories import (
     RoleFactory,
     UserFactory,
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def clean_up_test_roles(db):
+    created_names = [
+        name for name in ("operator", "endpoint-viewer")
+        if role_service.get_by_name(name) is None
+    ]
+    yield
+    db.session.rollback()
+    for name in created_names:
+        role = role_service.get_by_name(name)
+        if role:
+            db.session.execute(roles_users.delete().where(roles_users.c.role_id == role.id))
+            db.session.query(Role).filter(Role.id == role.id).delete()
+    db.session.commit()
 
 
 def authorization(session, role_name, api_key=False):
