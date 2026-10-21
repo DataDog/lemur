@@ -16,6 +16,10 @@ class DestinationPlugin(Plugin):
     sync_as_source = False
     sync_as_source_name = ""
 
+    def check_connection(self, options):
+        """Check connectivity without uploading certificates. Optional for plugins."""
+        raise NotImplementedError
+
     def upload(self, name, body, private_key, cert_chain, options, **kwargs):
         raise NotImplementedError
 
