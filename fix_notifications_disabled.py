@@ -19,8 +19,12 @@ Use
     # apply: set notify=True on candidates
     python fix_notifications_disabled.py --apply
 
-Requires a Lemur config; set LEMUR_CONFIG if not using ~/.lemur/lemur.conf.py.
+    # explicit config path (optional); otherwise the app resolves it via the
+    # LEMUR_CONF env var (in-cluster: /etc/lemur/lemur.conf.py) or the default
+    # ~/.lemur/lemur.conf.py, matching how `lemur` itself bootstraps.
+    python fix_notifications_disabled.py --config /path/to/lemur.conf.py --apply
 """
+import argparse
 import os
 import sys
 
@@ -32,14 +36,17 @@ from lemur.certificates.models import Certificate
 from lemur import database
 
 
-DEFAULT_CONFIG = "~/.lemur/lemur.conf.py"
-
-
 def main():
-    apply = "--apply" in sys.argv
-    config = os.environ.get("LEMUR_CONFIG", DEFAULT_CONFIG)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--apply", action="store_true",
+                        help="Persist changes (set notify=True). Dry-run by default.")
+    parser.add_argument("--config", default=None,
+                        help="Path to lemur.conf.py. If omitted, the app resolves it via "
+                             "LEMUR_CONF or the default ~/.lemur/lemur.conf.py.")
+    args = parser.parse_args()
 
-    app = create_app(config)
+    apply = args.apply
+    app = create_app(args.config)
     with app.app_context():
         # Same eligibility as the CRDL022 health-check query: not deleted, not
         # expired, not revoked. Then restrict to notify==False (disabled).
