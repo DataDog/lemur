@@ -567,7 +567,8 @@ def add_destination_to_sources(dst, previous_label=None):
     updated in place so it keeps its id, endpoints and certificate links, and only created when
     no paired source exists. If a rename leaves a source orphaned under the previous label, no other
     destination uses that label, and the orphan has no certificates or endpoints, it is removed.
-    If the orphan has data, it is left for an operator to handle manually.
+    If the orphan has data it is left in place so the '[Lemur] Source without matching
+    destination' monitor can surface it for review.
 
     :param dst: the destination, with label/options/description already set to their new values
     :param previous_label: the destination's label before it changed (only relevant on rename)
@@ -652,10 +653,12 @@ def add_destination_to_sources(dst, previous_label=None):
                 .first()
             )
             if not still_used:
-                # Only delete the orphan if it carries no real data — no certificate
-                # associations and no endpoints. A source with certs or endpoints was
-                # likely created or populated independently and should not be silently
-                # removed by a destination rename; an operator should handle it manually.
+                # Only delete the orphan if it has no certificates and no endpoints.
+                # If it has data, the certificates were synced from a specific AWS
+                # account/path that cannot be safely migrated to the adopted source
+                # (different account or path). Leave it in place — the
+                # '[Lemur] Source without matching destination' monitor will surface it
+                # for manual review.
                 orphan_has_data = (
                     bool(getattr(orphan, "certificate", None))
                     or bool(orphan.endpoints)
