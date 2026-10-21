@@ -48,6 +48,7 @@ def test_sync_endpoints(session):
     from lemur.tests.factories import EndpointFactory, SourceFactory, CertificateFactory
     from lemur.plugins.lemur_aws.plugin import AWSSourcePlugin
 
+    source_service.plugins.register(AWSSourcePlugin)
     source = SourceFactory()
     source.plugin_name = "aws-source"
 
@@ -55,10 +56,11 @@ def test_sync_endpoints(session):
     crt2 = CertificateFactory()
     crt3 = CertificateFactory()
     existing_endpoint = EndpointFactory(
-        name="test-lb-4", dnsname="test4.example.com", port=443
+        name="test-lb-4", dnsname="test4.example.com", port=443, active=False
     )
     existing_endpoint.primary_certificate = crt1
     existing_endpoint.source = source
+    undiscovered_endpoint = EndpointFactory(active=False, source=source)
     session.commit()
 
     with mock.patch.object(
@@ -173,9 +175,13 @@ def test_sync_endpoints(session):
     assert ep3.sni_certificates[1].name == crt2.name
 
     ep4 = endpoint_service.get_by_name("test-lb-4")
+    assert ep4.id == existing_endpoint.id
+    assert ep4.active is True
     assert ep4.primary_certificate.name == crt2.name
     assert len(ep4.sni_certificates) == 1
     assert ep4.sni_certificates[0].name == crt3.name
+    session.refresh(undiscovered_endpoint)
+    assert undiscovered_endpoint.active is False
 
 
 @pytest.mark.parametrize(

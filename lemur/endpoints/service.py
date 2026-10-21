@@ -223,6 +223,7 @@ def update(endpoint_id, **kwargs):
     endpoint.policy = kwargs["policy"]
     endpoint.source = kwargs["source"]
     endpoint.registry_type = kwargs["registry_type"]
+    endpoint.active = True
 
     existing_alias = {}
     for e in endpoint.aliases:
