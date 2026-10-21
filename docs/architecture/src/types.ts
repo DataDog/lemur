@@ -86,7 +86,8 @@ export type Data = {
                 | 'workload'
                 | null;
             isFrame: boolean;
-            owner: string | null;
+            // Optional: frame sub-nodes (white boxes) have no owner.
+            owner?: string | null;
         }
     >;
     docOf: Record<string, string>;
