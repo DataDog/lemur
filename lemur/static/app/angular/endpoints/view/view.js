@@ -10,7 +10,7 @@ angular.module('lemur')
     });
   })
 
-  .controller('EndpointsViewController', function ($q, $scope, $uibModal, EndpointApi, EndpointService, MomentService, ngTableParams) {
+  .controller('EndpointsViewController', function ($q, $scope, $uibModal, EndpointApi, EndpointService, MomentService, ngTableParams, $window, toaster) {
     $scope.filter = {};
     $scope.endpointsTable = new ngTableParams({
       page: 1,            // show first page
@@ -31,6 +31,28 @@ angular.module('lemur')
       }
     });
 
+
+    $scope.deactivate = function (endpoint) {
+      if (endpoint.deactivating || !endpoint.active || !$window.confirm(
+        'Deactivate ' + endpoint.name + ' in Lemur? This does not change the certificate or cloud resource. Source sync may reactivate it if rediscovered.'
+      )) {
+        return;
+      }
+      endpoint.deactivating = true;
+      return endpoint.post('deactivate').then(function () {
+        endpoint.active = false;
+        toaster.pop({type: 'success', title: 'Endpoint deactivated', body: endpoint.name});
+        return $scope.endpointsTable.reload();
+      }, function (response) {
+        toaster.pop({
+          type: 'error',
+          title: 'Unable to deactivate endpoint',
+          body: (response.data && response.data.message) || 'Please try again.'
+        });
+      }).finally(function () {
+        endpoint.deactivating = false;
+      });
+    };
 
     $scope.ciphers = [
       {'title': 'Protocol-SSLv2', 'id': 'Protocol-SSLv2'},

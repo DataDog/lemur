@@ -26,6 +26,7 @@ from lemur.endpoints.models import (
 )
 from lemur.sources.models import Source
 from lemur.extensions import metrics
+from lemur.logs import service as log_service
 
 
 def get_all():
@@ -47,6 +48,22 @@ def get(endpoint_id):
     :return:
     """
     return database.get(Endpoint, endpoint_id)
+
+
+def deactivate(endpoint_id):
+    endpoint = get(endpoint_id)
+    if endpoint is None:
+        return None
+    if endpoint.active:
+        # Preserve date_created, which otherwise has an ORM onupdate default.
+        database.session_query(Endpoint).filter(Endpoint.id == endpoint.id).update(
+            {Endpoint.active: False, Endpoint.date_created: Endpoint.date_created}
+        )
+        database.commit()
+        log_service.audit_log(
+            "deactivate_endpoint", endpoint.name, f"Deactivated endpoint {endpoint.id}"
+        )
+    return {"id": endpoint.id, "active": False}
 
 
 def get_by_name(name):

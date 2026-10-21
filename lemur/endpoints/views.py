@@ -12,6 +12,7 @@ from flask_restful import reqparse, Api
 from lemur.common.utils import paginated_parser
 from lemur.common.schema import validate_schema
 from lemur.auth.service import AuthenticatedResource
+from lemur.auth.permissions import write_permission
 
 from lemur.endpoints import service
 from lemur.endpoints.schemas import endpoint_output_schema, endpoints_output_schema
@@ -105,5 +106,20 @@ class Endpoints(AuthenticatedResource):
         return service.get(endpoint_id)
 
 
+class EndpointDeactivate(AuthenticatedResource):
+    @write_permission.require(http_exception=403)
+    def post(self, endpoint_id):
+        """Deactivate inventory only; source sync may reactivate a rediscovered endpoint."""
+        endpoint = service.deactivate(endpoint_id)
+        if endpoint is None:
+            return {"message": "Endpoint not found"}, 404
+        return endpoint
+
+
 api.add_resource(EndpointsList, "/endpoints", endpoint="endpoints")
 api.add_resource(Endpoints, "/endpoints/<int:endpoint_id>", endpoint="endpoint")
+api.add_resource(
+    EndpointDeactivate,
+    "/endpoints/<int:endpoint_id>/deactivate",
+    endpoint="endpoint_deactivate",
+)
