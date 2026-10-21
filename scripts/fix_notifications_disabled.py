@@ -35,6 +35,12 @@ the running lemur pod. Run it there via kubectl. These commands are copy-pasteab
     kubectl -n cert-orchestration exec "$POD" -c lemur -- \
         /opt/venv/bin/python /tmp/fix.py --apply
 
+# Test ONE cert first (dry-run, then apply) before the full batch:
+    kubectl -n cert-orchestration exec "$POD" -c lemur -- \
+        /opt/venv/bin/python /tmp/fix.py --cert-id 1452
+    kubectl -n cert-orchestration exec "$POD" -c lemur -- \
+        /opt/venv/bin/python /tmp/fix.py --cert-id 1452 --apply
+
 Why this works: inside the pod, `create_app(None)` resolves the config from the
 `LEMUR_CONF` env var (/etc/lemur/lemur.conf.py), which the deployment already sets,
 so no `--config` is needed in the pod.
@@ -58,11 +64,37 @@ def main():
     parser.add_argument("--config", default=None,
                         help="Path to lemur.conf.py. If omitted, the app resolves it via "
                              "LEMUR_CONF or the default ~/.lemur/lemur.conf.py.")
+    parser.add_argument("--cert-id", type=int, default=None,
+                        help="Restrict to a single certificate id (e.g. test one first). "
+                             "Skips eligibility checks; use with --apply to touch only it.")
     args = parser.parse_args()
 
     apply = args.apply
     app = create_app(args.config)
     with app.app_context():
+        if args.cert_id is not None:
+            # Targeted mode: act on exactly this one cert, regardless of replaced state.
+            target = Certificate.query.get(args.cert_id)
+            if target is None:
+                print(f"No certificate with id={args.cert_id}.")
+                return
+            print("=" * 70)
+            print(f"TARGETED mode: cert id={target.id}")
+            print(f"  cn={target.cn!r} owner={target.owner or 'N/A'!r}")
+            print(f"  notify={target.notify} rotation={target.rotation} replaced={bool(target.replaced)}")
+            print(f"  {'DRY-RUN - would set notify=True' if not apply else 'APPLY - setting notify=True'}")
+            print("=" * 70)
+            if not apply:
+                print("Dry run complete. Re-run with --apply to persist.")
+                return
+            if target.notify is not True:
+                target.notify = True
+                database.update(target)
+                print(f"Fixed cert id={target.id} (notify=True).")
+            else:
+                print(f"Cert id={target.id} notify is already True; no change.")
+            return
+
         # Same eligibility as the CRDL022 health-check query: not deleted, not
         # expired, not revoked. Then restrict to notify==False (disabled).
         candidates = (
