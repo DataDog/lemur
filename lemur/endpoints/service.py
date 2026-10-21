@@ -50,20 +50,21 @@ def get(endpoint_id):
     return database.get(Endpoint, endpoint_id)
 
 
-def deactivate(endpoint_id):
+def set_active(endpoint_id, active):
     endpoint = get(endpoint_id)
     if endpoint is None:
         return None
-    if endpoint.active:
+    if endpoint.active != active:
         # Preserve date_created, which otherwise has an ORM onupdate default.
         database.session_query(Endpoint).filter(Endpoint.id == endpoint.id).update(
-            {Endpoint.active: False, Endpoint.date_created: Endpoint.date_created}
+            {Endpoint.active: active, Endpoint.date_created: Endpoint.date_created}
         )
         database.commit()
+        action = "reactivate" if active else "deactivate"
         log_service.audit_log(
-            "deactivate_endpoint", endpoint.name, f"Deactivated endpoint {endpoint.id}"
+            f"{action}_endpoint", endpoint.name, f"{action.capitalize()}d endpoint {endpoint.id}"
         )
-    return {"id": endpoint.id, "active": False}
+    return {"id": endpoint.id, "active": active}
 
 
 def get_by_name(name):

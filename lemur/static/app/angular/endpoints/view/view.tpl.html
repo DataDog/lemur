@@ -38,8 +38,9 @@
                         </td>
                         <td data-title="''" filter="{ 'ciphers' : 'select'}" filter-data="ciphers" class="centered-cell">
                             <div class="btn-group pull-right">
-                                <button ng-if="endpoint.active" class="btn btn-sm btn-danger"
-                                        ng-click="deactivate(endpoint)" ng-disabled="endpoint.deactivating">Deactivate
+                                <button class="btn btn-sm" ng-class="endpoint.active ? 'btn-danger' : 'btn-default'"
+                                        ng-click="setActive(endpoint, !endpoint.active)" ng-disabled="endpoint.updatingActive">
+                                    {{ endpoint.active ? 'Deactivate' : 'Reactivate' }}
                                 </button>
                                 <button ng-model="endpoint.toggle" class="btn btn-sm btn-info" uib-btn-checkbox
                                         btn-checkbox-true="1"
