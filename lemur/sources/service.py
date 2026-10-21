@@ -653,4 +653,3 @@ def add_destination_to_sources(dst, previous_label=None):
                 delete(orphan.id)
 
     return changed
-
