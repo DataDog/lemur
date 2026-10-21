@@ -267,6 +267,8 @@ def test_acm_destination_creates_source_with_matching_options(app):
     with mock.patch.object(
         plugins, "get", side_effect=lambda slug: plugin_by_slug[slug]
     ), mock.patch.object(source_service, "get_all", return_value=[]), mock.patch.object(
+        source_service, "get_by_label", return_value=None
+    ), mock.patch.object(
         source_service, "create"
     ) as create:
         assert source_service.add_destination_to_sources(destination) is True
