@@ -9,7 +9,8 @@ Replaced certs are auto-muted via the `Certificate.replaces` append event listen
 (models.py), so notifications off on a replaced cert is expected and must NOT be
 touched. The only real operator error is a cert with notifications disabled that
 was NEVER replaced. This script finds exactly those and (optionally) re-enables
-notifications on them.
+notifications on them. After applying, it forces an immediate rerun of the
+certificate health check so the CRDL022 dashboard reflects the fix immediately.
 
 How to run (end-to-end)
 -----------------------
@@ -52,9 +53,26 @@ import sys
 import arrow
 from sqlalchemy.sql.expression import false
 
-from lemur import create_app
+from lemur import create_app, database
+from lemur.certificates import health as certificate_health
 from lemur.certificates.models import Certificate
-from lemur import database
+
+
+def rerun_health_check():
+    """Force an immediate re-emit of certificate health metrics.
+
+    Calls send_certificate_health_metrics() directly (same code path as the
+    certificate_health_check celery task) so the CRDL022 dashboard reflects the
+    updated notify state right away rather than waiting for the next scheduled
+    run. Note: run inside an active Flask app context.
+    """
+    print("\nForcing a rerun of the certificate health check ...")
+    summary = certificate_health.send_certificate_health_metrics()
+    print("Health check rerun complete:")
+    print(f"  certificates_checked = {summary['certificates_checked']}")
+    print(f"  unhealthy_certificates = {summary['unhealthy_certificates']}")
+    print(f"  failed_checks = {summary['failed_checks']}")
+    print(f"  errors = {summary['errors']}")
 
 
 def main():
@@ -93,6 +111,7 @@ def main():
                 print(f"Fixed cert id={target.id} (notify=True).")
             else:
                 print(f"Cert id={target.id} notify is already True; no change.")
+            rerun_health_check()
             return
 
         # Same eligibility as the CRDL022 health-check query: not deleted, not
@@ -139,6 +158,7 @@ def main():
                 database.update(c)
                 fixed += 1
         print(f"Fixed {fixed} certs.")
+        rerun_health_check()
         print("Done.")
 
 
