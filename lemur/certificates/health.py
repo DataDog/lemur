@@ -23,7 +23,9 @@ def missing_creator(certificate, now):
 
 
 def notifications_disabled(certificate, now):
-    return certificate.notify is False
+    # Replaced certs are auto-muted via the Certificate.replaces append event listener;
+    # notifications off on a replaced cert is expected, not an operator error.
+    return certificate.notify is False and not certificate.replaced
 
 
 def autorotation_disabled_near_expiry(certificate, now):
