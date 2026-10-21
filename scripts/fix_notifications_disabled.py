@@ -36,6 +36,11 @@ the running lemur pod. Run it there via kubectl. These commands are copy-pasteab
     kubectl -n cert-orchestration exec "$POD" -c lemur -- \
         /opt/venv/bin/python /tmp/fix.py --apply
 
+# Apply AND dispatch the certificate_health_check celery task to the worker
+# (instead of rerunning the health metrics in-process):
+    kubectl -n cert-orchestration exec "$POD" -c lemur -- \
+        /opt/venv/bin/python /tmp/fix.py --apply --celery
+
 # Test ONE cert first (dry-run, then apply) before the full batch:
     kubectl -n cert-orchestration exec "$POD" -c lemur -- \
         /opt/venv/bin/python /tmp/fix.py --cert-id 1452
@@ -58,15 +63,30 @@ from lemur.certificates import health as certificate_health
 from lemur.certificates.models import Certificate
 
 
-def rerun_health_check():
-    """Force an immediate re-emit of certificate health metrics.
+def rerun_health_check(via_celery=False):
+    """Force the certificate health check to rerun after applying a fix.
 
-    Calls send_certificate_health_metrics() directly (same code path as the
-    certificate_health_check celery task) so the CRDL022 dashboard reflects the
-    updated notify state right away rather than waiting for the next scheduled
-    run. Note: run inside an active Flask app context.
+    By default this re-emits health metrics in-process via
+    send_certificate_health_metrics() (same code path as the celery task). Pass
+    via_celery=True to instead dispatch the real celery task
+    (lemur.common.celery.certificate_health_check) to the broker/worker.
+
+    Note: send_task enqueues asynchronously; the worker runs it on its own
+    cadence. Run inside an active Flask app context.
     """
-    print("\nForcing a rerun of the certificate health check ...")
+    if via_celery:
+        from lemur.common.celery import celery_app
+        print("\nDispatching certificate_health_check celery task to the worker ...")
+        async_result = celery_app.send_task(
+            "lemur.common.celery.certificate_health_check"
+        )
+        print(
+            "Task dispatched (async id=%s). The worker will emit updated health "
+            "metrics on its next run." % async_result.id
+        )
+        return
+
+    print("\nForcing a rerun of the certificate health check (in-process) ...")
     summary = certificate_health.send_certificate_health_metrics()
     print("Health check rerun complete:")
     print(f"  certificates_checked = {summary['certificates_checked']}")
@@ -85,6 +105,9 @@ def main():
     parser.add_argument("--cert-id", type=int, default=None,
                         help="Restrict to a single certificate id (e.g. test one first). "
                              "Skips eligibility checks; use with --apply to touch only it.")
+    parser.add_argument("--celery", action="store_true",
+                        help="After apply, dispatch the certificate_health_check celery "
+                             "task to the worker instead of rerunning in-process.")
     args = parser.parse_args()
 
     apply = args.apply
@@ -111,7 +134,7 @@ def main():
                 print(f"Fixed cert id={target.id} (notify=True).")
             else:
                 print(f"Cert id={target.id} notify is already True; no change.")
-            rerun_health_check()
+            rerun_health_check(via_celery=args.celery)
             return
 
         # Same eligibility as the CRDL022 health-check query: not deleted, not
@@ -158,7 +181,7 @@ def main():
                 database.update(c)
                 fixed += 1
         print(f"Fixed {fixed} certs.")
-        rerun_health_check()
+        rerun_health_check(via_celery=args.celery)
         print("Done.")
 
 
