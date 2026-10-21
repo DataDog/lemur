@@ -357,3 +357,42 @@ def test_update_destination_rename_into_existing_source(session):
     assert paired.id == b_source.id
     assert paired.description == "renamed"
     assert get_plugin_option("path", paired.options) == "/new/"
+
+
+def test_update_destination_rename_into_existing_source_reverse(session):
+    """Rename dest B -> A where source A pre-exists and source B was auto-created with dest B.
+
+    This is the symmetric counterpart to test_update_destination_rename_into_existing_source:
+    that test renames dest A->B (orphan is source A); this test renames dest B->A (orphan is
+    source B). Both paths exercise the same orphan-cleanup branch in add_destination_to_sources.
+    """
+    from lemur.destinations import service as destination_service
+    from lemur.plugins.utils import get_plugin_option
+    from lemur.sources import service as source_service
+    from lemur.sources.models import Source
+
+    # Pre-existing source A (created directly, not via a destination)
+    a_source = source_service.create(
+        "rev-collide-a", "aws-source", _aws_destination_options(path="/a/"), "pre-existing a"
+    )
+    # Destination B auto-creates its own paired source under label rev-collide-b
+    destination = destination_service.create(
+        "rev-collide-b", "aws-destination", _aws_destination_options(path="/b/"), "b"
+    )
+    before = session.query(Source).count()
+
+    # Rename dest B -> A: should adopt source A (same id), remove orphan source B
+    destination_service.update(
+        destination.id,
+        "rev-collide-a",
+        "aws-destination",
+        _aws_destination_options(path="/new/"),
+        "renamed",
+    )
+
+    assert session.query(Source).count() == before - 1
+    assert not source_service.get_by_label("rev-collide-b")
+    paired = source_service.get_by_label("rev-collide-a")
+    assert paired.id == a_source.id
+    assert paired.description == "renamed"
+    assert get_plugin_option("path", paired.options) == "/new/"
