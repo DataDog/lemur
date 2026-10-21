@@ -11,18 +11,34 @@ touched. The only real operator error is a cert with notifications disabled that
 was NEVER replaced. This script finds exactly those and (optionally) re-enables
 notifications on them.
 
-Use
----
-    # dry-run (default): list candidates, make no changes
-    python fix_notifications_disabled.py
+How to run (end-to-end)
+-----------------------
+The script needs the Lemur app context and real DB config, which only exist inside
+the running lemur pod. Run it there via kubectl: (1) pick the cluster, (2) find and
+copy into the pod, (3) dry-run, then (4) apply.
 
-    # apply: set notify=True on candidates
-    python fix_notifications_disabled.py --apply
+# 1) Point kubectl at the right cluster (e.g. prod):
+    kubectl config use-context build1.us1.ddbuild.io
 
-    # explicit config path (optional); otherwise the app resolves it via the
-    # LEMUR_CONF env var (in-cluster: /etc/lemur/lemur.conf.py) or the default
-    # ~/.lemur/lemur.conf.py, matching how `lemur` itself bootstraps.
-    python fix_notifications_disabled.py --config /path/to/lemur.conf.py --apply
+# 2) Find the lemur pod and copy the script into its lemur container:
+    kubectl -n cert-orchestration get pods -l app=lemur -o wide
+    POD="cert-orchestration/lemur-fddbc66bb-vps9t"   # <- use the name from above
+    kubectl cp scripts/fix_notifications_disabled.py "$POD":/tmp/fix.py -c lemur
+
+# 3) DRY-RUN (default — lists candidates, changes nothing):
+    kubectl exec -n cert-orchestration "$POD" -c lemur -- \
+        /opt/venv/bin/python /tmp/fix.py
+
+# 4) Review the printed list, then APPLY (sets notify=True on those certs):
+    kubectl exec -n cert-orchestration "$POD" -c lemur -- \
+        /opt/venv/bin/python /tmp/fix.py --apply
+
+Optional — run outside the pod against an explicit config (e.g. a local clone):
+    python scripts/fix_notifications_disabled.py --config /path/to/lemur.conf.py --apply
+
+Why this works: inside the pod, `create_app(None)` resolves the config from the
+`LEMUR_CONF` env var (/etc/lemur/lemur.conf.py), which the deployment already sets,
+so no `--config` is needed in the pod.
 """
 import argparse
 import os
