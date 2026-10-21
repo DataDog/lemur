@@ -30,7 +30,7 @@ from lemur.common.utils import find_matching_certificates_by_hash, parse_certifi
 from lemur.common.defaults import serial
 from lemur.logs import service as log_service
 from lemur.plugins.base import plugins
-from lemur.plugins.utils import get_plugin_option, set_plugin_option
+from lemur.plugins.utils import get_plugin_option
 
 
 def certificate_create(certificate, source):
@@ -539,61 +539,52 @@ def render(args):
     return database.sort_and_page(query, Source, args)
 
 
-def add_destination_to_sources(dst):
+def _apply_destination_options(src_options, dst):
+    """Copy the destination's options onto src_options, appending any that are new.
+
+    Sources can carry options the destination does not (e.g. endpointType and regions on
+    aws-source) and those must survive. Destination options already present on the source are
+    updated; destination options that are new to the source are appended, because using
+    set_plugin_option alone would silently drop them.
     """
-    Given a destination, check if it can be added as sources, and include it if not already a source
-    We identify qualified destinations based on the sync_as_source attributed of the plugin.
-    The destination sync_as_source_name reveals the name of the suitable source-plugin.
-    We rely on source & dest titles to match to avoid duplicates.
-    :return: true for success and false for not adding the destination as source
+    dst_options = dst.options or []
+    for option in dst_options:
+        name = option.get("name")
+        existing = next((o for o in src_options if o.get("name") == name), None)
+        if existing is not None:
+            existing["value"] = get_plugin_option(name, dst_options)
+        else:
+            src_options.append(copy.deepcopy(option))
+
+
+def add_destination_to_sources(dst, previous_label=None):
     """
-    # check that destination can be synced to a source
-    destination_plugin = plugins.get(dst.plugin_name)
-    if not destination_plugin.sync_as_source:
-        return False
+    Keep a destination's paired source in sync, creating it or updating it in place.
 
-    source_labels = set()
-    sources = get_all()
-    for src in sources:
-        source_labels.add(src.label)
+    A source is paired to its destination by label. Given a destination, the paired source is
+    located by its current label (or by the previous label when the destination was renamed),
+    updated in place so it keeps its id, endpoints and certificate links, and only created when
+    no paired source exists. If a rename leaves a source orphaned under the previous label and no
+    other destination uses that label, the orphan is removed so we never leave unpaired sources.
 
-    if dst.label in source_labels:
-        return False
-
-    destination_plugin = plugins.get(dst.plugin_name)
-    src_options = copy.deepcopy(
-        plugins.get(destination_plugin.sync_as_source_name).options
-    )
-    for option in src_options:
-        set_plugin_option(
-            option['name'], get_plugin_option(option['name'], dst.options), src_options
-        )
-    create(
-        label=dst.label,
-        plugin_name=destination_plugin.sync_as_source_name,
-        options=src_options,
-        description=dst.description,
-    )
-    return True
-
-
-def update_destination_source(dst, previous_label):
-    """
-    Given an updated destination, keep its paired source in step, creating one only if none exists.
-    Sources and destinations are paired by label, so when a destination is renamed its source is
-    looked up under previous_label and renamed along with it, instead of a second source being
-    created and the original left unpaired. Options the destination also defines are copied from
-    it; source-only options are left as they are.
-    :return: "created" or "updated" if the source was changed, otherwise None
+    :param dst: the destination, with label/options/description already set to their new values
+    :param previous_label: the destination's label before it changed (only relevant on rename)
+    :return: "created" or "updated" if the source changed, otherwise None
     """
     destination_plugin = plugins.get(dst.plugin_name)
     if not destination_plugin.sync_as_source:
         return None
+    dest_src_name = destination_plugin.sync_as_source_name
 
+    # locate the paired source: prefer one already at the new label, else one at the previous label
     source = get_by_label(dst.label)
-    if not source and previous_label != dst.label:
+    if source is not None and source.plugin_name != dest_src_name:
+        # a source of another plugin type owns this label; leave it alone and create no duplicate
+        return None
+
+    if source is None and previous_label and previous_label != dst.label:
         previous_source = get_by_label(previous_label)
-        # destination labels are not unique, another destination may still pair with the old source
+        # destination labels are not unique; another destination may still pair with the old source
         previous_label_in_use = (
             database.session_query(Destination)
             .filter(Destination.label == previous_label, Destination.id != dst.id)
@@ -601,40 +592,65 @@ def update_destination_source(dst, previous_label):
         )
         if (
             previous_source
-            and previous_source.plugin_name == destination_plugin.sync_as_source_name
+            and previous_source.plugin_name == dest_src_name
             and not previous_label_in_use
         ):
             source = previous_source
 
-    if not source:
-        return "created" if add_destination_to_sources(dst) else None
+    if source is None:
+        # no paired source: create one (e.g. a brand-new destination)
+        if any(s.label == dst.label for s in get_all()):
+            return None
+        src_options = copy.deepcopy(plugins.get(dest_src_name).options or [])
+        _apply_destination_options(src_options, dst)
+        create(
+            label=dst.label,
+            plugin_name=dest_src_name,
+            options=src_options,
+            description=dst.description,
+        )
+        return "created"
 
-    # a source of another plugin type already holds this label, leave it alone
-    if source.plugin_name != destination_plugin.sync_as_source_name:
-        return None
-
-    # start from the source's own options so source-only settings (e.g. endpointType, regions) are
-    # kept, and only overwrite the options the destination also defines
-    src_options = copy.deepcopy(
-        source.options or plugins.get(destination_plugin.sync_as_source_name).options
+    # a paired source exists: merge the destination's options onto a copy of the source's own
+    # options (preserving source-only settings), then write it if anything changed
+    src_options = (
+        copy.deepcopy(source.options)
+        if source.options is not None
+        else copy.deepcopy(plugins.get(dest_src_name).options or [])
     )
-    for option in dst.options or []:
-        set_plugin_option(
-            option["name"], get_plugin_option(option["name"], dst.options), src_options
+    _apply_destination_options(src_options, dst)
+
+    changed = (
+        "updated"
+        if (source.label, source.options, source.description)
+        != (dst.label, src_options, dst.description)
+        else None
+    )
+    if changed:
+        update(
+            source.id,
+            label=dst.label,
+            plugin_name=source.plugin_name,
+            options=src_options,
+            description=dst.description,
         )
 
-    if (source.label, source.options, source.description) == (
-        dst.label,
-        src_options,
-        dst.description,
-    ):
-        return None
+    # a rename may leave a source orphaned under the previous label (e.g. the new label already
+    # had a source); remove it if no other destination still uses the previous label
+    if previous_label and previous_label != dst.label:
+        orphan = get_by_label(previous_label)
+        if (
+            orphan is not None
+            and orphan.id != source.id
+            and orphan.plugin_name == dest_src_name
+        ):
+            still_used = (
+                database.session_query(Destination)
+                .filter(Destination.label == previous_label, Destination.id != dst.id)
+                .first()
+            )
+            if not still_used:
+                delete(orphan.id)
 
-    update(
-        source.id,
-        label=dst.label,
-        plugin_name=source.plugin_name,
-        options=src_options,
-        description=dst.description,
-    )
-    return "updated"
+    return changed
+

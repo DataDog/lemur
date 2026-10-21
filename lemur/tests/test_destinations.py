@@ -304,3 +304,56 @@ def test_update_destination_keeps_source_of_other_destination(session):
 
     assert source_service.get_by_label("shared-label").id == shared_source.id
     assert source_service.get_by_label("split-label").id != shared_source.id
+
+
+def test_update_destination_adds_new_option_to_source(session):
+    from lemur.destinations import service as destination_service
+    from lemur.plugins.utils import get_plugin_option
+    from lemur.sources import service as source_service
+
+    destination = destination_service.create(
+        "add-opt", "aws-destination", _aws_destination_options(), "base"
+    )
+    source = source_service.get_by_label("add-opt")
+    assert get_plugin_option("costCenter", source.options) is None
+
+    new_options = _aws_destination_options() + [
+        {"name": "costCenter", "type": "str", "value": "net-edge"}
+    ]
+    destination_service.update(
+        destination.id, "add-opt", "aws-destination", new_options, "base"
+    )
+
+    edited = source_service.get_by_label("add-opt")
+    assert get_plugin_option("costCenter", edited.options) == "net-edge"
+
+
+def test_update_destination_rename_into_existing_source(session):
+    from lemur.destinations import service as destination_service
+    from lemur.plugins.utils import get_plugin_option
+    from lemur.sources import service as source_service
+    from lemur.sources.models import Source
+
+    destination = destination_service.create(
+        "collide-a", "aws-destination", _aws_destination_options(path="/a/"), "a"
+    )
+    b_source = source_service.create(
+        "collide-b", "aws-source", _aws_destination_options(path="/b/"), "pre-existing b"
+    )
+    before = session.query(Source).count()
+
+    destination_service.update(
+        destination.id,
+        "collide-b",
+        "aws-destination",
+        _aws_destination_options(path="/new/"),
+        "renamed",
+    )
+
+    # the pre-existing collide-b source is adopted (id preserved); orphan collide-a is removed
+    assert session.query(Source).count() == before - 1
+    assert not source_service.get_by_label("collide-a")
+    paired = source_service.get_by_label("collide-b")
+    assert paired.id == b_source.id
+    assert paired.description == "renamed"
+    assert get_plugin_option("path", paired.options) == "/new/"
