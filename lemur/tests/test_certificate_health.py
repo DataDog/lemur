@@ -161,6 +161,9 @@ def test_each_reason_emits_one_failure(app, reason, overrides):
     {"not_after": NOW.shift(days=30, seconds=1)},
     {"not_after": NOW.shift(days=1), "replaced": [certificate(id=43)]},
     {"replaces": [certificate(id=40), certificate(id=41)]},
+    # Replaced certs are auto-muted via the Certificate.replaces append event listener,
+    # so notifications off on a replaced cert is expected and must not fire.
+    {"notify": False, "replaced": [certificate(id=43)]},
 ])
 def test_passing_conditions_emit_zero(app, overrides):
     states, summary = emit([certificate(**overrides)])
@@ -190,6 +193,15 @@ def test_summary_counts_unique_unhealthy_certificates_and_all_failures(app):
     assert summary == dict(
         certificates_checked=3, unhealthy_certificates=2, failed_checks=6, errors=0
     )
+
+
+def test_notifications_disabled_ignores_replaced_cert_but_emits_zero_for_all(app):
+    cert = certificate(notify=False, replaced=[certificate(id=43)])
+    states, summary = emit([cert])
+    # All seven reasons must be zero: notifications off on a replaced cert is expected
+    # and the cert is otherwise healthy (single replacement is not multiple_replacements).
+    assert states == {(42, reason): 0 for reason in REASONS}
+    assert summary["failed_checks"] == summary["unhealthy_certificates"] == 0
 
 
 def test_recovered_reason_explicitly_emits_zero(app):

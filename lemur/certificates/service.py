@@ -502,8 +502,30 @@ def upload(**kwargs):
 
 def create(**kwargs):
     """
-    Creates a new certificate.
+    Creates a new certificate from schema-normalized input.
     """
+    # Validate replacements preserves the predecessor CN and all existing SANs.
+    if kwargs.get("replaces"):
+        common_name = kwargs.get("common_name") or ""
+        names = kwargs.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
+        for predecessor in kwargs["replaces"]:
+            if common_name != (predecessor.cn or ""):
+                raise Exception(
+                    f"Replacement CN must match certificate {predecessor.id}: {predecessor.cn}"
+                )
+            try:
+                previous_names = predecessor.parsed_cert.extensions.get_extension_for_class(
+                    x509.SubjectAlternativeName
+                ).value
+            except x509.ExtensionNotFound:
+                previous_names = []
+            missing = set(previous_names) - set(names)
+            if missing:
+                values = sorted(f"{type(name).__name__}:{name.value}" for name in missing)
+                raise Exception(
+                    f"Replacement cannot remove SANs from certificate {predecessor.id}: {values}"
+                )
+
     # Validate destinations do not overlap accounts for the same plugin and path
     if "destinations" in kwargs:
         dest_plugin_accounts = {}
