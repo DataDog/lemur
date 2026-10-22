@@ -193,6 +193,8 @@ class SectigoIssuerPlugin(IssuerPlugin):
                     "dcv_status": _normalize_dcv_status(
                         entry.get("dcvStatus", "unknown")
                     ),
+                    # expirationDate is a date string "YYYY-MM-DD" from /dcv/v1/validation.
+                    "validated_until": entry.get("expirationDate"),
                 }
             )
         return results

@@ -548,6 +548,7 @@ class DigiCertIssuerPlugin(IssuerPlugin):
             # /validation endpoint; DigiCert's dcv_expiration data is unreliable
             # and unused, so it is not returned.
             dcv_status_by_type = {}
+            validated_until_by_type = {}
             domain_id = domain.get("id")
             if domain_id:
                 try:
@@ -556,9 +557,12 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                     )
                     val_data = handle_response(val_resp)
                     for v in val_data.get("validations", []):
-                        dcv_status_by_type[v.get("type")] = _normalize_dcv_status(
+                        vtype = v.get("type")
+                        dcv_status_by_type[vtype] = _normalize_dcv_status(
                             v.get("dcv_status", "unknown")
                         )
+                        if v.get("validated_until"):
+                            validated_until_by_type[vtype] = v["validated_until"]
                 except SoftTimeLimitExceeded:
                     raise
                 except Exception:
@@ -580,6 +584,7 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                         "dcv_status": (
                             dcv_status_by_type.get(val_type) or "unknown"
                         ).lower(),
+                        "validated_until": validated_until_by_type.get(val_type),
                     }
                 )
         return results

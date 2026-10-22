@@ -1436,7 +1436,7 @@ def emit_dcv_expiration_metrics():
                     if status_norm != "active" and status_norm != "pending":
                         domain_broken = True
                     metrics.send(
-                        "dcv.health",
+                        "dcv.health.domain_status",
                         "gauge",
                         1 if status_norm == "active" else 0,
                         metric_tags={
@@ -1447,13 +1447,45 @@ def emit_dcv_expiration_metrics():
                             "validation_type": validation_type,
                         },
                     )
+                    # Forewarning metric: days until DCV expires.
+                    # Alert threshold: < 3 days (page), < 7 days (warning).
+                    # Emitted alongside the binary gauge so monitors can alert
+                    # before status flips to expired.
+                    validated_until_str = entry.get("validated_until")
+                    if validated_until_str:
+                        try:
+                            # Handle both date-only (Sectigo: "YYYY-MM-DD") and
+                            # full ISO-8601 (DigiCert: "2026-10-27T03:51:17+00:00").
+                            if "T" in str(validated_until_str):
+                                exp_dt = datetime.fromisoformat(
+                                    str(validated_until_str).replace("Z", "+00:00")
+                                )
+                            else:
+                                from datetime import date
+                                d_parts = [int(x) for x in str(validated_until_str).split("-")]
+                                exp_dt = datetime(
+                                    d_parts[0], d_parts[1], d_parts[2], tzinfo=timezone.utc
+                                )
+                            days_left = (exp_dt - datetime.now(timezone.utc)).days
+                            metrics.send(
+                                "dcv.health.days_until_expiry",
+                                "gauge",
+                                days_left,
+                                metric_tags={
+                                    "domain": domain,
+                                    "ca": ca_name,
+                                    "validation_type": validation_type,
+                                },
+                            )
+                        except (ValueError, TypeError, IndexError):
+                            pass  # unparseable date: skip, don't block metric emission
                 if domain_broken:
                     broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
             else:
                 # Active cert for this monitored CA but the CA didn't report the
                 # domain: a coverage gap. Flag it (0) so it's not silently missed.
                 metrics.send(
-                    "dcv.health",
+                    "dcv.health.domain_status",
                     "gauge",
                     0,
                     metric_tags={
