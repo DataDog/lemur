@@ -61,6 +61,18 @@ def normalize_domain_name(name):
     return name.strip().lower().lstrip("*.").rstrip(".")
 
 
+def normalize_ca_name(name):
+    """Normalize a CA issuer domain name to lowercase.
+
+    Used to produce a consistent 'ca' tag value on
+    dcv.health.persist_txt_record metrics, where the issuer comes from the
+    TXT record content (e.g. 'digicert.com' / 'sectigo.com').
+    """
+    if not name:
+        return ""
+    return name.strip().lower()
+
+
 def base64encode(string):
     # Performs Base64 encoding of string to string using the base64.b64encode() function
     # which encodes bytes to bytes.
