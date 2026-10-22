@@ -615,7 +615,7 @@ class DigiCertIssuerPlugin(IssuerPlugin):
             # Trigger persistent-txt revalidation.
             val_resp = self.session.post(
                 f"{base_url}/services/v2/domain/{domain_id}/validation",
-                json={"validations": [{"type": "ov"}], "dcv_method": "persistent-txt"},
+                json={"validations": [{"type": "ov"}, {"type": "ev"}], "dcv_method": "persistent-txt"},
             )
             handle_response(val_resp)
             return {"domain": domain_name, "status": "triggered", "detail": None}
