@@ -10,6 +10,7 @@
 """
 
 import arrow
+from flask import current_app
 
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -26,6 +27,7 @@ from lemur.endpoints.models import (
 )
 from lemur.sources.models import Source
 from lemur.extensions import metrics
+from lemur.logs import service as log_service
 
 
 def get_all():
@@ -47,6 +49,25 @@ def get(endpoint_id):
     :return:
     """
     return database.get(Endpoint, endpoint_id)
+
+
+def set_active(endpoint_id, active):
+    endpoint = get(endpoint_id)
+    if endpoint is None:
+        return None
+    if endpoint.active != active:
+        # Preserve date_created, which otherwise has an ORM onupdate default.
+        database.session_query(Endpoint).filter(Endpoint.id == endpoint.id).update(
+            {Endpoint.active: active, Endpoint.date_created: Endpoint.date_created}
+        )
+        database.commit()
+        action = "reactivate" if active else "deactivate"
+        log_service.audit_log(
+            f"{action}_endpoint", endpoint.name, f"{action.capitalize()}d endpoint {endpoint.id}"
+        )
+    else:
+        current_app.logger.debug("Endpoint %s already has active=%s; no-op", endpoint.id, active)
+    return {"id": endpoint.id, "active": active}
 
 
 def get_by_name(name):
@@ -205,6 +226,7 @@ def update(endpoint_id, **kwargs):
     endpoint.policy = kwargs["policy"]
     endpoint.source = kwargs["source"]
     endpoint.registry_type = kwargs["registry_type"]
+    endpoint.active = True
 
     existing_alias = {}
     for e in endpoint.aliases:
