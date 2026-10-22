@@ -34,7 +34,7 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
-from lemur.common.utils import normalize_domain_name
+from lemur.common.utils import normalize_ca_name, normalize_domain_name
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -1335,7 +1335,7 @@ def _active_domains_by_ca():
     """
     by_ca = {}
     for cert in certificate_service.get_all_valid_certs(None):
-        ca_name = cert.authority.plugin_name if cert.authority else "unknown"
+        ca_name = normalize_ca_name(cert.authority.plugin_name if cert.authority else "unknown")
         for d in cert.domains:
             name = normalize_domain_name(d.name)
             if not name:
@@ -1368,7 +1368,7 @@ def emit_dcv_expiration_metrics():
     ca_status_by_domain = {}
     monitored_cas = set()
     for plugin in plugins.all(plugin_type="issuer"):
-        ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
+        ca_name = normalize_ca_name(getattr(plugin, "slug", plugin.__class__.__name__.lower()))
         try:
             dcv_data = plugin.get_dcv_expiration_data()
         except SoftTimeLimitExceeded:

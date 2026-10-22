@@ -567,3 +567,37 @@ def drop_last_cert_from_chain(full_chain: str) -> str:
         ),
     ).decode()
     return pem_certificate
+
+
+# ---------------------------------------------------------------------------
+# CA name normalization
+# ---------------------------------------------------------------------------
+
+# Maps any known CA identifier (plugin slug, TXT-record issuer domain, etc.)
+# to a canonical short name suitable for metric tags.
+_CA_NAME_MAP = {
+    # DigiCert plugin slugs
+    "digicert-issuer": "digicert",
+    "digicert-source": "digicert",
+    "digicert-cis-issuer": "digicert",
+    "digicert-cis-source": "digicert",
+    # DigiCert TXT-record issuer domain (DNS-PERSIST-01 format)
+    "digicert.com": "digicert",
+    # Sectigo plugin slug
+    "sectigo-issuer": "sectigo",
+    # Sectigo TXT-record issuer domain
+    "sectigo.com": "sectigo",
+}
+
+
+def normalize_ca_name(raw: str) -> str:
+    """Return a canonical CA short-name for metric tags.
+
+    Accepts Lemur plugin slugs (e.g. "digicert-issuer") and DNS-PERSIST-01
+    issuer domain names (e.g. "digicert.com") and returns a stable, human-
+    readable tag value ("digicert", "sectigo", …).
+
+    Unknown values are returned lowercased and unchanged so future CAs surface
+    in metrics without requiring a code change first.
+    """
+    return _CA_NAME_MAP.get(raw, raw.lower() if raw else "unknown")

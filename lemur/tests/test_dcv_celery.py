@@ -135,9 +135,9 @@ def test_issuer_plugin_dcv_default_returns_empty():
 def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
-    mock_get_all_domains.return_value = {"digicert-issuer": {"example.com"}}
+    mock_get_all_domains.return_value = {"digicert": {"example.com"}}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name maps this to "digicert"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": "example.com",
@@ -160,7 +160,7 @@ def test_emit_dcv_expiration_metrics_emits_metric_for_active_domain(
     assert vs_calls[0].args[2] == 1  # active -> healthy
     tags = vs_calls[0].kwargs["metric_tags"]
     assert tags["domain"] == "example.com"
-    assert tags["ca"] == "digicert-issuer"
+    assert tags["ca"] == "digicert"
     assert tags["dcv_status"] == "active"
     assert tags["dcv_method"] == "persistent-txt"
     assert tags["validation_type"] == "ov"
@@ -186,9 +186,9 @@ def test_emit_dcv_expiration_metrics_validation_status_mapping(
         "unknown.com": "unknown",
         "empty.com": "",
     }
-    mock_get_all_domains.return_value = {"digicert-issuer": set(status_by_domain)}
+    mock_get_all_domains.return_value = {"digicert": set(status_by_domain)}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name maps this to "digicert"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": domain,
@@ -233,9 +233,9 @@ def test_emit_dcv_expiration_metrics_does_not_hide_expired_behind_active(
     # lookup must keep BOTH (not last-write-collapse), so an expired EV is NOT
     # hidden behind an active OV: it emits its own gauge (0) and the domain is
     # counted as broken.
-    mock_get_all_domains.return_value = {"digicert-issuer": {"example.com"}}
+    mock_get_all_domains.return_value = {"digicert": {"example.com"}}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name maps this to "digicert"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": "example.com",
@@ -284,9 +284,9 @@ def test_emit_dcv_expiration_metrics_matches_wildcard_domain(
     # sides (the plugin's normalization is covered in the Sectigo plugin test).
     # Here the plugin reports the normalized domain key, which must match the
     # active-cert set and be healthy rather than flagged "uncovered".
-    mock_get_all_domains.return_value = {"sectigo-issuer": {"lemur-sandbox.datad0g.com"}}
+    mock_get_all_domains.return_value = {"sectigo": {"lemur-sandbox.datad0g.com"}}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "sectigo-issuer"
+    fake_plugin.slug = "sectigo-issuer"  # normalize_ca_name maps this to "sectigo"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             # Sectigo's get_dcv_expiration_data() normalizes "*.foo.com" -> "foo.com"
@@ -321,9 +321,9 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
 ):
     # Sectigo prod does not return expirationDate, so dcv_expiration is absent;
     # dcv.health must still be emitted from dcv_status.
-    mock_get_all_domains.return_value = {"sectigo-issuer": {"datad0g.com"}}
+    mock_get_all_domains.return_value = {"sectigo": {"datad0g.com"}}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "sectigo-issuer"
+    fake_plugin.slug = "sectigo-issuer"  # normalize_ca_name maps this to "sectigo"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": "datad0g.com",
@@ -345,7 +345,7 @@ def test_emit_dcv_expiration_metrics_emits_validation_status_without_expiration(
     assert len(vs_calls) == 1
     assert vs_calls[0].args[2] == 1  # active -> healthy
     assert vs_calls[0].kwargs["metric_tags"]["dcv_status"] == "active"
-    assert vs_calls[0].kwargs["metric_tags"]["ca"] == "sectigo-issuer"
+    assert vs_calls[0].kwargs["metric_tags"]["ca"] == "sectigo"
 
 
 @patch("lemur.common.celery._active_domains_by_ca")
@@ -403,9 +403,9 @@ def test_emit_dcv_expiration_metrics_plugin_exception_does_not_stop_others(
 def test_emit_dcv_expiration_metrics_malformed_entry_emits_error(
     mock_current_app, mock_metrics, mock_plugins, mock_get_all_domains
 ):
-    mock_get_all_domains.return_value = {"digicert-issuer": {"example.com"}}
+    mock_get_all_domains.return_value = {"digicert": {"example.com"}}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name maps this to "digicert"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": "example.com",
@@ -439,7 +439,7 @@ def test_emit_dcv_expiration_metrics_malformed_entry_emits_error(
     ]
     assert len(malformed_calls) == 2
     assert all(
-        c.kwargs["metric_tags"]["ca"] == "digicert-issuer" for c in malformed_calls
+        c.kwargs["metric_tags"]["ca"] == "digicert" for c in malformed_calls
     )
 
 
@@ -504,10 +504,10 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
 ):
     # Staging knows only its own domains; a prod domain in DigiCert should be skipped.
     mock_get_all_domains.return_value = {
-        "digicert-issuer": {"lemur-sandbox.datad0g.com"}
+        "digicert": {"lemur-sandbox.datad0g.com"}
     }
     fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name maps this to "digicert"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": "lemur-sandbox.datad0g.com",
@@ -544,9 +544,9 @@ def test_emit_dcv_expiration_metrics_filters_unknown_domains(
 def test_emit_dcv_expiration_metrics_flags_uncovered_domain(
     mock_current_app, mock_metrics, mock_plugins, mock_active
 ):
-    mock_active.return_value = {"digicert-issuer": {"inuse.com", "reported.com"}}
+    mock_active.return_value = {"digicert": {"inuse.com", "reported.com"}}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name maps this to "digicert"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": "reported.com",
@@ -616,9 +616,9 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
     mock_current_app, mock_metrics, mock_plugins, mock_active
 ):
     # ok.com (active), expired.com (expired), gap.com (uncovered) -> 2 broken.
-    mock_active.return_value = {"digicert-issuer": {"ok.com", "expired.com", "gap.com"}}
+    mock_active.return_value = {"digicert": {"ok.com", "expired.com", "gap.com"}}
     fake_plugin = MagicMock()
-    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name maps this to "digicert"
     fake_plugin.get_dcv_expiration_data.return_value = [
         {
             "domain": "ok.com",
@@ -648,7 +648,7 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
     ]
     assert len(broken_calls) == 1
     assert broken_calls[0].args[2] == 2  # expired + uncovered
-    assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert-issuer"
+    assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert"
 
 
 @patch("lemur.common.celery.certificate_service")
@@ -680,8 +680,8 @@ def test_active_domains_by_ca_yields_base_domains(mock_cert_service):
 
     result = _active_domains_by_ca()
 
-    assert result["digicert-issuer"] == {"datad0g.com", "datadoghq.com"}
-    assert result["sectigo-issuer"] == {"updog.ai"}
+    assert result["digicert"] == {"datad0g.com", "datadoghq.com"}
+    assert result["sectigo"] == {"updog.ai"}
     # No raw subdomain SANs in the result
     for domains in result.values():
         for d in domains:
@@ -711,4 +711,4 @@ def test_active_domains_by_ca_skips_bare_public_suffix(mock_cert_service):
 
     result = _active_domains_by_ca()
 
-    assert result["digicert-issuer"] == {"example.com"}
+    assert result["digicert"] == {"example.com"}
