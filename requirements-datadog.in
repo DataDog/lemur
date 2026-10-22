@@ -28,6 +28,8 @@ importlib-metadata==8.5.0
 markupsafe==2.1.5
 
 # === Security Overrides (not yet fixed in upstream) ===
+publicsuffixlist  # PSL-based registrable base domain resolution for DCV monitoring
+
 # These can be removed once upstream catches up
 urllib3 >= 2.5.0  # (CVE-2025-50181, CVE-2025-50182) - upstream has 1.26.18
 jinja2 >= 3.1.6  # (CVE-2024-56201, CVE-2024-56326, CVE-2025-27516) - upstream has 3.1.3

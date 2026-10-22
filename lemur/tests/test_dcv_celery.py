@@ -649,3 +649,66 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
     assert len(broken_calls) == 1
     assert broken_calls[0].args[2] == 2  # expired + uncovered
     assert broken_calls[0].kwargs["metric_tags"]["ca"] == "digicert-issuer"
+
+
+@patch("lemur.common.celery.certificate_service")
+def test_active_domains_by_ca_yields_base_domains(mock_cert_service):
+    """_active_domains_by_ca should return eTLD+1 base domains, not raw SANs.
+
+    Given certs with subdomain SANs (api.datad0g.com, *.datad0g.com) and a base
+    domain SAN (datad0g.com), all three should collapse to the single base domain
+    "datad0g.com" in the returned set — matching what DigiCert's /v2/domain returns.
+    """
+    from lemur.common.celery import _active_domains_by_ca
+
+    def make_domain(name):
+        d = MagicMock()
+        d.name = name
+        return d
+
+    def make_cert(plugin_name, san_names):
+        cert = MagicMock()
+        cert.authority.plugin_name = plugin_name
+        cert.domains = [make_domain(n) for n in san_names]
+        return cert
+
+    mock_cert_service.get_all_valid_certs.return_value = [
+        make_cert("digicert-issuer", ["api.datad0g.com", "*.datad0g.com", "datad0g.com"]),
+        make_cert("digicert-issuer", ["sub.datadoghq.com"]),
+        make_cert("sectigo-issuer", ["updog.ai"]),
+    ]
+
+    result = _active_domains_by_ca()
+
+    assert result["digicert-issuer"] == {"datad0g.com", "datadoghq.com"}
+    assert result["sectigo-issuer"] == {"updog.ai"}
+    # No raw subdomain SANs in the result
+    for domains in result.values():
+        for d in domains:
+            assert not d.startswith("api.")
+            assert not d.startswith("*.")
+            assert not d.startswith("sub.")
+
+
+@patch("lemur.common.celery.certificate_service")
+def test_active_domains_by_ca_skips_bare_public_suffix(mock_cert_service):
+    """SANs that resolve to a bare public suffix (no registrable part) are skipped."""
+    from lemur.common.celery import _active_domains_by_ca
+
+    def make_domain(name):
+        d = MagicMock()
+        d.name = name
+        return d
+
+    cert = MagicMock()
+    cert.authority.plugin_name = "digicert-issuer"
+    cert.domains = [
+        make_domain("com"),          # bare TLD -> no base domain
+        make_domain("co.uk"),        # bare ccTLD+1 -> no base domain
+        make_domain("example.com"),  # valid -> example.com
+    ]
+    mock_cert_service.get_all_valid_certs.return_value = [cert]
+
+    result = _active_domains_by_ca()
+
+    assert result["digicert-issuer"] == {"example.com"}

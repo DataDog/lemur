@@ -49,8 +49,11 @@ from lemur.notifications.messaging import (
 from lemur.pending_certificates import service as pending_certificate_service
 from lemur.plugins.base import plugins
 from lemur.sources.cli import clean, sync, validate_sources
+from publicsuffixlist import PublicSuffixList
 
 fips.instance.must_enable_fips_if_needed()
+
+_PSL = PublicSuffixList()
 
 if current_app:
     flask_app = current_app._get_current_object()
@@ -1315,19 +1318,31 @@ def certificate_expirations_metrics():
 
 def _active_domains_by_ca():
     """
-    Return {ca_plugin_name: set(domain)} for every domain on an active (not
-    expired, not revoked) certificate, keyed by the issuing authority's plugin
-    name (e.g. "digicert-issuer"). This is the actual in-use domain set, used to
-    scope DCV monitoring so a domain with an active cert is always covered even
-    if the CA's own domain list omits it.
+    Return {ca_plugin_name: set(base_domain)} for every base domain (eTLD+1,
+    CA/Browser Forum Base Domain Name) on an active (not expired, not revoked)
+    certificate, keyed by the issuing authority's plugin name
+    (e.g. "digicert-issuer").
+
+    CAs register and report DCV at the base-domain level (e.g. DigiCert's
+    /v2/domain returns "datad0g.com", not "api.datad0g.com"). Raw cert SANs are
+    subdomains under those base domains. Matching raw SANs against the CA's
+    domain list would produce false 'uncovered' alerts for every subdomain SAN;
+    deriving the base domain via the IANA PSL ensures the lookup aligns with what
+    the CA reports.
+
+    SANs whose base domain cannot be determined (bare public suffix, single
+    label, invalid) are silently skipped.
     """
     by_ca = {}
     for cert in certificate_service.get_all_valid_certs(None):
         ca_name = cert.authority.plugin_name if cert.authority else "unknown"
         for d in cert.domains:
             name = normalize_domain_name(d.name)
-            if name:
-                by_ca.setdefault(ca_name, set()).add(name)
+            if not name:
+                continue
+            base = _PSL.privatesuffix(name)
+            if base:
+                by_ca.setdefault(ca_name, set()).add(base)
     return by_ca
 
 
