@@ -972,9 +972,10 @@ def get_certificate_primitives(certificate):
     certificate via `create`.
     """
     start, end = calculate_reissue_range(certificate.not_before, certificate.not_after)
-    ser = CertificateInputSchema().load(
-        CertificateOutputSchema().dump(certificate).data
-    )
+    serialized = CertificateOutputSchema().dump(certificate).data
+    # Renew from the issued certificate, not the original CSR's possibly smaller SAN list.
+    serialized.pop("csr", None)
+    ser = CertificateInputSchema().load(serialized)
     assert not ser.errors, "Error re-serializing certificate: %s" % ser.errors
     data = ser.data
 
@@ -1011,9 +1012,6 @@ def reissue_certificate(certificate, notify=None, replace=None, user=None):
     """
     primitives = get_certificate_primitives(certificate)
 
-    if primitives.get("csr"):
-        #  We do not want to re-use the CSR when creating a certificate because this defeats the purpose of rotation.
-        del primitives["csr"]
     if not user:
         primitives["creator"] = certificate.user
 
