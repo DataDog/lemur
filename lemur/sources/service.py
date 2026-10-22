@@ -668,4 +668,3 @@ def add_destination_to_sources(dst, previous_label=None):
                     db.session.delete(orphan)
 
     return changed
-
