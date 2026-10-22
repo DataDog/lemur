@@ -1483,6 +1483,38 @@ def emit_dcv_expiration_metrics():
         total_domains += ca_domains
         ca_domains_by_ca[ca_name] = ca_domains
 
+    # Emit an alert signal for any domain the CA reports as expired that has no
+    # active Lemur certificate. These are orphaned registrations — not managed
+    # by Lemur but still registered with the CA. They should not be auto-
+    # revalidated (revalidate_dcv_domains only acts on active_by_ca), but an
+    # operator should investigate and deregister them if no longer needed.
+    all_active = set()
+    for domains in active_by_ca.values():
+        all_active.update(domains)
+    for domain, ca_entries in ca_status_by_domain.items():
+        if domain in all_active:
+            continue
+        for ca_name, entries in ca_entries.items():
+            for entry in entries:
+                status_norm = entry.get("dcv_status", "unknown").strip().lower()
+                if status_norm in ("expired",):
+                    metrics.send(
+                        "dcv.health.domain_status",
+                        "gauge",
+                        0,
+                        metric_tags={
+                            "domain": domain,
+                            "ca": ca_name,
+                            "dcv_status": "orphan_expired",
+                            "dcv_method": entry.get("dcv_method", "unknown"),
+                            "validation_type": entry.get("validation_type", "unknown"),
+                        },
+                    )
+                    current_app.logger.warning(
+                        f"emit_dcv_expiration_metrics: orphan expired domain {domain} "
+                        f"(ca={ca_name}, no active Lemur cert)"
+                    )
+
     current_app.logger.info(
         f"emit_dcv_expiration_metrics: done. domains_checked={total_domains}, "
         f"cas_with_data={ca_domains_by_ca}"

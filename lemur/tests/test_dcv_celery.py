@@ -712,3 +712,59 @@ def test_active_domains_by_ca_skips_bare_public_suffix(mock_cert_service):
     result = _active_domains_by_ca()
 
     assert result["digicert"] == {"example.com"}
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.plugins")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_dcv_expiration_metrics_alerts_on_orphan_expired_domain(
+    mock_current_app, mock_metrics, mock_plugins, mock_active
+):
+    # A domain the CA reports as expired but Lemur has no active cert for
+    # should emit dcv.health.domain_status with dcv_status="orphan_expired" (0).
+    # It should NOT be silently dropped.
+    mock_active.return_value = {"digicert": {"known.com"}}  # orphan.com not here
+    fake_plugin = MagicMock()
+    fake_plugin.slug = "digicert-issuer"  # normalize_ca_name -> "digicert"
+    fake_plugin.get_dcv_expiration_data.return_value = [
+        {
+            "domain": "known.com",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "active",
+            "validation_type": "ov",
+            "org_id": "1376962",
+        },
+        {
+            "domain": "orphan.com",
+            "dcv_method": "persistent-txt",
+            "dcv_status": "expired",
+            "validation_type": "ov",
+            "org_id": "1376962",
+        },
+    ]
+    mock_plugins.all.return_value = [fake_plugin]
+
+    from lemur.common.celery import emit_dcv_expiration_metrics
+    emit_dcv_expiration_metrics()
+
+    gauge_calls = [
+        c for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2 and c.args[1] == "gauge" and c.args[0] == "dcv.health.domain_status"
+    ]
+    orphan_calls = [
+        c for c in gauge_calls
+        if c.kwargs.get("metric_tags", {}).get("dcv_status") == "orphan_expired"
+    ]
+    assert len(orphan_calls) == 1, f"expected 1 orphan_expired call, got {orphan_calls}"
+    assert orphan_calls[0].args[2] == 0
+    assert orphan_calls[0].kwargs["metric_tags"]["domain"] == "orphan.com"
+    assert orphan_calls[0].kwargs["metric_tags"]["ca"] == "digicert"
+
+    # known.com should NOT be emitted as orphan
+    known_orphan = [
+        c for c in gauge_calls
+        if c.kwargs.get("metric_tags", {}).get("domain") == "known.com"
+        and c.kwargs.get("metric_tags", {}).get("dcv_status") == "orphan_expired"
+    ]
+    assert len(known_orphan) == 0
