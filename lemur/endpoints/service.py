@@ -10,6 +10,7 @@
 """
 
 import arrow
+from flask import current_app
 
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
@@ -64,6 +65,8 @@ def set_active(endpoint_id, active):
         log_service.audit_log(
             f"{action}_endpoint", endpoint.name, f"{action.capitalize()}d endpoint {endpoint.id}"
         )
+    else:
+        current_app.logger.debug("Endpoint %s already has active=%s; no-op", endpoint.id, active)
     return {"id": endpoint.id, "active": active}
 
 

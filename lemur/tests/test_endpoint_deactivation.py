@@ -105,9 +105,13 @@ def test_deactivate_is_idempotent(client, session, activation):
     url = api.url_for(EndpointActive, endpoint_id=endpoint.id)
     with patch("lemur.endpoints.service.log_service.audit_log") as audit:
         assert client.post(url, headers=headers, json={"active": active}).status_code == 200
-        assert client.post(url, headers=headers, json={"active": active}).get_json() == {
-            "id": endpoint.id, "active": active,
-        }
+        with patch("lemur.endpoints.service.current_app.logger.debug") as debug:
+            assert client.post(url, headers=headers, json={"active": active}).get_json() == {
+                "id": endpoint.id, "active": active,
+            }
+        debug.assert_called_once_with(
+            "Endpoint %s already has active=%s; no-op", endpoint.id, active
+        )
     audit.assert_called_once()
 
 
