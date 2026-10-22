@@ -973,7 +973,8 @@ def get_certificate_primitives(certificate):
     """
     start, end = calculate_reissue_range(certificate.not_before, certificate.not_after)
     serialized = CertificateOutputSchema().dump(certificate).data
-    # Renew from the issued certificate, not the original CSR's possibly smaller SAN list.
+    # Drop the CSR before loading: reusing it would reuse the key and defeat
+    # rotation, and its SAN list can be smaller than the issued certificate's.
     serialized.pop("csr", None)
     ser = CertificateInputSchema().load(serialized)
     assert not ser.errors, "Error re-serializing certificate: %s" % ser.errors
