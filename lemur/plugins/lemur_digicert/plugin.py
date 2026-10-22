@@ -584,6 +584,50 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                 )
         return results
 
+    def revalidate_domain(self, domain_name):
+        """Trigger DCV revalidation (persistent-txt) for a base domain.
+
+        Looks up the domain ID via the DigiCert /v2/domain search endpoint,
+        then POSTs to /v2/domain/<id>/validation to retrigger validation.
+
+        Returns a dict:
+          {"domain": str, "status": "triggered"|"not_found"|"error", "detail": str|None}
+
+        Re-raises SoftTimeLimitExceeded; all other exceptions are caught and
+        returned as status="error" so the caller can continue with other domains.
+        """
+        base_url = current_app.config.get("DIGICERT_URL")
+        if not base_url:
+            return {"domain": domain_name, "status": "error", "detail": "DIGICERT_URL not configured"}
+        try:
+            # Search for the domain by exact name to get its numeric ID.
+            search_resp = self.session.get(
+                f"{base_url}/services/v2/domain",
+                params={"filters[search]": domain_name, "filters[search_criteria]": "exact"},
+            )
+            search_data = handle_response(search_resp)
+            domains = search_data.get("domains", [])
+            if not domains:
+                return {"domain": domain_name, "status": "not_found", "detail": "no match in DigiCert domain list"}
+            domain_id = domains[0].get("id")
+            if not domain_id:
+                return {"domain": domain_name, "status": "error", "detail": "domain entry missing id field"}
+            # Trigger persistent-txt revalidation.
+            val_resp = self.session.post(
+                f"{base_url}/services/v2/domain/{domain_id}/validation",
+                json={"validations": [{"type": "ov"}], "dcv_method": "persistent-txt"},
+            )
+            handle_response(val_resp)
+            return {"domain": domain_name, "status": "triggered", "detail": None}
+        except SoftTimeLimitExceeded:
+            raise
+        except Exception as exc:
+            current_app.logger.warning(
+                f"revalidate_domain: DigiCert revalidation failed for {domain_name}: {exc}",
+                exc_info=True,
+            )
+            return {"domain": domain_name, "status": "error", "detail": str(exc)}
+
 
 class DigiCertCISSourcePlugin(SourcePlugin):
     """Wrap the Digicert CIS Certifcate API."""

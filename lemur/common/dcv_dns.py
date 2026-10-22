@@ -19,6 +19,7 @@ suffix is never queried.
 import time
 
 import dns.exception
+from lemur.common.utils import normalize_ca_name
 import dns.flags
 import dns.resolver
 from publicsuffixlist import PublicSuffixList
@@ -145,7 +146,7 @@ def verify_persist_records(domains, expected_uris):
                 results.append(
                     {
                         "domain": domain,
-                        "ca": issuer,
+                        "ca": normalize_ca_name(issuer),
                         "status": "missing",
                         "account_uri": None,
                         "persist_until": None,
@@ -162,7 +163,7 @@ def verify_persist_records(domains, expected_uris):
                 results.append(
                     {
                         "domain": domain,
-                        "ca": issuer,
+                        "ca": normalize_ca_name(issuer),
                         "status": "dns_error",
                         "account_uri": None,
                         "persist_until": None,
@@ -187,7 +188,7 @@ def verify_persist_records(domains, expected_uris):
                 results.append(
                     {
                         "domain": domain,
-                        "ca": issuer,
+                        "ca": normalize_ca_name(issuer),
                         "status": "unparseable",
                         "account_uri": None,
                         "persist_until": None,
@@ -212,7 +213,7 @@ def verify_persist_records(domains, expected_uris):
             results.append(
                 {
                     "domain": domain,
-                    "ca": issuer,
+                    "ca": normalize_ca_name(issuer),
                     "status": result_status,
                     "account_uri": actual,
                     "persist_until": persist_until,

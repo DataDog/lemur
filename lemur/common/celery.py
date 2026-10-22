@@ -1536,3 +1536,102 @@ def emit_persist_record_metrics():
             broken_by_ca[ca],
             metric_tags={"ca": ca},
         )
+
+
+@celery_app.task(soft_time_limit=3600)
+def revalidate_dcv_domains():
+    """
+    Proactively retrigger DCV validation (POST) for every base domain with an
+    active certificate, once per day. Complements emit_dcv_expiration_metrics
+    (which only observes); this task acts.
+
+    Calls revalidate_domain() on each issuer plugin that implements it
+    (DigiCert, Sectigo). A short inter-call sleep avoids hammering the CA API.
+
+    Emits:
+      dcv.revalidation.triggered   counter  {domain, ca}  -- successful POST
+      dcv.revalidation.error       counter  {domain, ca}  -- failed/not_found
+      dcv.revalidation.domains_processed  gauge  {ca}     -- count per CA
+    """
+    function = f"{__name__}.{sys._getframe().f_code.co_name}"
+    task_id = None
+    if celery_app.current_task:
+        task_id = celery_app.current_task.request.id
+    log_data = {
+        "function": function,
+        "message": "revalidating DCV for all active domains",
+        "task_id": task_id,
+    }
+    if task_id and is_task_active(function, task_id, None):
+        log_data["message"] = "Skipping task: Task is already active"
+        current_app.logger.debug(log_data)
+        return
+
+    current_app.logger.debug(log_data)
+    active_by_ca = _active_domains_by_ca()
+
+    for plugin in plugins.all(plugin_type="issuer"):
+        if not hasattr(plugin, "revalidate_domain"):
+            continue
+        ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
+        domains = active_by_ca.get(ca_name, set())
+        if not domains:
+            current_app.logger.debug(
+                f"revalidate_dcv_domains: no active domains for {ca_name}, skipping"
+            )
+            continue
+
+        processed = 0
+        for domain in sorted(domains):
+            try:
+                result = plugin.revalidate_domain(domain)
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception as exc:
+                current_app.logger.warning(
+                    f"revalidate_dcv_domains: unexpected error for {domain} ({ca_name}): {exc}",
+                    exc_info=True,
+                )
+                metrics.send(
+                    "dcv.revalidation.error",
+                    "counter",
+                    1,
+                    metric_tags={"domain": domain, "ca": ca_name},
+                )
+                processed += 1
+                time.sleep(0.5)
+                continue
+
+            status = result.get("status", "error")
+            if status == "triggered":
+                metrics.send(
+                    "dcv.revalidation.triggered",
+                    "counter",
+                    1,
+                    metric_tags={"domain": domain, "ca": ca_name},
+                )
+            else:
+                current_app.logger.warning(
+                    f"revalidate_dcv_domains: {ca_name}/{domain}: status={status} detail={result.get('detail')}"
+                )
+                metrics.send(
+                    "dcv.revalidation.error",
+                    "counter",
+                    1,
+                    metric_tags={"domain": domain, "ca": ca_name},
+                )
+            processed += 1
+            time.sleep(0.5)
+
+        metrics.send(
+            "dcv.revalidation.domains_processed",
+            "gauge",
+            processed,
+            metric_tags={"ca": ca_name},
+        )
+        current_app.logger.info(
+            f"revalidate_dcv_domains: {ca_name} processed {processed} domains"
+        )
+
+    metrics.send(f"{function}.success", "counter", 1)
+    return log_data

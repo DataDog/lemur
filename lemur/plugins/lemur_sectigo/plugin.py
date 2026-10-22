@@ -197,6 +197,33 @@ class SectigoIssuerPlugin(IssuerPlugin):
             )
         return results
 
+    def revalidate_domain(self, domain_name):
+        """Trigger DCV revalidation (persistent-txt) for a base domain via Sectigo SCM v2.
+
+        POSTs to /dcv/v2/validation/submit/domain/persistent-txt with the domain
+        name.  The endpoint is available on the cert-manager.com SCM v2 API
+        which the existing client's session is already authenticated against.
+
+        Returns a dict:
+          {"domain": str, "status": "triggered"|"error", "detail": str|None}
+
+        Re-raises SoftTimeLimitExceeded; all other exceptions are caught and
+        returned as status="error" so the caller can continue with other domains.
+        """
+        try:
+            url = f"{self.client.base_url}/dcv/v2/validation/submit/domain/persistent-txt"
+            response = self.client.session.post(url, json={"domain": domain_name})
+            response.raise_for_status()
+            return {"domain": domain_name, "status": "triggered", "detail": None}
+        except SoftTimeLimitExceeded:
+            raise
+        except Exception as exc:
+            current_app.logger.warning(
+                f"revalidate_domain: Sectigo revalidation failed for {domain_name}: {exc}",
+                exc_info=True,
+            )
+            return {"domain": domain_name, "status": "error", "detail": str(exc)}
+
 
 def _retry_if_certificate_pending(exception):
     return isinstance(exception, PendingError)
