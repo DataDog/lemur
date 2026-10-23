@@ -1002,6 +1002,36 @@ def get_certificate_primitives(certificate):
     return data
 
 
+def validate_reissue_configuration(certificate, primitives):
+    """Reject unintended changes before applying explicit renewal overrides."""
+    expected = {
+        "common_name": certificate.cn or "",
+        "key_type": get_key_type_from_certificate(certificate.body),
+        "owner": certificate.owner,
+        "notify": certificate.notify,
+        "rotation": certificate.rotation,
+    }
+    actual = {field: primitives.get(field) for field in expected}
+    for field in ("authority", "rotation_policy", "dns_provider"):
+        expected[field] = getattr(getattr(certificate, field), "id", None)
+        actual[field] = getattr(primitives.get(field), "id", None)
+    for field in ("destinations", "roles", "notifications"):
+        expected[field] = {item.id for item in getattr(certificate, field)}
+        actual[field] = {item.id for item in primitives.get(field, [])}
+    expected["SANs"] = set(certificate.extensions["sub_alt_names"]["names"])
+    actual["SANs"] = set(
+        primitives.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
+    )
+    changed = [field for field in expected if actual[field] != expected[field]]
+    if primitives.get("csr"):
+        changed.append("csr")
+    if changed:
+        raise ValueError(
+            f"Refusing to reissue certificate {certificate.id}: "
+            f"renewal configuration changed: {', '.join(changed)}"
+        )
+
+
 def reissue_certificate(certificate, notify=None, replace=None, user=None):
     """
     Reissue certificate with the same properties of the given certificate.
@@ -1012,6 +1042,7 @@ def reissue_certificate(certificate, notify=None, replace=None, user=None):
     :return:
     """
     primitives = get_certificate_primitives(certificate)
+    validate_reissue_configuration(certificate, primitives)
 
     if not user:
         primitives["creator"] = certificate.user
