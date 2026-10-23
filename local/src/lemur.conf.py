@@ -161,6 +161,13 @@ CELERYBEAT_SCHEDULE = {
     #     },
     #     'schedule': crontab(hour=10, minute=0),
     # },
+    # 'revalidate_dcv_domains': {
+    #     'task': 'lemur.common.celery.revalidate_dcv_domains',
+    #     'options': {
+    #         'expires': 3600
+    #     },
+    #     'schedule': crontab(hour=3, minute=0),  # daily at 03:00 UTC
+    # },
     # 'send_security_expiration_summary': {
     #     'task': 'lemur.common.celery.send_security_expiration_summary',
     #     'options': {
