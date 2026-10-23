@@ -61,7 +61,12 @@ def get_authoritative_nameserver(domain):
         sub = s[1]
 
         query = dns.message.make_query(sub, dns.rdatatype.NS)
-        response = dns.query.udp(query, nameserver)
+        try:
+            response = dns.query.udp(query, nameserver, timeout=5)
+        except dns.exception.Timeout as exc:
+            raise DNSResolveError(
+                f"Timed out querying nameserver {nameserver} for {sub} NS records"
+            ) from exc
 
         rcode = response.rcode()
         if rcode != dns.rcode.NOERROR:
