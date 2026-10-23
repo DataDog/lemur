@@ -73,5 +73,10 @@ RUN clean-apt install python3 python3-distutils haveged curl postgresql-client o
     chown -R dog:dog /opt
 
 ENV FIPS_ENABLED=$FIPS_ENABLED
+ENV AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+# Incident 62343: distrust the emSign root in the OS bundle used by Requests and gRPC.
+RUN sed -i '\|^mozilla/emSign_ECC_Root_CA_-_G3.crt$|s|^|!|' /etc/ca-certificates.conf && \
+    update-ca-certificates
 
 USER dog
