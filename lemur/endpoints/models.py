@@ -91,7 +91,7 @@ class Endpoint(db.Model):
 
     @property
     def source_label(self):
-        return self.source.label
+        return self.source.label if self.source else None
 
     @property
     def issues(self):
