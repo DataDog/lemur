@@ -22,7 +22,7 @@ Datadog's fork of [Netflix/Lemur](https://github.com/netflix/lemur) — a TLS ce
 ```
 chart/
   config/lemur.conf.py       # Application config (rendered from Vault via consul-template)
-  values.yaml                # Image tag lives here — bump this to deploy a new release
+  values.yaml                # Image tag for scheduled staging→prod deploys; staging-manual uses BUILD.bazel
   values/environments/
     us1.staging.dog.yaml
     us1.ddbuild.io.yaml
@@ -85,6 +85,11 @@ cd lemur && lemur db migrate -m "description"
 # review lemur/migrations/versions/<new file> carefully
 ```
 
+> **Important:** to find the true current DB head in a running environment, check on the pod — not the local codebase:
+> ```bash
+> kubectl exec -n cert-orchestration deploy/lemur -- lemur db heads
+> ```
+
 ## Dependencies
 
 - `requirements.in` — upstream base (compiled to `requirements.txt`)
@@ -118,6 +123,121 @@ Rules for adding metrics:
 ## Release Process
 
 Master commits build a prod-signed image via GitLab CI, tagged `v<pipeline_id>-<short_sha>` and re-tagged `mutable-latest-prod`.
+
+## Deploying
+
+### Variables
+
+```bash
+CLUSTER="gizmo.us1.staging.dog"
+NAMESPACE="cert-orchestration"
+DEPLOYMENT="lemur"
+CONTAINER="lemur"
+REGISTRY="registry.ddbuild.io/lemur"
+```
+
+### 1. Get image tag from GitLab
+
+`gh run list` returns GitHub Actions only — use GitLab API for the build.
+
+```bash
+# Find latest successful pipeline for a branch
+PIPELINE_ID=$(curl -s \
+  "https://gitlab.ddbuild.io/api/v4/projects/DataDog%2Flemur/pipelines?ref=<BRANCH_URL_ENCODED>&per_page=5" \
+  -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+  | jq -r '[.[] | select(.status == "success")][0].id')
+
+# Get the build-stage-image job ID
+JOB_ID=$(curl -s \
+  "https://gitlab.ddbuild.io/api/v4/projects/DataDog%2Flemur/pipelines/${PIPELINE_ID}/jobs?per_page=50" \
+  -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+  | jq -r '.[] | select(.name == "build-stage-image") | .id')
+
+# Extract IMAGE_TAG and DIGEST from job log
+curl -s \
+  "https://gitlab.ddbuild.io/api/v4/projects/DataDog%2Flemur/jobs/${JOB_ID}/trace" \
+  -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+  -o /tmp/lemur-build-log.txt
+
+IMAGE_TAG=$(grep 'Image tag:' /tmp/lemur-build-log.txt | grep -oE 'v[0-9]+-[a-f0-9]+')
+DIGEST=$(crane digest ${REGISTRY}:${IMAGE_TAG})
+echo "IMAGE_TAG=${IMAGE_TAG}  DIGEST=${DIGEST}"
+```
+
+### 2. Deploy to staging-manual (without merging to master)
+
+> ⚠️ Do NOT merge to master just to test — that triggers the scheduled `staging-prod` run (Mon–Fri 16:00 UTC).
+
+```bash
+cd ~/go/src/github.com/DataDog/k8s-resources
+git checkout -b <YOUR_BRANCH>   # e.g. evan/lemur-test
+
+# Inline tag and digest
+sed -i '' "s|tag = \".*\"|tag = \"${IMAGE_TAG}\"|" k8s/lemur/chart/BUILD.bazel
+sed -i '' "s|digest = \"sha256:.*\"|digest = \"${DIGEST}\"|" k8s/lemur/chart/BUILD.bazel
+grep -E 'tag|digest' k8s/lemur/chart/BUILD.bazel   # verify
+
+git add k8s/lemur/chart/BUILD.bazel
+git -c commit.gpgsign=false commit -m "lemur: staging-manual ${IMAGE_TAG}"
+git push origin <YOUR_BRANCH>
+
+ddr conductor run --target staging-manual --branch <YOUR_BRANCH> lemur
+```
+
+Service catalog: https://sdp.ddbuild.io/#/services/details?name=lemur&service_tab=conductor
+
+### 3. Verify deployment
+
+```bash
+kubectl config use-context ${CLUSTER}
+kubectl rollout status deployment/${DEPLOYMENT} -n ${NAMESPACE} --context ${CLUSTER}
+
+# Confirm image (must match IMAGE_TAG, NOT mutable-latest-prod)
+kubectl get deployment ${DEPLOYMENT} -n ${NAMESPACE} --context ${CLUSTER} \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="'${CONTAINER}'")].image}{"\n"}'
+```
+
+### 4. Sandbox access
+
+```bash
+export LEMUR_TOKEN=$(ssh workspace-evan-lemur '/usr/local/bin/workspace_secret LEMUR_SANDBOX_API_KEY')
+LEMUR_URL="https://lemur-sandbox.us1.staging.dog"
+
+# Sanity check
+curl -s -H "Authorization: Bearer ${LEMUR_TOKEN}" \
+  "${LEMUR_URL}/api/1/destinations?count=5" | jq '.items[].label'
+```
+
+> Note: `workspace_secrets`/`workspaces` are shell aliases (interactive only). Always use `/usr/local/bin/workspace_secret` (singular) in non-interactive SSH commands.
+
+### 5. Prod promote
+
+Merge to master — the scheduled `staging-prod` conductor run (Mon–Fri 12/14 UTC) picks it up automatically.
+
+### Cleanup after staging test
+
+```bash
+cd ~/go/src/github.com/DataDog/k8s-resources
+git checkout master && git pull
+git branch -D <YOUR_BRANCH>
+git push origin --delete <YOUR_BRANCH>
+```
+
+### Rollback (emergency)
+
+```bash
+kubectl rollout undo deployment/${DEPLOYMENT} -n ${NAMESPACE} --context ${CLUSTER}
+kubectl rollout status deployment/${DEPLOYMENT} -n ${NAMESPACE} --context ${CLUSTER}
+```
+
+## Common Gotchas
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `403` push to `k8s-resources` | origin points at archived `DataDog/` repo | `git remote set-url origin git@ddoghq.github.com:ddoghq/k8s-resources.git` |
+| Conductor "sourcing stage failed" | git-mirror lag after push | Wait 5–10 min, re-trigger `ddr conductor run …` |
+| Deploy shows `mutable-latest-prod` after conductor run | Deploy did not land | Re-check conductor output, confirm `staging-manual` target, re-run |
+| `gpg: signing failed` on commit | SSH agent unavailable for ddoghq remote | Add `-c commit.gpgsign=false` to `git commit` |
 
 ## Runbooks & References
 - Wiki: https://datadoghq.atlassian.net/wiki/spaces/NE/pages/2130608302/Lemur+Certificate+Orchestration
