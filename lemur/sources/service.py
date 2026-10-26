@@ -91,8 +91,10 @@ def sync_endpoints(source):
 
     for endpoint in endpoints:
         try:
-            exists = endpoint_service.get_by_dnsname_and_port(
-                endpoint["dnsname"], endpoint["port"]
+            # The key has the source and the name. Many sources can report the same
+            # dnsname and port, and each one must keep its own row (CLOUDR-1927).
+            exists = endpoint_service.get_by_dedupe_key(
+                endpoint["dnsname"], endpoint["port"], source, endpoint["name"]
             )
         except OperationalError as e:
             # This is a workaround for handling sqlalchemy error "idle-in-transaction timeout", which is seen rarely
@@ -102,8 +104,8 @@ def sync_endpoints(source):
                 # all the update, insert operations are committed individually. So this should be harmless/no-op
                 database.rollback()
                 # retry one more time
-                exists = endpoint_service.get_by_dnsname_and_port(
-                    endpoint["dnsname"], endpoint["port"]
+                exists = endpoint_service.get_by_dedupe_key(
+                    endpoint["dnsname"], endpoint["port"], source, endpoint["name"]
                 )
             else:
                 raise e
