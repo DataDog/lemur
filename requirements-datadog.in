@@ -28,6 +28,8 @@ importlib-metadata==8.5.0
 markupsafe==2.1.5
 
 # === Security Overrides (not yet fixed in upstream) ===
+publicsuffixlist  # PSL-based registrable base domain resolution for DCV monitoring
+
 # These can be removed once upstream catches up
 certifi >= 2026.10.19  # Incident 62343: distrust compromised eMudhra CA chains
 urllib3 >= 2.5.0  # (CVE-2025-50181, CVE-2025-50182) - upstream has 1.26.18
