@@ -1293,8 +1293,11 @@ def certificate_expirations_metrics():
     # Folded in from the former standalone check_dcv_expiration task (EVBL-51):
     # emit DCV token expiry gauges from the same consolidated expiry-metrics task.
     try:
-        emit_dcv_expiration_metrics()
-        emit_persist_record_metrics()
+        # Compute the active-cert base-domain set once and share it across
+        # both monitoring functions to avoid two full certificate table scans.
+        active_by_ca = _active_domains_by_ca()
+        emit_dcv_expiration_metrics(active_by_ca=active_by_ca)
+        emit_persist_record_metrics(active_by_ca=active_by_ca)
     except SoftTimeLimitExceeded:
         log_data["message"] = "Time limit exceeded."
         current_app.logger.error(log_data)
@@ -1333,7 +1336,25 @@ def _active_domains_by_ca():
     return by_ca
 
 
-def emit_dcv_expiration_metrics():
+@celery_app.task(
+    name="lemur.common.celery.check_dcv_expiration",
+    soft_time_limit=3600,
+)
+def _check_dcv_expiration_deprecated():
+    """
+    Deprecated alias for the former standalone check_dcv_expiration task (EVBL-51).
+
+    check_dcv_expiration was folded into certificate_expirations_metrics. This stub
+    keeps the old fully-qualified task name registered so any in-flight broker
+    messages or beat schedule entries not yet removed resolve instead of failing
+    with 'Received unregistered task of type lemur.common.celery.check_dcv_expiration'.
+
+    Remove once the CELERYBEAT_SCHEDULE entry is dropped and the queue has drained.
+    """
+    emit_dcv_expiration_metrics()
+
+
+def emit_dcv_expiration_metrics(active_by_ca=None):
     """
     Report a single unified dcv.health gauge for every domain with an active
     certificate, driven by the in-use (active-cert) domain set rather than the
@@ -1398,7 +1419,10 @@ def emit_dcv_expiration_metrics():
             ca_status_by_domain.setdefault(domain, {}).setdefault(ca_name, []).append(entry)
 
     # Enumerate active-cert domains (the actual in-use set), keyed by CA plugin.
-    active_by_ca = _active_domains_by_ca()
+    # Use the pre-computed set if provided by the caller to avoid a duplicate
+    # full certificate table scan.
+    if active_by_ca is None:
+        active_by_ca = _active_domains_by_ca()
     total_domains = 0
     ca_domains_by_ca = {}
     broken_by_ca = {}
@@ -1476,7 +1500,7 @@ def emit_dcv_expiration_metrics():
     )
 
 
-def emit_persist_record_metrics():
+def emit_persist_record_metrics(active_by_ca=None):
     """
     Verify _validation-persist.<domain> records directly from DNS and emit the
     persist-record component of the unified dcv.health gauge.
@@ -1502,8 +1526,10 @@ def emit_persist_record_metrics():
         )
         return
     # Domain-scoped set from the lemur DB (active certs), not the CA return.
+    if active_by_ca is None:
+        active_by_ca = _active_domains_by_ca()
     persist_domains = set()
-    for domains in _active_domains_by_ca().values():
+    for domains in active_by_ca.values():
         persist_domains.update(domains)
     if not persist_domains:
         return
