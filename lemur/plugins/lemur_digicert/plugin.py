@@ -21,6 +21,7 @@ import pem
 import requests
 import sys
 from celery.exceptions import SoftTimeLimitExceeded
+from sentry_sdk import capture_exception
 from cryptography import x509
 from flask import current_app, g
 from lemur.common.utils import validate_conf, convert_pkcs7_bytes_to_pem, normalize_domain_name
@@ -565,10 +566,16 @@ class DigiCertIssuerPlugin(IssuerPlugin):
                             validated_until_by_type[vtype] = v["validated_until"]
                 except SoftTimeLimitExceeded:
                     raise
-                except Exception:
+                except Exception as e:
                     # Fall back to the list endpoint's per-type status rather than
                     # failing the whole run; never block metric emission. The list
                     # endpoint already reports active/pending (shared vocabulary).
+                    current_app.logger.warning(
+                        f"get_dcv_expiration_data: /validation call failed for "
+                        f"{domain_name} (id={domain_id}): {e}",
+                        exc_info=True,
+                    )
+                    capture_exception()
                     for v in domain.get("validations", []):
                         dcv_status_by_type[v.get("type")] = v.get("status", "unknown")
             if not dcv_status_by_type:

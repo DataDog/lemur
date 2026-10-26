@@ -1334,7 +1334,18 @@ def _active_domains_by_ca():
     label, invalid) are silently skipped.
     """
     by_ca = {}
-    for cert in certificate_service.get_all_valid_certs(None):
+    try:
+        certs = certificate_service.get_all_valid_certs(None)
+    except SoftTimeLimitExceeded:
+        raise
+    except Exception as e:
+        current_app.logger.error(
+            f"_active_domains_by_ca: DB query failed, DCV monitoring will be empty: {e}",
+            exc_info=True,
+        )
+        capture_exception()
+        return by_ca
+    for cert in certs:
         ca_name = normalize_ca_name(cert.authority.plugin_name if cert.authority else "unknown")
         for d in cert.domains:
             name = normalize_domain_name(d.name)
@@ -1461,10 +1472,9 @@ def emit_dcv_expiration_metrics():
                                     str(validated_until_str).replace("Z", "+00:00")
                                 )
                             else:
-                                from datetime import date
-                                d_parts = [int(x) for x in str(validated_until_str).split("-")]
                                 exp_dt = datetime(
-                                    d_parts[0], d_parts[1], d_parts[2], tzinfo=timezone.utc
+                                    *[int(x) for x in str(validated_until_str).split("-")[:3]],
+                                    tzinfo=timezone.utc
                                 )
                             days_left = (exp_dt - datetime.now(timezone.utc)).days
                             metrics.send(
@@ -1477,8 +1487,12 @@ def emit_dcv_expiration_metrics():
                                     "validation_type": validation_type,
                                 },
                             )
-                        except (ValueError, TypeError, IndexError):
-                            pass  # unparseable date: skip, don't block metric emission
+                        except (ValueError, TypeError, IndexError) as e:
+                            current_app.logger.warning(
+                                f"dcv.health.days_until_expiry: could not parse "
+                                f"validated_until={validated_until_str!r} for "
+                                f"{domain} ({ca_name}): {e}"
+                            )
                 if domain_broken:
                     broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
             else:
