@@ -1061,15 +1061,22 @@ def reissue_certificate(certificate, notify=None, replace=None, user=None):
     return new_cert
 
 
-def is_attached_to_endpoint(certificate_name, endpoint_name):
+def is_attached_to_endpoint(certificate_name, endpoint_name, endpoint=None):
     """
     Find if given certificate is attached to the endpoint. Both, certificate and endpoint, are identified by name.
     This method talks to elb and finds the real time information.
+
+    Many endpoints can have the same name, for example the same Vault path in many data
+    centers (CLOUDR-1927). A search by name then finds more than one row. A caller that
+    has the endpoint object must pass it in `endpoint`, and then the name is not used.
+
     :param certificate_name:
     :param endpoint_name:
+    :param endpoint: the Endpoint object, if the caller has it
     :return: True if certificate is attached to the given endpoint, False otherwise
     """
-    endpoint = endpoint_service.get_by_name(endpoint_name)
+    if endpoint is None:
+        endpoint = endpoint_service.get_by_name(endpoint_name)
     attached_certificates = endpoint.source.plugin.get_endpoint_certificate_names(
         endpoint
     )
