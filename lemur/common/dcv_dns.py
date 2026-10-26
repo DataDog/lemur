@@ -20,7 +20,6 @@ import time
 
 import dns.exception
 from lemur.common.utils import normalize_ca_name
-import dns.flags
 import dns.resolver
 from publicsuffixlist import PublicSuffixList
 
@@ -92,10 +91,9 @@ def _resolve_persist_txt(domain):
     callers can distinguish "definitely absent" from "couldn't tell".
     """
     resolver = dns.resolver.Resolver()
-    # Request DNSSEC records (DO bit); honor the resolver's authenticated-data
-    # answer where the zone is signed (draft security considerations 7.5).
-    resolver.use_edns(0, dns.flags.DO)
     # Bound each query so a slow resolver can't stall the whole celery task.
+    # Note: DNSSEC verification (AD flag check) is not implemented; the DO bit
+    # is not set. Full DNSSEC chain validation is left to the recursive resolver.
     resolver.timeout = 2.0
     resolver.lifetime = 5.0
     qname = f"_validation-persist.{domain}"
@@ -184,7 +182,11 @@ def verify_persist_records(domains, expected_uris):
                     continue
                 found.update(parsed)
         for issuer, expected in expected_uris.items():
-            if unparseable:
+            entry = found.get(issuer)
+            # Only report unparseable for issuers that had no valid record found.
+            # If a valid record for this issuer exists alongside a malformed record
+            # for another issuer, report the valid result rather than masking it.
+            if entry is None and unparseable:
                 results.append(
                     {
                         "domain": domain,
@@ -195,7 +197,6 @@ def verify_persist_records(domains, expected_uris):
                     }
                 )
                 continue
-            entry = found.get(issuer)
             actual = entry["account_uri"] if entry else None
             persist_until = entry["persist_until"] if entry else None
             if actual is None:
