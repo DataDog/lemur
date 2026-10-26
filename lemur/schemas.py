@@ -339,3 +339,4 @@ class EndpointNestedOutputSchema(LemurOutputSchema):
     owner = fields.Email()
     type = fields.String()
     active = fields.Boolean()
+    source_label = fields.String()

@@ -9,6 +9,8 @@
 
 """
 
+import warnings
+
 import arrow
 from flask import current_app
 
@@ -108,13 +110,49 @@ def get_by_dnsname(dnsname):
 def get_by_dnsname_and_port(dnsname, port):
     """
     Retrieves and endpoint by it's dnsname and port.
+
+    .. deprecated:: CLOUDR-1927
+        This function ignores the source. Two sources that report the same
+        dnsname and port get the same row, and each sync changes the source of
+        that row. Use :func:`get_by_dedupe_key` instead.
+
     :param dnsname:
     :param port:
     :return:
     """
+    warnings.warn(
+        "get_by_dnsname_and_port is deprecated (CLOUDR-1927): it ignores the source. "
+        "Use get_by_dedupe_key instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return (
         Endpoint.query.filter(Endpoint.dnsname == dnsname)
         .filter(Endpoint.port == port)
+        .scalar()
+    )
+
+
+def get_by_dedupe_key(dnsname, port, source, name):
+    """
+    Retrieves an endpoint by the key that a source sync uses to find an existing endpoint:
+    dnsname, port, source and name.
+
+    Many sources can report the same dnsname and port. For example, one hostname
+    can be served from many data centers. The source and the name keep these
+    endpoints apart, so each deployment has its own row.
+
+    :param dnsname: the dnsname that the source plugin reports
+    :param port: the port that the source plugin reports
+    :param source: the Source object that reported the endpoint
+    :param name: the name that the source plugin reports (for example a Vault path)
+    :return: the endpoint, or None
+    """
+    return (
+        Endpoint.query.filter(Endpoint.dnsname == dnsname)
+        .filter(Endpoint.port == port)
+        .filter(Endpoint.source_id == source.id)
+        .filter(Endpoint.name == name)
         .scalar()
     )
 
