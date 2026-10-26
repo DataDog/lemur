@@ -34,6 +34,8 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
+from lemur.common.utils import normalize_domain_name
+from lemur.common.dcv_dns import verify_persist_records
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -1291,7 +1293,11 @@ def certificate_expirations_metrics():
     # Folded in from the former standalone check_dcv_expiration task (EVBL-51):
     # emit DCV token expiry gauges from the same consolidated expiry-metrics task.
     try:
-        _emit_dcv_expiration_metrics()
+        # Compute the active-cert base-domain set once and share it across
+        # both monitoring functions to avoid two full certificate table scans.
+        active_by_ca = _active_domains_by_ca()
+        emit_dcv_expiration_metrics(active_by_ca=active_by_ca)
+        emit_persist_record_metrics(active_by_ca=active_by_ca)
     except SoftTimeLimitExceeded:
         log_data["message"] = "Time limit exceeded."
         current_app.logger.error(log_data)
@@ -1302,78 +1308,32 @@ def certificate_expirations_metrics():
         current_app.logger.exception("Error sending DCV expiration metrics")
         capture_exception()
         metrics.send(
-            "dcv_expiration_metrics.error", "counter", 1, metric_tags={"function": function}
+            "dcv_expiration_metrics.error",
+            "counter",
+            1,
+            metric_tags={"function": function},
         )
 
     metrics.send(f"{function}.success", "counter", 1)
     return log_data
 
 
-def _emit_dcv_expiration_metrics():
+def _active_domains_by_ca():
     """
-    Iterates all registered issuer plugins that implement get_dcv_expiration_data()
-    and emits dcv.days_until_expiration gauge per domain (RDNA-1000).
-
-    Folded into certificate_expirations_metrics as part of EVBL-51 so a single
-    task owns all certificate/DCV expiry telemetry.
+    Return {ca_plugin_name: set(domain)} for every domain on an active (not
+    expired, not revoked) certificate, keyed by the issuing authority's plugin
+    name (e.g. "digicert-issuer"). This is the actual in-use domain set, used to
+    scope DCV monitoring so a domain with an active cert is always covered even
+    if the CA's own domain list omits it.
     """
-    total_domains = 0
-    total_errors = 0
-    now = datetime.now(timezone.utc)
-
-    for plugin in plugins.all(plugin_type="issuer"):
-        ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
-        try:
-            dcv_data = plugin.get_dcv_expiration_data()
-        except SoftTimeLimitExceeded:
-            raise
-        except Exception as e:
-            current_app.logger.warning(
-                f"_emit_dcv_expiration_metrics: {ca_name} raised {e}", exc_info=True
-            )
-            capture_exception()
-            total_errors += 1
-            continue
-
-        for entry in dcv_data:
-            try:
-                dcv_expiration = entry.get("dcv_expiration")
-                if not dcv_expiration:
-                    continue
-                expiry_dt = datetime.fromisoformat(
-                    dcv_expiration.replace("Z", "+00:00")
-                )
-                if expiry_dt.tzinfo is None:
-                    expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
-                days_remaining = (expiry_dt - now).days
-                metrics.send(
-                    "dcv.days_until_expiration",
-                    "gauge",
-                    days_remaining,
-                    metric_tags={
-                        "domain": entry.get("domain", "unknown"),
-                        "ca": ca_name,
-                        "validation_type": entry.get("validation_type", "unknown"),
-                        "org_id": entry.get("org_id", "unknown"),
-                        "dcv_method": entry.get("dcv_method", "unknown"),
-                    },
-                )
-                total_domains += 1
-            except SoftTimeLimitExceeded:
-                raise
-            except Exception as e:
-                current_app.logger.warning(
-                    f"_emit_dcv_expiration_metrics: failed on entry for ca={ca_name}: {e}",
-                    exc_info=True,
-                )
-                capture_exception()
-                total_errors += 1
-
-    metrics.send("dcv.expiration_check.domains_checked", "gauge", total_domains, metric_tags={})
-    metrics.send("dcv.expiration_check.errors", "gauge", total_errors, metric_tags={})
-    current_app.logger.info(
-        f"_emit_dcv_expiration_metrics: done. domains={total_domains} errors={total_errors}"
-    )
+    by_ca = {}
+    for cert in certificate_service.get_all_valid_certs(None):
+        ca_name = cert.authority.plugin_name if cert.authority else "unknown"
+        for d in cert.domains:
+            name = normalize_domain_name(d.name)
+            if name:
+                by_ca.setdefault(ca_name, set()).add(name)
+    return by_ca
 
 
 @celery_app.task(
@@ -1385,11 +1345,319 @@ def _check_dcv_expiration_deprecated():
     Deprecated alias for the former standalone check_dcv_expiration task (EVBL-51).
 
     check_dcv_expiration was folded into certificate_expirations_metrics. This stub
-    keeps the old fully-qualified task name registered so any messages still in the
-    broker (or a beat schedule entry not yet removed) resolve instead of failing with
-    "Received unregistered task of type 'lemur.common.celery.check_dcv_expiration'".
+    keeps the old fully-qualified task name registered so any in-flight broker
+    messages or beat schedule entries not yet removed resolve instead of failing
+    with 'Received unregistered task of type lemur.common.celery.check_dcv_expiration'.
 
-    Remove this alias once the CELERYBEAT_SCHEDULE entry is dropped and the queue
-    has drained (one deploy cycle).
+    Remove once the CELERYBEAT_SCHEDULE entry is dropped and the queue has drained.
     """
-    _emit_dcv_expiration_metrics()
+    emit_dcv_expiration_metrics()
+
+
+def emit_dcv_expiration_metrics(active_by_ca=None):
+    """
+    Report a single unified dcv.health gauge for every domain with an active
+    certificate, driven by the in-use (active-cert) domain set rather than the
+    CA's reported list. This closes the coverage gap where a domain is in use
+    but not reported by a CA: such domains are emitted with dcv_status='uncovered'
+    (0).
+
+    Unified health signal: dcv.health{domain, ca, dcv_method, dcv_status,
+    validation_type} == 1 when any listed validation is 'active', else 0.
+    pending is surfaced via the dcv_status tag as a warning (gauge 0 but not
+    counted as broken); a domain is counted broken (dcv.health.broken per CA)
+    only when it has any non-active/non-pending validation (e.g. expired).
+    The DNS-native persist-record component is folded in by a later PR (#388).
+
+    Only CAs that implement get_dcv_expiration_data() (DigiCert, Sectigo) are
+    monitored; ACME/unknown authorities are skipped (they handle their own DCV).
+    """
+    # CA-reported status lookup: {domain: {ca_plugin: [entry, ...]}}.
+    ca_status_by_domain = {}
+    monitored_cas = set()
+    for plugin in plugins.all(plugin_type="issuer"):
+        ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
+        try:
+            dcv_data = plugin.get_dcv_expiration_data()
+        except SoftTimeLimitExceeded:
+            raise
+        except Exception as e:
+            current_app.logger.warning(
+                f"emit_dcv_expiration_metrics: {ca_name} raised {e}", exc_info=True
+            )
+            capture_exception()
+            metrics.send(
+                "dcv.expiration_check.plugin.errors",
+                "counter",
+                1,
+                metric_tags={"ca": ca_name},
+            )
+            continue
+        if not dcv_data:
+            # Issuer doesn't support DCV checking (the base returns []) or has no
+            # rows: not a monitored CA. Emit a counter so "CA returned no DCV
+            # data" is distinguishable from a CA that raised (plugin.errors).
+            metrics.send(
+                "dcv.expiration_check.plugin.missing",
+                "counter",
+                1,
+                metric_tags={"ca": ca_name},
+            )
+            continue
+        monitored_cas.add(ca_name)
+        for entry in dcv_data:
+            if not isinstance(entry, dict) or not entry.get("domain"):
+                # Malformed entry: surface it as a data-quality error.
+                metrics.send(
+                    "dcv.expiration_check.plugin.errors",
+                    "counter",
+                    1,
+                    metric_tags={"ca": ca_name, "reason": "malformed_entry"},
+                )
+                continue
+            domain = entry["domain"]
+            ca_status_by_domain.setdefault(domain, {}).setdefault(ca_name, []).append(entry)
+
+    # Enumerate active-cert domains (the actual in-use set), keyed by CA plugin.
+    # Use the pre-computed set if provided by the caller to avoid a duplicate
+    # full certificate table scan.
+    if active_by_ca is None:
+        active_by_ca = _active_domains_by_ca()
+    total_domains = 0
+    ca_domains_by_ca = {}
+    broken_by_ca = {}
+    for ca_name, domains in active_by_ca.items():
+        if ca_name not in monitored_cas:
+            # Not a monitored CA / DCV is unimplemented.
+            continue
+        ca_domains = 0
+        for domain in domains:
+            entries = ca_status_by_domain.get(domain, {}).get(ca_name, [])
+            if entries:
+                domain_broken = False
+                for entry in entries:
+                    dcv_status = entry.get("dcv_status", "unknown")
+                    dcv_method = entry.get("dcv_method", "unknown")
+                    validation_type = entry.get("validation_type", "unknown")
+                    # Don't hide an expired validation behind an active one (e.g.
+                    # EV expired behind OV active): a domain is counted broken if
+                    # ANY validation is expired. pending is a warning (gauge 0 +
+                    # status tag), not a break.
+                    status_norm = dcv_status.strip().lower()
+                    if status_norm != "active" and status_norm != "pending":
+                        domain_broken = True
+                    metrics.send(
+                        "dcv.health",
+                        "gauge",
+                        1 if status_norm == "active" else 0,
+                        metric_tags={
+                            "domain": domain,
+                            "ca": ca_name,
+                            "dcv_method": dcv_method,
+                            "dcv_status": dcv_status,
+                            "validation_type": validation_type,
+                        },
+                    )
+                if domain_broken:
+                    broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
+            else:
+                # Active cert for this monitored CA but the CA didn't report the
+                # domain: a coverage gap. Flag it (0) so it's not silently missed.
+                metrics.send(
+                    "dcv.health",
+                    "gauge",
+                    0,
+                    metric_tags={
+                        "domain": domain,
+                        "ca": ca_name,
+                        "dcv_status": "uncovered",
+                        "dcv_method": "unknown",
+                        "validation_type": "unknown",
+                    },
+                )
+                broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
+            ca_domains += 1
+        metrics.send(
+            "dcv.expiration_check.domains_checked",
+            "gauge",
+            ca_domains,
+            metric_tags={"ca": ca_name},
+        )
+        # Complementary dashboard signal: count of broken (expired/missing)
+        # domains per CA.
+        metrics.send(
+            "dcv.health.broken",
+            "gauge",
+            broken_by_ca.get(ca_name, 0),
+            metric_tags={"ca": ca_name},
+        )
+        total_domains += ca_domains
+        ca_domains_by_ca[ca_name] = ca_domains
+
+    current_app.logger.info(
+        f"emit_dcv_expiration_metrics: done. domains_checked={total_domains}, "
+        f"cas_with_data={ca_domains_by_ca}"
+    )
+
+
+def emit_persist_record_metrics(active_by_ca=None):
+    """
+    Verify _validation-persist.<domain> records directly from DNS and emit the
+    persist-record component of the unified dcv.health gauge.
+
+    DNS-native complement to emit_dcv_expiration_metrics(): instead of trusting
+    only the CA's reported status, check the persistent record we publish.
+    Both feed the same dcv.health metric family -- this function emits
+    dcv.health{domain, ca, persist_record_status} == 1 when the record is ok,
+    0 when missing / wrong / unparseable / expired / dns_error -- so a single
+    monitor on dcv.health aggregates the CA component (from
+    emit_dcv_expiration_metrics) and this DNS component.
+
+    The domain set is computed from the lemur database (active certificates) via
+    the domain-scoped _active_domains_by_ca(), so no cross-environment records
+    are queried. Expected account URIs come from DCV_PERSIST_ACCOUNT_URIS in the
+    deployment config (not default.conf, which configure_app does not layer over);
+    if unset, verification is skipped.
+    """
+    expected_uris = current_app.config.get("DCV_PERSIST_ACCOUNT_URIS", {})
+    if not expected_uris:
+        current_app.logger.info(
+            "emit_persist_record_metrics: no DCV_PERSIST_ACCOUNT_URIS configured; skipping"
+        )
+        return
+    # Domain-scoped set from the lemur DB (active certs), not the CA return.
+    if active_by_ca is None:
+        active_by_ca = _active_domains_by_ca()
+    persist_domains = set()
+    for domains in active_by_ca.values():
+        persist_domains.update(domains)
+    if not persist_domains:
+        return
+
+    results = verify_persist_records(persist_domains, expected_uris)
+    # Seed the per-CA rollup from the configured issuers so a 0 (recovery) sample
+    # is emitted for every CA, even when healthy (avoids stale/no-data rollups).
+    ca_names = list(expected_uris)
+    broken_by_ca = {ca: 0 for ca in ca_names}
+    for r in results:
+        ok = 1 if r["status"] == "ok" else 0
+        if not ok:
+            broken_by_ca[r["ca"]] = broken_by_ca.get(r["ca"], 0) + 1
+        metrics.send(
+            "dcv.health",
+            "gauge",
+            ok,
+            metric_tags={
+                "domain": r["domain"],
+                "ca": r["ca"],
+                "persist_record_status": r["status"],
+            },
+        )
+    # Always emit the per-CA broken rollup (0 when healthy) so a resolved failure
+    # emits a recovery sample instead of going stale / no-data.
+    for ca in ca_names:
+        metrics.send(
+            "dcv.health.persist_broken",
+            "gauge",
+            broken_by_ca[ca],
+            metric_tags={"ca": ca},
+        )
+
+
+@celery_app.task(soft_time_limit=3600)
+def revalidate_dcv_domains():
+    """
+    Proactively retrigger DCV validation (POST) for every base domain with an
+    active certificate, once per day. Complements emit_dcv_expiration_metrics
+    (which only observes); this task acts.
+
+    Calls revalidate_domain() on each issuer plugin that implements it
+    (DigiCert, Sectigo). A short inter-call sleep avoids hammering the CA API.
+
+    Emits:
+      dcv.revalidation.triggered   counter  {domain, ca}  -- successful POST
+      dcv.revalidation.error       counter  {domain, ca}  -- failed/not_found
+      dcv.revalidation.domains_processed  gauge  {ca}     -- count per CA
+    """
+    function = f"{__name__}.{sys._getframe().f_code.co_name}"
+    task_id = None
+    if celery_app.current_task:
+        task_id = celery_app.current_task.request.id
+    log_data = {
+        "function": function,
+        "message": "revalidating DCV for all active domains",
+        "task_id": task_id,
+    }
+    if task_id and is_task_active(function, task_id, None):
+        log_data["message"] = "Skipping task: Task is already active"
+        current_app.logger.debug(log_data)
+        return
+
+    current_app.logger.debug(log_data)
+    active_by_ca = _active_domains_by_ca()
+
+    for plugin in plugins.all(plugin_type="issuer"):
+        if not hasattr(plugin, "revalidate_domain"):
+            continue
+        ca_name = getattr(plugin, "slug", plugin.__class__.__name__.lower())
+        domains = active_by_ca.get(ca_name, set())
+        if not domains:
+            current_app.logger.debug(
+                f"revalidate_dcv_domains: no active domains for {ca_name}, skipping"
+            )
+            continue
+
+        processed = 0
+        for domain in sorted(domains):
+            try:
+                result = plugin.revalidate_domain(domain)
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception as exc:
+                current_app.logger.warning(
+                    f"revalidate_dcv_domains: unexpected error for {domain} ({ca_name}): {exc}",
+                    exc_info=True,
+                )
+                metrics.send(
+                    "dcv.revalidation.error",
+                    "counter",
+                    1,
+                    metric_tags={"domain": domain, "ca": ca_name},
+                )
+                processed += 1
+                time.sleep(0.5)
+                continue
+
+            status = result.get("status", "error")
+            if status == "triggered":
+                metrics.send(
+                    "dcv.revalidation.triggered",
+                    "counter",
+                    1,
+                    metric_tags={"domain": domain, "ca": ca_name},
+                )
+            else:
+                current_app.logger.warning(
+                    f"revalidate_dcv_domains: {ca_name}/{domain}: status={status} detail={result.get('detail')}"
+                )
+                metrics.send(
+                    "dcv.revalidation.error",
+                    "counter",
+                    1,
+                    metric_tags={"domain": domain, "ca": ca_name},
+                )
+            processed += 1
+            time.sleep(0.5)
+
+        metrics.send(
+            "dcv.revalidation.domains_processed",
+            "gauge",
+            processed,
+            metric_tags={"ca": ca_name},
+        )
+        current_app.logger.info(
+            f"revalidate_dcv_domains: {ca_name} processed {processed} domains"
+        )
+
+    metrics.send(f"{function}.success", "counter", 1)
+    return log_data
