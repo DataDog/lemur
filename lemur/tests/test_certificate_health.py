@@ -10,6 +10,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 NOW = arrow.get("2030-01-01T12:00:00Z")
 REASONS = (
     "rotation_enabled_without_authority",
+    "rotation_enabled_without_policy",
     "missing_owner",
     "missing_creator",
     "notifications_disabled",
@@ -116,7 +117,7 @@ def test_empty_run_emits_four_zero_summary_gauges(app):
     )
 
 
-def test_healthy_certificate_emits_all_seven_zeros(app):
+def test_healthy_certificate_emits_all_zeros(app):
     states, summary = emit([certificate()])
     assert states == {(42, reason): 0 for reason in REASONS}
     assert summary == dict(
@@ -126,6 +127,7 @@ def test_healthy_certificate_emits_all_seven_zeros(app):
 
 @pytest.mark.parametrize("reason,overrides", [
     ("rotation_enabled_without_authority", {"authority_id": None}),
+    ("rotation_enabled_without_policy", {"rotation_policy": None}),
     ("missing_owner", {"owner": None}),
     ("missing_owner", {"owner": ""}),
     ("missing_owner", {"owner": " \t\n"}),
@@ -198,7 +200,7 @@ def test_summary_counts_unique_unhealthy_certificates_and_all_failures(app):
 def test_notifications_disabled_ignores_replaced_cert_but_emits_zero_for_all(app):
     cert = certificate(notify=False, replaced=[certificate(id=43)])
     states, summary = emit([cert])
-    # All seven reasons must be zero: notifications off on a replaced cert is expected
+    # All reasons must be zero: notifications off on a replaced cert is expected
     # and the cert is otherwise healthy (single replacement is not multiple_replacements).
     assert states == {(42, reason): 0 for reason in REASONS}
     assert summary["failed_checks"] == summary["unhealthy_certificates"] == 0
@@ -213,20 +215,33 @@ def test_recovered_reason_explicitly_emits_zero(app):
     assert recovered[(42, "missing_owner")] == 0
 
 
-def test_missing_policy_is_unknown_only_when_needed(app):
+def test_missing_policy_emits_failure_without_evaluation_errors(app):
     states, summary = emit([
         certificate(rotation_policy=None, owner=""),
         certificate(id=43, rotation_policy=None, replaced=[certificate(id=44)]),
         certificate(id=45, rotation=False, rotation_policy=None),
     ])
-    assert (42, "expiring_without_replacement") not in states
+    assert states[(42, "expiring_without_replacement")] == 0
+    assert states[(42, "rotation_enabled_without_policy")] == 1
+    assert states[(43, "rotation_enabled_without_policy")] == 1
+    assert states[(45, "rotation_enabled_without_policy")] == 0
     assert states[(42, "missing_owner")] == 1
     assert states[(43, "expiring_without_replacement")] == 0
     assert states[(45, "expiring_without_replacement")] == 0
-    assert len(states) == 20
+    assert len(states) == 3 * len(REASONS)
     assert summary == dict(
-        certificates_checked=3, unhealthy_certificates=1, failed_checks=1, errors=1
+        certificates_checked=3, unhealthy_certificates=2, failed_checks=3, errors=0
     )
+
+
+def test_assigning_rotation_policy_clears_missing_policy_reason(app):
+    cert = certificate(rotation_policy=None)
+    failed, _ = emit([cert])
+    cert.rotation_policy = SimpleNamespace(days=60)
+    recovered, summary = emit([cert])
+    assert failed[(42, "rotation_enabled_without_policy")] == 1
+    assert recovered[(42, "rotation_enabled_without_policy")] == 0
+    assert summary["failed_checks"] == summary["errors"] == 0
 
 
 def test_multiple_errors_count_certificate_once_and_continue(app):
