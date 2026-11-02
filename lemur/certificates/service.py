@@ -283,27 +283,21 @@ def get_all_pending_reissue():
         .filter(not_(Certificate.replaced.any()))
     )
     pending = current.filter(Certificate.in_rotation_window == true()).all()
-    if not any(certificate_pair(cert) for cert in pending):
+    pairs = {certificate_pair(cert) for cert in pending} - {None}
+    if not pairs:
         return pending
-    # Pairing opts current autorotating certificates into early renewal.
-    peers = current.filter(Certificate.description.contains("[certificate-pair:")).all()
-    return paired_reissue_candidates(pending, peers)
+
+    selected = {cert.id: cert for cert in pending}
+    for cert in current.filter(Certificate.description.contains("[certificate-pair:")):
+        if certificate_pair(cert) in pairs:
+            selected[cert.id] = cert
+    return list(selected.values())
 
 
 def certificate_pair(certificate):
     """Read the explicit pairing identifier, independently of key type or CN."""
     match = re.search(r"\[certificate-pair:([^\[\]\s]+)\]", certificate.description or "")
     return match.group(1) if match else None
-
-
-def paired_reissue_candidates(pending, current):
-    """Include current members of due groups once, trusting the explicit tags."""
-    selected = {cert.id: cert for cert in pending}
-    due_pairs = {certificate_pair(cert) for cert in pending} - {None}
-    for cert in current:
-        if certificate_pair(cert) in due_pairs:
-            selected[cert.id] = cert
-    return list(selected.values())
 
 
 def find_duplicates(cert):
