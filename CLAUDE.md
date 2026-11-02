@@ -115,6 +115,20 @@ Rules for adding metrics:
 - **Do** add `datacenter` to any metric describing where a cert was deployed. Source it from `destination.description` JSON via `_parse_destination_description()` in `certificates/service.py` (or the analogous `_datacenter_from_description()` in `certificates/models.py`).
 - **Do** add `source` to endpoint-scoped metrics using `endpoint.source.label`.
 
+## Certificate Rotation Groups
+
+Add the same `[rotation-group:<identifier>]` tag to each certificate's description to renew them together. For example, an RSA certificate and an ECDSA certificate can both include:
+
+```text
+[rotation-group:edge-us9-public]
+```
+
+Use one group tag per certificate, with a unique identifier for the intended group and no whitespace or brackets inside the identifier. Preserve any existing description tags, such as `[dc-bootstrap:...]`. Group membership is explicit: Lemur does not require matching CNs or particular key types, and a group can contain more than two certificates.
+
+When a member becomes due under its rotation policy, scheduled reissuance also selects the group's other certificates that have autorotation enabled and no replacement. Each certificate is selected once per run. The tag is preserved in the replacement's description. Adding the tag alone does not issue certificates or enable autorotation.
+
+This groups renewal selection, not initial creation or endpoint deployment. Issuance remains sequential and failures are independent, with no rollback or guarantee of identical validity dates. Deduplication is only per run: a later attempt can reissue a successful member again, and a failed early renewal may wait until its own policy makes it due unless another group member triggers renewal first.
+
 ## Release Process
 
 Master commits build a prod-signed image via GitLab CI, tagged `v<pipeline_id>-<short_sha>` and re-tagged `mutable-latest-prod`.
