@@ -1,6 +1,6 @@
 """Tests for the revalidate_dcv_domains Celery task (CLOUDR-2344)."""
 import sys
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from celery.exceptions import SoftTimeLimitExceeded
 
@@ -31,7 +31,6 @@ def _make_plugin(slug, domains, revalidate_results=None, has_revalidate=True):
         )
     else:
         del plugin.revalidate_domain  # ensure hasattr returns False
-
 
     return plugin
 
