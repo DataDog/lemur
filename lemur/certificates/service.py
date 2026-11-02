@@ -1426,7 +1426,9 @@ def send_certificate_expiration_metrics(expiry_window=None):
     for certificate in certificates:
         try:
             days_until_expiration = _get_cert_expiry_in_days(certificate.not_after)
-            has_active_endpoints = len(certificate.endpoints) > 0
+            has_active_endpoints = any(
+                endpoint.active for endpoint in certificate.endpoints
+            )
             is_replacement = len(certificate.replaces) > 0
             has_been_replaced = any(
                 r.id != certificate.id for r in certificate.replaced
