@@ -278,17 +278,28 @@ def get_all_pending_reissue():
 
     :return:
     """
-    current = (
+    pending = (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
+        .filter(Certificate.in_rotation_window == true())
+        .all()
     )
-    pending = current.filter(Certificate.in_rotation_window == true()).all()
+    return include_paired_certificates(pending)
+
+
+def include_paired_certificates(pending):
+    """Include current autorotating partners of due certificates once."""
     pairs = {certificate_pair(cert) for cert in pending} - {None}
     if not pairs:
         return pending
 
     selected = {cert.id: cert for cert in pending}
-    for cert in current.filter(Certificate.description.contains("[certificate-pair:")):
+    peers = (
+        Certificate.query.filter(Certificate.rotation == true())
+        .filter(not_(Certificate.replaced.any()))
+        .filter(Certificate.description.contains("[certificate-pair:"))
+    )
+    for cert in peers:
         if certificate_pair(cert) in pairs:
             selected[cert.id] = cert
     return list(selected.values())
