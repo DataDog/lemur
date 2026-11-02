@@ -274,7 +274,7 @@ def get_all_pending_reissue():
     policy to determine how many days from expiration the certificate must be
     for rotation to be pending.
 
-    Also includes tagged partners with autorotation enabled and no replacement.
+    Also includes rotation group members with autorotation enabled and no replacement.
 
     :return:
     """
@@ -284,30 +284,30 @@ def get_all_pending_reissue():
         .filter(Certificate.in_rotation_window == true())
         .all()
     )
-    return include_paired_certificates(pending)
+    return include_grouped_certificates(pending)
 
 
-def include_paired_certificates(pending):
-    """Include current autorotating partners of due certificates once."""
-    pairs = {certificate_pair(cert) for cert in pending} - {None}
-    if not pairs:
+def include_grouped_certificates(pending):
+    """Include current autorotating members of due rotation groups once."""
+    groups = {rotation_group(cert) for cert in pending} - {None}
+    if not groups:
         return pending
 
     selected = {cert.id: cert for cert in pending}
     peers = (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
-        .filter(Certificate.description.contains("[certificate-pair:"))
+        .filter(Certificate.description.contains("[rotation-group:"))
     )
     for cert in peers:
-        if certificate_pair(cert) in pairs:
+        if rotation_group(cert) in groups:
             selected[cert.id] = cert
     return list(selected.values())
 
 
-def certificate_pair(certificate):
-    """Read the explicit pairing identifier, independently of key type or CN."""
-    match = re.search(r"\[certificate-pair:([^\[\]\s]+)\]", certificate.description or "")
+def rotation_group(certificate):
+    """Read the rotation group identifier, independently of key type or CN."""
+    match = re.search(r"\[rotation-group:([^\[\]\s]+)\]", certificate.description or "")
     return match.group(1) if match else None
 
 

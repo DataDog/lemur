@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lemur.certificates.service import certificate_pair, get_all_pending_reissue
+from lemur.certificates.service import rotation_group, get_all_pending_reissue
 
 
 @pytest.fixture
@@ -19,38 +19,38 @@ def select_candidates():
     return select
 
 
-def cert(cert_id, key_type="RSA2048", pair="edge-us9:*.edge-us9.prod.dog"):
+def cert(cert_id, key_type="RSA2048", group="edge-us9-public"):
     return SimpleNamespace(
         id=cert_id,
         key_type=key_type,
         cn="*.edge-us9.prod.dog",
-        description=f"[certificate-pair:{pair}]" if pair else "ordinary certificate",
+        description=f"[rotation-group:{group}]" if group else "ordinary certificate",
     )
 
 
-def test_pair_identifier_survives_reissue_description():
+def test_group_identifier_survives_reissue_description():
     certificate = cert(1)
     certificate.description = (
         "Reissued by Lemur for cert ID 100, "
         "[dc-bootstrap:edge-us9:*.edge-us9.prod.dog:RSA2048] " + certificate.description
     )
-    assert certificate_pair(certificate) == "edge-us9:*.edge-us9.prod.dog"
+    assert rotation_group(certificate) == "edge-us9-public"
 
 
 def test_bootstrap_identifier_does_not_opt_in():
     certificate = cert(1)
     certificate.description = "[dc-bootstrap:edge-us9:*.edge-us9.prod.dog:RSA2048]"
-    assert certificate_pair(certificate) is None
+    assert rotation_group(certificate) is None
 
 
-def test_due_member_adds_partner_once(select_candidates):
+def test_due_member_adds_group_members_once(select_candidates):
     rsa, ecc = cert(1), cert(2, "ECCPRIME256V1")
     assert select_candidates([rsa], [rsa, ecc]) == [rsa, ecc]
     assert select_candidates([rsa, ecc], [rsa, ecc]) == [rsa, ecc]
 
 
-def test_unpaired_and_not_due_pairs_unchanged(select_candidates):
-    ordinary = cert(3, pair=None)
+def test_ungrouped_and_not_due_groups_unchanged(select_candidates):
+    ordinary = cert(3, group=None)
     assert select_candidates(
         [ordinary], [cert(1), cert(2, "ECCPRIME256V1")]
     ) == [ordinary]
@@ -71,5 +71,5 @@ def test_different_names_and_key_types_are_allowed(select_candidates):
 
 
 def test_similar_identifier_does_not_match(select_candidates):
-    first, other = cert(1, pair="edge-us9"), cert(2, pair="edge-us90")
+    first, other = cert(1, group="edge-us9"), cert(2, group="edge-us90")
     assert select_candidates([first], [first, other]) == [first]
