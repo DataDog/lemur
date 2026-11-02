@@ -9,7 +9,7 @@
 import json
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from itertools import groupby
 
 import arrow
@@ -302,6 +302,15 @@ def include_grouped_certificates(pending):
     for cert in peers:
         if rotation_group(cert) in groups:
             selected[cert.id] = cert
+    group_sizes = Counter(rotation_group(cert) for cert in selected.values())
+    for cert in selected.values():
+        group = rotation_group(cert)
+        if group in groups and group_sizes[group] == 1:
+            current_app.logger.error(
+                "Rotation group %s has no other eligible member for certificate %s; "
+                "check group tags, autorotation, and replacements. Renewing this certificate alone.",
+                group, cert.id,
+            )
     return list(selected.values())
 
 

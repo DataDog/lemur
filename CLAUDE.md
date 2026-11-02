@@ -127,6 +127,8 @@ Use one group tag per certificate, with a unique identifier for the intended gro
 
 When a member becomes due under its rotation policy, scheduled reissuance also selects the group's other certificates that have autorotation enabled and no replacement. Each certificate is selected once per run. The tag is preserved in the replacement's description. Adding the tag alone does not issue certificates or enable autorotation.
 
+If a due tagged certificate has no other eligible group member, Lemur logs an error with its group identifier and certificate ID, then continues renewing it alone. Check for mistyped tags, disabled autorotation, or members that already have replacements. This log does not fail the job or create a new monitor.
+
 This groups renewal selection, not initial creation or endpoint deployment. Issuance remains sequential and failures are independent, with no rollback or guarantee of identical validity dates. Deduplication is only per run: a later attempt can reissue a successful member again, and a failed early renewal may wait until its own policy makes it due unless another group member triggers renewal first.
 
 ## Release Process

@@ -13,7 +13,7 @@ from lemur.certificates.service import (
 
 
 @pytest.fixture
-def select_candidates():
+def select_candidates(app):
     def select(pending, peers):
         with patch("lemur.certificates.service.Certificate") as model:
             current = model.query.filter.return_value.filter.return_value
@@ -76,9 +76,28 @@ def test_different_names_and_key_types_are_allowed(select_candidates):
     assert select_candidates([first], [first, second]) == [first, second]
 
 
-def test_similar_identifier_does_not_match(select_candidates):
+def test_similar_identifier_does_not_match(app, select_candidates):
     first, other = cert(1, group="edge-us9"), cert(2, group="edge-us90")
-    assert select_candidates([first], [first, other]) == [first]
+    with patch.object(app.logger, "error") as error:
+        assert select_candidates([first], [first, other]) == [first]
+        error.assert_called_once()
+        assert error.call_args.args[1:] == ("edge-us9", first.id)
+
+
+@pytest.mark.parametrize("size", [2, 3])
+def test_complete_groups_do_not_log_errors(app, select_candidates, size):
+    members = [cert(i) for i in range(size)]
+    with patch.object(app.logger, "error") as error:
+        assert select_candidates(members, members) == members
+        error.assert_not_called()
+
+
+def test_singleton_logs_once_even_with_duplicate_query_rows(app, select_candidates):
+    member = cert(1)
+    with patch.object(app.logger, "error") as error:
+        assert select_candidates([member], [member, member]) == [member]
+        error.assert_called_once()
+        assert error.call_args.args[1:] == ("edge-us9-public", member.id)
 
 
 @pytest.mark.parametrize(
