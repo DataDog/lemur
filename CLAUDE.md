@@ -123,7 +123,7 @@ Add the same `[rotation-group:<identifier>]` tag to each certificate's descripti
 [rotation-group:edge-us9-public]
 ```
 
-Use one group tag per certificate, with a unique identifier for the intended group and no whitespace or brackets inside the identifier. Preserve any existing description tags, such as `[dc-bootstrap:...]`. Group membership is explicit: Lemur does not require matching CNs or particular key types, and a group can contain more than two certificates.
+Use one group tag per certificate, with a unique identifier for the intended group and no whitespace or brackets inside the identifier. If multiple valid group tags are present, only the first is used. Preserve any existing description tags, such as `[dc-bootstrap:...]`. Group membership is explicit: Lemur does not require matching CNs or particular key types, and a group can contain more than two certificates.
 
 When a member becomes due under its rotation policy, scheduled reissuance also selects the group's other certificates that have autorotation enabled and no replacement. Each certificate is selected once per run. The tag is preserved in the replacement's description. Adding the tag alone does not issue certificates or enable autorotation.
 
