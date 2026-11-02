@@ -7,6 +7,7 @@
 """
 
 import arrow
+import re
 import sys
 from flask import current_app
 from flask_principal import Identity, identity_changed
@@ -190,6 +191,36 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
             **({"source": str(endpoint.source.label)} if endpoint.source else {}),
         },
     )
+
+
+def certificate_pair(certificate):
+    """An explicit description token opts a certificate into paired reissuance."""
+    match = re.search(r"\[certificate-pair:([^\[\]\s]+)\]", certificate.description or "")
+    return match.group(1) if match else None
+
+
+def paired_reissue_candidates(pending, current):
+    """Expand the scheduled batch before issuance mutates replacement links."""
+    pending = list(pending)
+    selected = {cert.id: cert for cert in pending}
+    due_pairs = {certificate_pair(cert) for cert in pending} - {None}
+    pairs = {}
+    for cert in current:
+        pair = certificate_pair(cert)
+        if pair:
+            pairs.setdefault(pair, []).append(cert)
+    for pair, peers in pairs.items():
+        if pair not in due_pairs:
+            continue
+        families = {(other.key_type or "")[:3] for other in peers}
+        if len(peers) != 2 or families != {"RSA", "ECC"} or len({p.cn for p in peers}) != 1:
+            raise ValueError(
+                f"Certificate pair {pair} must contain one RSA and one ECC "
+                "certificate with the same CN"
+            )
+        for peer in peers:
+            selected[peer.id] = peer
+    return list(selected.values())
 
 
 def request_reissue(certificate, notify, commit):
@@ -479,7 +510,14 @@ def reissue(old_certificate_name, notify, commit):
 
         failed = 0
         if not old_cert:
-            for certificate in get_all_pending_reissue():
+            pending = get_all_pending_reissue()
+            current = Certificate.query.filter(
+                Certificate.rotation.is_(True),
+                ~Certificate.replaced.any(),
+                Certificate.description.contains("[certificate-pair:"),
+            ).all()
+            pending = paired_reissue_candidates(pending, current)
+            for certificate in pending:
                 if not request_reissue(certificate, notify, commit):
                     failed += 1
         else:
