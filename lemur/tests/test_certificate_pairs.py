@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from lemur.certificates.cli import certificate_pair, paired_reissue_candidates
+from lemur.certificates.service import certificate_pair, paired_reissue_candidates
 
 
 def cert(cert_id, key_type="RSA2048", pair="edge-us9:*.edge-us9.prod.dog"):
@@ -46,6 +46,16 @@ def test_unpaired_and_not_due_pairs_unchanged():
     "peers",
     [[cert(1)], [cert(1), cert(2)], [cert(1), cert(2, "ECCPRIME256V1"), cert(3)]],
 )
-def test_ambiguous_pair_fails_before_issuance(peers):
-    with pytest.raises(ValueError, match="one RSA and one ECC"):
-        paired_reissue_candidates([peers[0]], peers)
+def test_group_membership_is_defined_only_by_tag(peers):
+    assert paired_reissue_candidates([peers[0]], peers) == peers
+
+
+def test_different_names_and_key_types_are_allowed():
+    first, second = cert(1), cert(2, "ED25519")
+    second.cn = "another.example.com"
+    assert paired_reissue_candidates([first], [first, second]) == [first, second]
+
+
+def test_similar_identifier_does_not_match():
+    first, other = cert(1, pair="edge-us9"), cert(2, pair="edge-us90")
+    assert paired_reissue_candidates([first], [first, other]) == [first]

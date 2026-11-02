@@ -266,22 +266,37 @@ def get_all_pending_cleaning_issued_since_days(source, days_since_issuance):
     )
 
 
+def certificate_pair(certificate):
+    """Read the explicit pairing identifier, independently of key type or CN."""
+    match = re.search(r"\[certificate-pair:([^\[\]\s]+)\]", certificate.description or "")
+    return match.group(1) if match else None
+
+
+def paired_reissue_candidates(pending, current):
+    """Include current members of due groups once, trusting the explicit tags."""
+    selected = {cert.id: cert for cert in pending}
+    due_pairs = {certificate_pair(cert) for cert in pending} - {None}
+    for cert in current:
+        if certificate_pair(cert) in due_pairs:
+            selected[cert.id] = cert
+    return list(selected.values())
+
+
 def get_all_pending_reissue():
     """
-    Retrieves all certificates that need to be rotated.
-
-    Must be X days from expiration, uses the certificates rotation
-    policy to determine how many days from expiration the certificate must be
-    for rotation to be pending.
-
-    :return:
+    Return certificates due under their rotation policy and their tagged partners.
+    Partners must still have autorotation enabled and no replacement.
     """
-    return (
+    current = (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
-        .filter(Certificate.in_rotation_window == true())
-        .all()
-    )  # noqa
+    )
+    pending = current.filter(Certificate.in_rotation_window == true()).all()
+    if not any(certificate_pair(cert) for cert in pending):
+        return pending
+    # Pairing opts current autorotating certificates into early renewal.
+    peers = current.filter(Certificate.description.contains("[certificate-pair:")).all()
+    return paired_reissue_candidates(pending, peers)
 
 
 def find_duplicates(cert):
