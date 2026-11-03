@@ -313,14 +313,22 @@ google-api-core[grpc]==2.30.0
     # via
     #   -r requirements-tests.txt
     #   google-cloud-compute
+    #   google-cloud-core
     #   google-cloud-private-ca
 google-auth==2.49.1
     # via
     #   -r requirements-tests.txt
     #   google-api-core
     #   google-cloud-compute
+    #   google-cloud-core
     #   google-cloud-private-ca
 google-cloud-compute==1.46.0
+    # via -r requirements-tests.txt
+google-cloud-core==2.7.0
+    # via
+    #   -r requirements-tests.txt
+    #   google-cloud-dns
+google-cloud-dns==0.37.1
     # via -r requirements-tests.txt
 google-cloud-private-ca==1.17.0
     # via -r requirements-tests.txt
