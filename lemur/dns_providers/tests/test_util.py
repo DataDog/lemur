@@ -1,9 +1,24 @@
 from unittest.mock import Mock, patch
 
 import dns.exception
+import dns.resolver
 import pytest
 
 from lemur.dns_providers import util
+
+
+@patch("lemur.dns_providers.util.dns.resolver.Resolver")
+def test_get_dns_records_raises_lookup_errors_when_requested(mock_resolver):
+    mock_resolver.return_value.resolve.side_effect = dns.exception.Timeout
+    with pytest.raises(dns.exception.Timeout):
+        util.get_dns_records("example.com", "TXT", raise_errors=True)
+
+
+@patch("lemur.dns_providers.util.dns.resolver.Resolver")
+def test_get_dns_records_missing_records_are_empty(mock_resolver):
+    for error in (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        mock_resolver.return_value.resolve.side_effect = error
+        assert util.get_dns_records("example.com", "TXT", raise_errors=True) == []
 
 
 @patch("lemur.dns_providers.util.dns.resolver.Resolver")

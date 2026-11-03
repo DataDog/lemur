@@ -91,8 +91,8 @@ def get_authoritative_nameserver(domain):
     return nameserver
 
 
-def get_dns_records(domain, rdtype, nameserver=None):
-    """Retrieves the DNS records matching the name and type and returns a list of records"""
+def get_dns_records(domain, rdtype, nameserver=None, raise_errors=False):
+    """Return records; raise_errors propagates lookup errors, but not missing records."""
     records = []
     try:
         dns_resolver = dns.resolver.Resolver()
@@ -102,7 +102,11 @@ def get_dns_records(domain, rdtype, nameserver=None):
         for rdata in dns_response:
             for record in rdata.strings:
                 records.append(record.decode("utf-8"))
-    except dns.exception.DNSException:
+    except dns.exception.DNSException as error:
+        if raise_errors:
+            if isinstance(error, (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer)):
+                return []
+            raise
         capture_exception()
         function = sys._getframe().f_code.co_name
         metrics.send(f"{function}.fail", "counter", 1)
