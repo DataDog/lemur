@@ -266,7 +266,10 @@ def test_active_domains_by_ca_applies_psl_reduction(mock_cert_service):
     assert "vault.dev.lemur-sandbox-test.datad0g.com" not in domains
     assert "registry-sandbox.us3.staging.dog" not in domains
     assert "api.datadoghq.com" not in domains
-    # PSL-reduced base domains must appear
-    assert "lemur-sandbox-test.datad0g.com" in domains
-    assert "staging.dog" in domains or "us3.staging.dog" in domains  # depends on PSL
+    # PSL-reduced base domains (eTLD+1) must appear
+    # vault.dev.lemur-sandbox-test.datad0g.com -> datad0g.com
+    assert "datad0g.com" in domains
+    # registry-sandbox.us3.staging.dog -> staging.dog
+    assert "staging.dog" in domains
+    # api.datadoghq.com and datadoghq.com -> datadoghq.com
     assert "datadoghq.com" in domains
