@@ -1562,6 +1562,10 @@ def emit_persist_record_metrics(active_by_ca=None):
             broken_by_ca[ca],
             metric_tags={"ca": ca},
         )
+    current_app.logger.info(
+        f"emit_persist_record_metrics: done. domains={len(persist_domains)} "
+        f"results={len(results)} broken_by_ca={broken_by_ca}"
+    )
 
 
 @celery_app.task(soft_time_limit=3600)
