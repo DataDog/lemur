@@ -14,6 +14,10 @@ def rotation_enabled_without_authority(certificate, now):
     return certificate.rotation is True and certificate.authority_id is None
 
 
+def rotation_enabled_without_policy(certificate, now):
+    return certificate.rotation is True and certificate.rotation_policy is None
+
+
 def missing_owner(certificate, now):
     return certificate.owner is None or not certificate.owner.strip()
 
@@ -23,7 +27,9 @@ def missing_creator(certificate, now):
 
 
 def notifications_disabled(certificate, now):
-    return certificate.notify is False
+    # Replaced certs are auto-muted via the Certificate.replaces append event listener;
+    # notifications off on a replaced cert is expected, not an operator error.
+    return certificate.notify is False and not certificate.replaced
 
 
 def autorotation_disabled_near_expiry(certificate, now):
@@ -42,6 +48,7 @@ def expiring_without_replacement(certificate, now):
     return (
         certificate.rotation is True
         and not certificate.replaced
+        and certificate.rotation_policy is not None
         and arrow.get(certificate.not_after)
         <= now.shift(days=certificate.rotation_policy.days)
     )
@@ -50,6 +57,7 @@ def expiring_without_replacement(certificate, now):
 # Function names are the stable metric reason values; each predicate runs independently.
 HEALTH_CHECKS = (
     rotation_enabled_without_authority,
+    rotation_enabled_without_policy,
     missing_owner,
     missing_creator,
     notifications_disabled,

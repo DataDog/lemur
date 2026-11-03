@@ -137,7 +137,7 @@ cert-manager==3.0.0
     # via -r requirements-tests.txt
 certbot==5.4.0
     # via -r requirements-tests.txt
-certifi==2026.2.25
+certifi==2026.10.19
     # via
     #   -r requirements-tests.txt
     #   httpcore

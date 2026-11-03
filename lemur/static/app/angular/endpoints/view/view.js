@@ -10,7 +10,7 @@ angular.module('lemur')
     });
   })
 
-  .controller('EndpointsViewController', function ($q, $scope, $uibModal, EndpointApi, EndpointService, MomentService, ngTableParams) {
+  .controller('EndpointsViewController', function ($q, $scope, $uibModal, EndpointApi, EndpointService, MomentService, ngTableParams, $window, toaster) {
     $scope.filter = {};
     $scope.endpointsTable = new ngTableParams({
       page: 1,            // show first page
@@ -31,6 +31,31 @@ angular.module('lemur')
       }
     });
 
+
+    $scope.setActive = function (endpoint, active) {
+      var action = active ? 'Reactivate' : 'Deactivate';
+      var explanation = active ? 'This restores tracking without verifying the endpoint or changing the certificate or cloud resource.' :
+        'This does not change the certificate or cloud resource. Source sync may reactivate it if rediscovered.';
+      if (endpoint.updatingActive || endpoint.active === active || !$window.confirm(
+        action + ' ' + endpoint.name + ' in Lemur? ' + explanation
+      )) {
+        return;
+      }
+      endpoint.updatingActive = true;
+      return endpoint.post('active', {active: active}).then(function () {
+        endpoint.active = active;
+        toaster.pop({type: 'success', title: 'Endpoint ' + action.toLowerCase() + 'd', body: endpoint.name});
+        return $scope.endpointsTable.reload();
+      }, function (response) {
+        toaster.pop({
+          type: 'error',
+          title: 'Unable to ' + action.toLowerCase() + ' endpoint',
+          body: (response.data && response.data.message) || 'Please try again.'
+        });
+      }).finally(function () {
+        endpoint.updatingActive = false;
+      });
+    };
 
     $scope.ciphers = [
       {'title': 'Protocol-SSLv2', 'id': 'Protocol-SSLv2'},
