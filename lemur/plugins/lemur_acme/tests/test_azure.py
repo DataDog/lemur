@@ -1,5 +1,7 @@
 from unittest.mock import Mock, patch
 
+import pytest
+
 from azure.core.exceptions import ResourceNotFoundError
 from azure.mgmt.dns.models import RecordSet, TxtRecord
 
@@ -170,7 +172,6 @@ def test_delete_txt_record_accepts_single_change_tuple(mock_get_client):
 @patch("lemur.plugins.lemur_acme.azure.dnsutil.get_dns_records")
 @patch("lemur.plugins.lemur_acme.azure.dnsutil.get_authoritative_nameserver")
 def test_wait_for_dns_change(mock_get_nameserver, mock_get_dns_records, mock_sleep):
-    mock_get_nameserver.return_value = "192.0.2.53"
     mock_get_dns_records.side_effect = [[], ["new-token"]]
     change_id = (
         "sub",
@@ -182,9 +183,22 @@ def test_wait_for_dns_change(mock_get_nameserver, mock_get_dns_records, mock_sle
 
     azure.wait_for_dns_change(change_id, OPTIONS)
 
-    mock_get_nameserver.assert_called_once_with("sub.example.com")
+    mock_get_nameserver.assert_not_called()
     assert mock_get_dns_records.call_count == 2
     mock_get_dns_records.assert_called_with(
-        "_acme-challenge.test.sub.example.com", "TXT", "192.0.2.53"
+        "_acme-challenge.test.sub.example.com", "TXT"
     )
     mock_sleep.assert_called_once_with(5)
+
+
+@patch("lemur.plugins.lemur_acme.azure.time.sleep")
+@patch("lemur.plugins.lemur_acme.azure.dnsutil.get_dns_records", return_value=[])
+def test_wait_for_dns_change_stops_retrying(mock_get_dns_records, mock_sleep):
+    host = "_acme-challenge.test.sub.example.com"
+    change_id = ("sub", "sub.example.com", "_acme-challenge.test", host, "new-token")
+
+    with pytest.raises(RuntimeError, match="Azure DNS TXT record did not propagate"):
+        azure.wait_for_dns_change(change_id, OPTIONS)
+
+    assert mock_get_dns_records.call_count == 12
+    assert mock_sleep.call_count == 12

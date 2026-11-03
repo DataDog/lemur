@@ -69,10 +69,9 @@ def create_txt_record(host, value, account_number):
 
 
 def wait_for_dns_change(change_id, account_number=None):
-    _, zone, _, host, value = change_id
-    nameserver = dnsutil.get_authoritative_nameserver(zone)
+    _, _, _, host, value = change_id
     for _ in range(12):
-        if value in dnsutil.get_dns_records(host, "TXT", nameserver):
+        if value in dnsutil.get_dns_records(host, "TXT"):
             return
         time.sleep(5)
     raise RuntimeError(f"Azure DNS TXT record did not propagate for {host}")

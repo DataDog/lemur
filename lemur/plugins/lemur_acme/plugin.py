@@ -19,7 +19,11 @@ from flask import current_app
 from sentry_sdk import capture_exception
 
 from lemur.authorizations import service as authorization_service
-from lemur.common.utils import check_validation, drop_last_cert_from_chain, csr_to_string
+from lemur.common.utils import (
+    check_validation,
+    drop_last_cert_from_chain,
+    csr_to_string,
+)
 from lemur.constants import CRLReason, EMAIL_RE
 from lemur.dns_providers import service as dns_provider_service
 from lemur.exceptions import InvalidConfiguration
@@ -262,10 +266,10 @@ class ACMEIssuerPlugin(IssuerPlugin):
             except (PollError, AcmeError, Exception) as e:
                 capture_exception()
                 metrics.send("get_ordered_certificates_resolution_error", "counter", 1)
-                order_url = order.uri
+                order_url = entry["order"].uri
                 error = f"{e}. Order URI: {order_url}"
                 current_app.logger.error(
-                    f"Unable to resolve pending cert: {pending_cert}. "
+                    f"Unable to resolve pending cert: {entry['pending_cert']}. "
                     f"Check out {order_url} for more information.",
                     exc_info=True,
                 )
@@ -276,10 +280,17 @@ class ACMEIssuerPlugin(IssuerPlugin):
                         "last_error": error,
                     }
                 )
-                # Ensure DNS records get deleted
-                self.acme_dns_challenge.cleanup(
-                    entry["authorizations"], entry["acme_client"]
-                )
+                # Reuse the handler that knows which providers own these challenges.
+                try:
+                    self.acme.cleanup_dns_challenges(
+                        entry["acme_client"], entry["authorizations"]
+                    )
+                except Exception:
+                    metrics.send("cleanup_dns_challenges_error", "counter", 1)
+                    current_app.logger.warning(
+                        f"Unable to clean up DNS challenges for {entry['pending_cert']}",
+                        exc_info=True,
+                    )
         return certs
 
     def create_certificate(self, csr, issuer_options):
