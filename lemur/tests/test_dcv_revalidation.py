@@ -227,3 +227,46 @@ def test_revalidate_dcv_domains_not_found_emits_error(
     errors = [c for c in mock_metrics.send.call_args_list if c.args[0] == "dcv.revalidation.error"]
     assert len(errors) == 1
     assert errors[0].kwargs["metric_tags"]["domain"] == "unknown.com"
+
+
+# ---------------------------------------------------------------------------
+# Tests for _active_domains_by_ca PSL base-domain reduction
+# ---------------------------------------------------------------------------
+
+@patch("lemur.common.celery.certificate_service")
+def test_active_domains_by_ca_applies_psl_reduction(mock_cert_service):
+    """_active_domains_by_ca must reduce SANs to eTLD+1 base domains via PSL.
+
+    Regression for the bug where raw SANs (e.g. vault.dev.lemur-sandbox-test.datad0g.com)
+    were passed to revalidate_domain() instead of their base domain (lemur-sandbox-test.datad0g.com),
+    causing every revalidation to return not_found.
+    """
+    mock_authority = MagicMock()
+    mock_authority.plugin_name = "digicert-issuer"
+
+    def _make_cert(san_names):
+        cert = MagicMock()
+        cert.authority = mock_authority
+        cert.domains = [MagicMock(name=n) for n in san_names]
+        for d, n in zip(cert.domains, san_names):
+            d.name = n
+        return cert
+
+    mock_cert_service.get_all_valid_certs.return_value = [
+        _make_cert(["vault.dev.lemur-sandbox-test.datad0g.com"]),
+        _make_cert(["registry-sandbox.us3.staging.dog"]),
+        _make_cert(["api.datadoghq.com", "datadoghq.com"]),
+    ]
+
+    from lemur.common.celery import _active_domains_by_ca
+    result = _active_domains_by_ca()
+
+    domains = result.get("digicert-issuer", set())
+    # Full SANs must NOT appear
+    assert "vault.dev.lemur-sandbox-test.datad0g.com" not in domains
+    assert "registry-sandbox.us3.staging.dog" not in domains
+    assert "api.datadoghq.com" not in domains
+    # PSL-reduced base domains must appear
+    assert "lemur-sandbox-test.datad0g.com" in domains
+    assert "staging.dog" in domains or "us3.staging.dog" in domains  # depends on PSL
+    assert "datadoghq.com" in domains

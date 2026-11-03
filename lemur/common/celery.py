@@ -35,7 +35,7 @@ from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.common.utils import normalize_domain_name
-from lemur.common.dcv_dns import verify_persist_records
+from lemur.common.dcv_dns import verify_persist_records, _base_domain
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -1331,8 +1331,9 @@ def _active_domains_by_ca():
         ca_name = cert.authority.plugin_name if cert.authority else "unknown"
         for d in cert.domains:
             name = normalize_domain_name(d.name)
-            if name:
-                by_ca.setdefault(ca_name, set()).add(name)
+            base = _base_domain(name) if name else None
+            if base:
+                by_ca.setdefault(ca_name, set()).add(base)
     return by_ca
 
 
