@@ -1109,6 +1109,57 @@ def test_reissue_certificate(
     assert new_cert.organization == certificate.organization
 
 
+@pytest.mark.parametrize(
+    "field",
+    ["common_name", "key_type", "owner", "notify", "rotation", "authority",
+     "rotation_policy", "dns_provider", "destinations", "roles", "notifications",
+     "SANs", "csr"],
+)
+def test_reissue_rejects_configuration_drift_before_create(
+    certificate, logged_in_user, field
+):
+    from types import SimpleNamespace
+    from lemur.certificates import service
+
+    primitives = service.get_certificate_primitives(certificate)
+    if field == "SANs":
+        primitives["extensions"]["sub_alt_names"]["names"] = [
+            x509.DNSName("unexpected.example.org")
+        ]
+    elif field in ("destinations", "roles", "notifications"):
+        primitives[field] = [SimpleNamespace(id=-1)]
+    elif field in ("authority", "rotation_policy", "dns_provider"):
+        primitives[field] = SimpleNamespace(id=-1)
+    elif field in ("notify", "rotation"):
+        primitives[field] = not primitives[field]
+    else:
+        primitives[field] = "unexpected"
+    with patch.object(service, "get_certificate_primitives", return_value=primitives), \
+            patch.object(service, "create") as create:
+        with pytest.raises(ValueError, match=f"renewal configuration changed: {field}"):
+            service.reissue_certificate(certificate)
+        create.assert_not_called()
+
+
+def test_reissue_allows_san_reordering_and_duplicates(certificate, logged_in_user):
+    from lemur.certificates import service
+
+    primitives = service.get_certificate_primitives(certificate)
+    names = list(primitives["extensions"]["sub_alt_names"]["names"])
+    primitives["extensions"]["sub_alt_names"]["names"] = list(reversed(names)) + names
+    service.validate_reissue_configuration(certificate, primitives)
+
+
+def test_reissue_allows_explicit_ecc_migration(certificate, logged_in_user, app):
+    from lemur.certificates import service
+
+    with patch.dict(app.config, {"ROTATE_TO_ECC_OWNER_LIST": [certificate.owner],
+                                 "ECC_NON_COMPATIBLE_COMMON_NAMES": []}), \
+            patch.object(service, "create") as create:
+        service.reissue_certificate(certificate)
+        assert create.call_args.kwargs["key_type"] == "ECCPRIME256V1"
+
+
 def test_create_csr():
     csr, private_key = create_csr(
         owner="joe@example.com",
