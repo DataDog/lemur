@@ -27,13 +27,14 @@ class RedisHandler:
         self.port = port
         self.db = db
 
-    def redis(self, db=0):
+    def redis(self, db=None):
         function = f"{__name__}.{sys._getframe().f_code.co_name}"
+        selected_db = self.db if db is None else db
         try:
             opts = {
                 "host": self.host,
                 "port": self.port,
-                "db": self.db,
+                "db": selected_db,
                 "encoding": "utf-8",
                 # The decode_responses flag here directs the client to convert the responses from Redis into Python strings
                 # using the default encoding utf-8.  This is client specific.

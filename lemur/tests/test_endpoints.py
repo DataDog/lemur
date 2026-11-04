@@ -30,11 +30,12 @@ def test_rotate_sni_certificate(client, source_plugin):
 
     endpoint = EndpointFactory()
     primary_certificate = endpoint.primary_certificate
-    endpoint.add_sni_certificate(old_sni_certificate)
+    endpoint.add_sni_certificate(old_sni_certificate, path="lemur-test")
 
     rotate_certificate(endpoint, old_sni_certificate, new_sni_certificate)
     assert endpoint.primary_certificate == primary_certificate
     assert endpoint.sni_certificates == [new_sni_certificate]
+    assert endpoint.certificates_assoc[-1].path == "lemur-test"
 
 
 def test_get_by_name_and_source(client, source_plugin):
