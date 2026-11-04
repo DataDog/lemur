@@ -224,7 +224,8 @@ def update(endpoint_id, **kwargs):
         endpoint.add_sni_certificate(crt["certificate"], crt["path"])
 
     endpoint.policy = kwargs["policy"]
-    endpoint.source = kwargs["source"]
+    if "source" in kwargs:
+        endpoint.source = kwargs["source"]
     endpoint.registry_type = kwargs["registry_type"]
     endpoint.active = True
 
