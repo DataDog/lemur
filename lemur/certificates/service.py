@@ -305,7 +305,7 @@ def include_grouped_certificates(pending):
     group_sizes = Counter(rotation_group(cert) for cert in selected.values())
     for cert in selected.values():
         group = rotation_group(cert)
-        if group in groups and group_sizes[group] == 1:
+        if group is not None and group_sizes[group] == 1:
             current_app.logger.error(
                 "Rotation group %s has no other eligible member for certificate %s; "
                 "check group tags, autorotation, and replacements. Renewing this certificate alone.",
