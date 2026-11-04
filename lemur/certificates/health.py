@@ -29,11 +29,17 @@ def notifications_disabled(certificate, now):
 
 
 def autorotation_disabled_near_expiry(certificate, now):
-    return (
+    if not (
         certificate.rotation is False
         and any(endpoint.active is True for endpoint in certificate.endpoints)
-        and arrow.get(certificate.not_after) < now.shift(days=60)
+    ):
+        return False
+    days = (
+        certificate.rotation_policy.days
+        if certificate.rotation_policy is not None
+        else current_app.config.get("LEMUR_DEFAULT_ROTATION_INTERVAL", 60)
     )
+    return arrow.get(certificate.not_after) < now.shift(days=days)
 
 
 def multiple_replacements(certificate, now):
