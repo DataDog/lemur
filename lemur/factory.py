@@ -12,9 +12,7 @@
 
 import os
 import importlib
-import logmatic
 import errno
-import socket
 import stat
 import sys
 
@@ -23,7 +21,7 @@ try:
 except ImportError:
     from importlib_metadata import entry_points
 
-from logging import FileHandler, Formatter, StreamHandler
+from logging import FileHandler, Formatter, StreamHandler, getLogger
 from logging.handlers import RotatingFileHandler
 
 from flask import Flask, current_app
@@ -38,6 +36,7 @@ from sentry_sdk.integrations.flask import FlaskIntegration
 from lemur.certificates.hooks import activate_debug_dump
 from lemur.common.health import mod as health
 from lemur.extensions import db, migrate, principal, smtp_mail, metrics, cors
+from lemur.logging import json_log_formatter
 
 
 DEFAULT_BLUEPRINTS = (health,)
@@ -221,14 +220,6 @@ def configure_database(app):
         FlaskReplicated(app)
 
 
-def json_log_formatter():
-    """
-    Builds the JSON log formatter shared by the Flask app and the Celery
-    worker so both emit identically-shaped structured logs.
-    """
-    return logmatic.JsonFormatter(extra={"hostname": socket.gethostname()})
-
-
 def configure_logging(app):
     """
     Sets up application wide logging.
@@ -265,11 +256,16 @@ def configure_logging(app):
     log_level = app.config.get("LOG_LEVEL", "DEBUG")
     handler.setLevel(log_level)
     app.logger.setLevel(log_level)
+    root_logger = getLogger()
+    root_logger.setLevel(log_level)
 
-    for existing_handler in app.logger.handlers:
+    existing_handlers = set(app.logger.handlers + root_logger.handlers)
+    for existing_handler in existing_handlers:
         existing_handler.close()
     app.logger.handlers.clear()
+    root_logger.handlers.clear()
     app.logger.addHandler(handler)
+    root_logger.addHandler(handler)
     app.logger.propagate = False
 
     if app.config.get("DEBUG_DUMP", False):
