@@ -177,6 +177,9 @@ setup(
             "azure_source = lemur.plugins.lemur_azure.plugin:AzureSourcePlugin",
             "gcp_destination = lemur.plugins.lemur_gcp.plugin:GCPDestinationPlugin",
             "gcp_source = lemur.plugins.lemur_gcp.plugin:GCPSourcePlugin",
+            "salesforce_issuer = lemur.plugins.lemur_salesforce.plugin:SalesforceIssuerPlugin",
+            "salesforce_source = lemur.plugins.lemur_salesforce.plugin:SalesforceSourcePlugin",
+            "salesforce_destination = lemur.plugins.lemur_salesforce.plugin:SalesforceDestinationPlugin",
         ],
     },
     classifiers=[
