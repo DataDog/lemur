@@ -1,22 +1,41 @@
 """
 Integration tests for lemur_salesforce plugin.
 
-Requires live credentials — skipped automatically when env vars are absent.
+Requires live credentials — skipped automatically when required config is absent.
 
-Required env vars:
-    SALESFORCE_ORG_URL        e.g. https://yourorg.develop.my.salesforce.com
-    SALESFORCE_CONSUMER_KEY   Connected App consumer key
-    SALESFORCE_PRIVATE_KEY    PEM private key (RSA), newlines as \\n or multiline
-    SALESFORCE_USERNAME       API-only service account username
+Credentials are read from Vault, not from env vars directly.
+The Lemur app config must have:
 
-    DIGICERT_API_KEY          DigiCert CertCentral API key
-    DIGICERT_ORG_ID           DigiCert org ID (must have DCV for datadoghq.com)
+  VAULT_ADDR             e.g. http://vault.service.consul:8200
+  VAULT_TOKEN            Vault token with read access to kv/data/lemur/salesforce/*
+  SALESFORCE_VAULT_PATH  Vault KV path (default: lemur/salesforce/dev-ed)
+
+Vault secret at SALESFORCE_VAULT_PATH must contain:
+  {
+    "org_url":         "https://datadog2-dev-ed.my.salesforce.com",
+    "username":        "partner.webints@datadoghq.com",
+    "password":        "...",
+    "security_token":  "...",
+    "consumer_key":    "<Connected App consumer key>",
+    "consumer_secret": "<Connected App consumer secret>"
+  }
+
+For local testing without a Vault cluster, set SALESFORCE_VAULT_PATH=local
+and populate the secret manually by passing a mock vault or using the
+local file fallback (see SALESFORCE_LOCAL_CREDS_FILE below).
+
+Alternatively, for purely local dev, set these env vars directly and
+they will be injected into the test app config (bypassing Vault):
+  SALESFORCE_ORG_URL, SALESFORCE_CONSUMER_KEY, SALESFORCE_PRIVATE_KEY,
+  SALESFORCE_USERNAME — triggers JWT Bearer flow
+
+  DIGICERT_API_KEY, DIGICERT_ORG_ID — required for signing tests
 
 Run:
     pytest lemur/plugins/lemur_salesforce/tests/test_integration.py -v -m integration
 
 What this covers end-to-end:
-  1. Salesforce JWT Bearer auth
+  1. Salesforce auth (JWT Bearer or Username-Password via Vault)
   2. create_ca_signed_cert()   — Salesforce generates real key pair + CSR
   3. get_csr()                 — retrieve PEM CSR from Salesforce
   4. DigiCertIssuerPlugin      — sign the Salesforce CSR via DigiCert API
@@ -33,30 +52,30 @@ import datetime
 import pytest
 import time
 
-# Skip the entire module if live creds are not present
-SF_ORG_URL = os.environ.get("SALESFORCE_ORG_URL")
-SF_CONSUMER_KEY = os.environ.get("SALESFORCE_CONSUMER_KEY")
-SF_PRIVATE_KEY = os.environ.get("SALESFORCE_PRIVATE_KEY", "").replace("\\n", "\n")
-SF_USERNAME = os.environ.get("SALESFORCE_USERNAME")
-DC_API_KEY = os.environ.get("DIGICERT_API_KEY")
-DC_ORG_ID = os.environ.get("DIGICERT_ORG_ID")
-
 pytestmark = pytest.mark.integration
 
-missing = [
-    name for name, val in [
-        ("SALESFORCE_ORG_URL", SF_ORG_URL),
-        ("SALESFORCE_CONSUMER_KEY", SF_CONSUMER_KEY),
-        ("SALESFORCE_PRIVATE_KEY", SF_PRIVATE_KEY),
-        ("SALESFORCE_USERNAME", SF_USERNAME),
-        ("DIGICERT_API_KEY", DC_API_KEY),
-        ("DIGICERT_ORG_ID", DC_ORG_ID),
-    ] if not val
-]
+# Require either Vault config OR direct env var JWT creds
+_has_vault = bool(os.environ.get("VAULT_ADDR") and os.environ.get("VAULT_TOKEN"))
+_has_direct = bool(
+    os.environ.get("SALESFORCE_ORG_URL")
+    and os.environ.get("SALESFORCE_CONSUMER_KEY")
+    and os.environ.get("SALESFORCE_PRIVATE_KEY")
+)
+_has_digicert = bool(os.environ.get("DIGICERT_API_KEY") and os.environ.get("DIGICERT_ORG_ID"))
 
-if missing:
+SF_ORG_URL = os.environ.get("SALESFORCE_ORG_URL", "https://datadog2-dev-ed.my.salesforce.com")
+
+if not (_has_vault or _has_direct):
     pytest.skip(
-        f"Integration tests require env vars: {', '.join(missing)}",
+        "Integration tests require either:"
+        " (1) VAULT_ADDR + VAULT_TOKEN pointing to a Vault with Salesforce creds, or"
+        " (2) SALESFORCE_ORG_URL + SALESFORCE_CONSUMER_KEY + SALESFORCE_PRIVATE_KEY env vars.",
+        allow_module_level=True,
+    )
+
+if not _has_digicert:
+    pytest.skip(
+        "Integration tests require DIGICERT_API_KEY + DIGICERT_ORG_ID for signing tests.",
         allow_module_level=True,
     )
 

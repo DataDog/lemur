@@ -1,21 +1,32 @@
 """
 Salesforce Metadata API client for Lemur certificate management.
 
-Handles JWT Bearer auth and the three Metadata API operations needed
-for cert rotation:
-  1. create_ca_signed_cert   — triggers Salesforce to generate a new key pair + CSR
-  2. get_csr                 — retrieves the PEM CSR from the new cert object
-  3. deploy_signed_cert      — uploads the CA-signed chain back to Salesforce
+Handles auth and the Metadata API operations needed for cert rotation:
+  1. create_ca_signed_cert    — triggers Salesforce to generate a new key pair + CSR
+  2. get_csr                  — retrieves the PEM CSR from the new cert object
+  3. deploy_signed_cert       — uploads the CA-signed chain back to Salesforce
   4. update_site_cert_binding — updates CustomSite to reference the new cert
-  5. list_certificates       — enumerates all Certificate metadata objects (for SourcePlugin)
+  5. list_certificates        — enumerates all Certificate metadata objects (for SourcePlugin)
+
+Auth modes (selected automatically based on available config):
+
+  JWT Bearer (production):
+    Requires SALESFORCE_CONSUMER_KEY + SALESFORCE_PRIVATE_KEY in app config.
+    No user interaction; recommended for production service accounts.
+
+  Username-Password (sandbox/dev):
+    Credentials read from Vault at SALESFORCE_VAULT_PATH (default:
+    kv/data/lemur/salesforce/dev-ed). Vault access via VAULT_ADDR +
+    VAULT_TOKEN (or Kubernetes auth if running in-cluster).
+    Requires a Connected App's consumer_key + consumer_secret also in Vault.
+    Password is concatenated with security_token before sending (Salesforce
+    requirement for non-trusted-IP logins).
 """
 
-import base64
 import time
 import zipfile
 import io
 
-import jwt
 import requests
 from flask import current_app
 
@@ -24,25 +35,54 @@ from flask import current_app
 # Auth
 # ---------------------------------------------------------------------------
 
-def _get_access_token(org_url, consumer_key, private_key_pem):
-    """Obtain a Salesforce access token via JWT Bearer flow.
+def _vault_salesforce_creds(vault_path=None):
+    """Read Salesforce credentials from Vault KV v2.
 
-    No user interaction required; token is valid for ~1 hour.
-    Callers should cache and refresh as needed (Lemur plugin __init__ is
-    called per-request so we keep this simple and re-auth each call for MVP).
+    Expected secret shape at vault_path:
+      {
+        "org_url":         "https://datadog2-dev-ed.my.salesforce.com",
+        "username":        "partner.webints@datadoghq.com",
+        "password":        "...",
+        "security_token":  "...",
+        "consumer_key":    "<Connected App consumer key>",
+        "consumer_secret": "<Connected App consumer secret>",
+      }
     """
+    import hvac
+
+    vault_addr = current_app.config.get("VAULT_ADDR", "http://localhost:8200")
+    vault_token = current_app.config.get("VAULT_TOKEN")
+    path = vault_path or current_app.config.get(
+        "SALESFORCE_VAULT_PATH", "lemur/salesforce/dev-ed"
+    )
+
+    client = hvac.Client(url=vault_addr, token=vault_token)
+    if not client.is_authenticated():
+        raise RuntimeError(f"Cannot authenticate to Vault at {vault_addr}")
+
+    secret = client.secrets.kv.v2.read_secret_version(
+        path=path, mount_point="kv"
+    )
+    return secret["data"]["data"]
+
+
+def _get_access_token_jwt(org_url, consumer_key, private_key_pem):
+    """Obtain a Salesforce access token via JWT Bearer flow (production)."""
+    import jwt as pyjwt
+
     audience = "https://login.salesforce.com"
     if "sandbox" in org_url or "test" in org_url:
         audience = "https://test.salesforce.com"
 
+    username = current_app.config.get("SALESFORCE_USERNAME")
     now = int(time.time())
     payload = {
         "iss": consumer_key,
-        "sub": current_app.config.get("SALESFORCE_USERNAME"),
+        "sub": username,
         "aud": audience,
         "exp": now + 300,
     }
-    assertion = jwt.encode(payload, private_key_pem, algorithm="RS256")
+    assertion = pyjwt.encode(payload, private_key_pem, algorithm="RS256")
 
     resp = requests.post(
         f"{audience}/services/oauth2/token",
@@ -56,12 +96,52 @@ def _get_access_token(org_url, consumer_key, private_key_pem):
     return resp.json()["access_token"]
 
 
-def _session(org_url):
-    """Return an authenticated requests.Session for the given org."""
-    consumer_key = current_app.config["SALESFORCE_CONSUMER_KEY"]
-    private_key_pem = current_app.config["SALESFORCE_PRIVATE_KEY"]
+def _get_access_token_password(creds):
+    """Obtain a Salesforce access token via Username-Password OAuth flow (dev/sandbox).
 
-    token = _get_access_token(org_url, consumer_key, private_key_pem)
+    Salesforce requires password + security_token concatenated when the
+    login IP is not in the org's trusted IP ranges.
+    """
+    login_url = "https://login.salesforce.com"
+    if "sandbox" in creds.get("org_url", "") or "dev-ed" in creds.get("org_url", ""):
+        # Developer Edition orgs use login.salesforce.com, not test.salesforce.com
+        login_url = "https://login.salesforce.com"
+
+    resp = requests.post(
+        f"{login_url}/services/oauth2/token",
+        data={
+            "grant_type": "password",
+            "client_id": creds["consumer_key"],
+            "client_secret": creds["consumer_secret"],
+            "username": creds["username"],
+            "password": creds["password"] + creds.get("security_token", ""),
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
+def _session(org_url, vault_path=None):
+    """Return an authenticated requests.Session for the given org.
+
+    Auth mode selection:
+    - If SALESFORCE_CONSUMER_KEY + SALESFORCE_PRIVATE_KEY are in app config
+      → JWT Bearer (production)
+    - Otherwise, read creds from Vault and use Username-Password flow
+      → Username-Password OAuth (dev/sandbox)
+    """
+    consumer_key = current_app.config.get("SALESFORCE_CONSUMER_KEY")
+    private_key = current_app.config.get("SALESFORCE_PRIVATE_KEY")
+
+    if consumer_key and private_key:
+        # Production: JWT Bearer
+        token = _get_access_token_jwt(org_url, consumer_key, private_key)
+    else:
+        # Dev/sandbox: Username-Password via Vault
+        creds = _vault_salesforce_creds(vault_path)
+        token = _get_access_token_password(creds)
+
     s = requests.Session()
     s.headers.update({"Authorization": f"Bearer {token}"})
     return s
@@ -88,7 +168,7 @@ def create_ca_signed_cert(org_url, cert_developer_name, master_label=None):
 
     Raises on failure.
     """
-    session = _session(org_url)
+    session = _session(org_url, vault_path=current_app.config.get("SALESFORCE_VAULT_PATH"))
     label = master_label or cert_developer_name.replace("_", " ")
 
     # Use Tooling API sObject to create the Certificate record
@@ -120,7 +200,7 @@ def get_csr(org_url, cert_developer_name):
 
     Returns the CSR as a string.
     """
-    session = _session(org_url)
+    session = _session(org_url, vault_path=current_app.config.get("SALESFORCE_VAULT_PATH"))
 
     # Query by DeveloperName to get the record Id and Body
     query = (
@@ -152,7 +232,7 @@ def deploy_signed_cert(org_url, cert_developer_name, signed_pem_chain):
     signed_pem_chain should be the end-entity cert + intermediate(s) concatenated.
     Salesforce activates the cert on the custom domain 4–8 hours after deploy.
     """
-    session = _session(org_url)
+    session = _session(org_url, vault_path=current_app.config.get("SALESFORCE_VAULT_PATH"))
 
     # Build a minimal Metadata API deploy ZIP:
     # certificates/<DeveloperName>.crt  (the signed PEM chain)
@@ -201,7 +281,7 @@ def update_site_cert_binding(org_url, site_developer_name, cert_developer_name):
 
     MVP: logs the required manual step if automated binding is not available.
     """
-    session = _session(org_url)
+    session = _session(org_url, vault_path=current_app.config.get("SALESFORCE_VAULT_PATH"))
 
     # Query for the Network (Experience Cloud site) by DeveloperName
     query = (
@@ -262,7 +342,7 @@ def list_certificates(org_url):
     Only returns signed certs (body contains BEGIN CERTIFICATE, not a CSR).
     Unsigned/pending CSR-only cert objects are skipped.
     """
-    session = _session(org_url)
+    session = _session(org_url, vault_path=current_app.config.get("SALESFORCE_VAULT_PATH"))
 
     query = "SELECT DeveloperName, Body, ExpirationDate FROM Certificate"
     url = f"{_TOOLING.format(org_url=org_url)}/query"
