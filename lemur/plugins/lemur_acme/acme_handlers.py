@@ -663,6 +663,12 @@ class AcmeDnsHandler(AcmeHandler):
             dns_providers = self.dns_providers_for_domain.get(
                 authz_record.target_domain
             )
+            if not dns_providers:
+                current_app.logger.warning(
+                    "Skipping DNS challenge cleanup: no DNS providers found for domain %s",
+                    authz_record.target_domain,
+                )
+                continue
             for dns_provider in dns_providers:
                 # Grab account number (For Route53)
                 dns_provider_options = json.loads(dns_provider.credentials)
@@ -688,12 +694,17 @@ class AcmeDnsHandler(AcmeHandler):
                             host_to_validate,
                             dns_challenge.validation(acme_client.net.key),
                         )
-                    except Exception as e:
+                    except Exception:
                         # If this fails, it's most likely because the record doesn't exist (It was already cleaned up)
                         # or we're not authorized to modify it.
                         metrics.send("cleanup_dns_challenges_error", "counter", 1)
                         capture_exception()
-                        pass
+                        current_app.logger.warning(
+                            "Unable to clean up DNS challenge for domain %s using provider %s",
+                            authz_record.target_domain,
+                            dns_provider.name,
+                            exc_info=True,
+                        )
 
     def get_cname(self, domain):
         """
