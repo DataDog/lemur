@@ -36,6 +36,7 @@ from werkzeug.utils import cached_property
 
 
 from lemur.common import defaults, utils, validators
+from lemur.common.coa_isolation import validate_coa_paths
 from lemur.constants import SUCCESS_METRIC_STATUS, FAILURE_METRIC_STATUS
 from lemur.database import db
 from lemur.domains.models import Domain
@@ -505,6 +506,7 @@ def update_destinations(target, value, initiator):
         )
         return
 
+    validate_coa_paths(value.plugin_name, value.options)
     destination_plugin = plugins.get(value.plugin_name)
     status = FAILURE_METRIC_STATUS
 
