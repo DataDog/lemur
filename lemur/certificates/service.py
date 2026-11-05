@@ -9,7 +9,7 @@
 import json
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from itertools import groupby
 
 import arrow
@@ -274,15 +274,51 @@ def get_all_pending_reissue():
     policy to determine how many days from expiration the certificate must be
     for rotation to be pending.
 
+    Also includes rotation group members with autorotation enabled and no replacement.
+
     :return:
     """
-    return (
+    pending = (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
         .filter(not_(Certificate.pending_cert.any(PendingCertificate.resolved == false())))
         .filter(Certificate.in_rotation_window == true())
         .all()
-    )  # noqa
+    )
+    return include_grouped_certificates(pending)
+
+
+def include_grouped_certificates(pending):
+    """Include current autorotating members of due rotation groups once."""
+    groups = {rotation_group(cert) for cert in pending} - {None}
+    if not groups:
+        return pending
+
+    selected = {cert.id: cert for cert in pending}
+    peers = (
+        Certificate.query.filter(Certificate.rotation == true())
+        .filter(not_(Certificate.replaced.any()))
+        .filter(Certificate.description.contains("[rotation-group:"))
+    )
+    for cert in peers:
+        if rotation_group(cert) in groups:
+            selected[cert.id] = cert
+    group_sizes = Counter(rotation_group(cert) for cert in selected.values())
+    for cert in selected.values():
+        group = rotation_group(cert)
+        if group is not None and group_sizes[group] == 1:
+            current_app.logger.error(
+                "Rotation group %s has no other eligible member for certificate %s; "
+                "check group tags, autorotation, and replacements. Renewing this certificate alone.",
+                group, cert.id,
+            )
+    return list(selected.values())
+
+
+def rotation_group(certificate):
+    """Read the rotation group identifier, independently of key type or CN."""
+    match = re.search(r"\[rotation-group:([^\[\]\s]+)\]", certificate.description or "")
+    return match.group(1) if match else None
 
 
 def find_duplicates(cert):
@@ -550,8 +586,30 @@ def upload(**kwargs):
 
 def create(**kwargs):
     """
-    Creates a new certificate.
+    Creates a new certificate from schema-normalized input.
     """
+    # Validate replacements preserves the predecessor CN and all existing SANs.
+    if kwargs.get("replaces"):
+        common_name = kwargs.get("common_name") or ""
+        names = kwargs.get("extensions", {}).get("sub_alt_names", {}).get("names", [])
+        for predecessor in kwargs["replaces"]:
+            if common_name != (predecessor.cn or ""):
+                raise Exception(
+                    f"Replacement CN must match certificate {predecessor.id}: {predecessor.cn}"
+                )
+            try:
+                previous_names = predecessor.parsed_cert.extensions.get_extension_for_class(
+                    x509.SubjectAlternativeName
+                ).value
+            except x509.ExtensionNotFound:
+                previous_names = []
+            missing = set(previous_names) - set(names)
+            if missing:
+                values = sorted(f"{type(name).__name__}:{name.value}" for name in missing)
+                raise Exception(
+                    f"Replacement cannot remove SANs from certificate {predecessor.id}: {values}"
+                )
+
     # Validate destinations do not overlap accounts for the same plugin and path
     if "destinations" in kwargs:
         dest_plugin_accounts = {}
@@ -1001,9 +1059,11 @@ def get_certificate_primitives(certificate):
     certificate via `create`.
     """
     start, end = calculate_reissue_range(certificate.not_before, certificate.not_after)
-    ser = CertificateInputSchema().load(
-        CertificateOutputSchema().dump(certificate).data
-    )
+    serialized = CertificateOutputSchema().dump(certificate).data
+    # Drop the CSR before loading so its SAN list does not overwrite
+    # the issued certificate's SANs during renewal.
+    serialized.pop("csr", None)
+    ser = CertificateInputSchema().load(serialized)
     assert not ser.errors, "Error re-serializing certificate: %s" % ser.errors
     data = ser.data
 
@@ -1040,9 +1100,6 @@ def reissue_certificate(certificate, notify=None, replace=None, user=None):
     """
     primitives = get_certificate_primitives(certificate)
 
-    if primitives.get("csr"):
-        #  We do not want to re-use the CSR when creating a certificate because this defeats the purpose of rotation.
-        del primitives["csr"]
     if not user:
         primitives["creator"] = certificate.user
 

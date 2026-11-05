@@ -26,7 +26,6 @@ from lemur.sources import service as source_service
 from lemur.users import service as user_service
 from lemur.certificates import service as certificate_service
 
-
 manager = Manager(usage="Handles all source related tasks.")
 
 
@@ -117,6 +116,7 @@ def execute_clean(plugin, certificate, source):
 )
 def sync(source_strings, ttl):
     sources = validate_sources(source_strings)
+    failed_sources = []
     for source in sources:
         status = FAILURE_METRIC_STATUS
 
@@ -150,6 +150,7 @@ def sync(source_strings, ttl):
             status = SUCCESS_METRIC_STATUS
 
         except Exception as e:
+            failed_sources.append(source.label)
             current_app.logger.exception(e)
 
             print("[X] Failed syncing source {label}!\n".format(label=source.label))
@@ -168,6 +169,10 @@ def sync(source_strings, ttl):
             1,
             metric_tags={"source": source.label, "status": status},
         )
+
+    if failed_sources:
+        # Finish the batch before letting Celery or the CLI report failure.
+        raise RuntimeError("Source sync failed for: " + ", ".join(failed_sources))
 
 
 @manager.option(

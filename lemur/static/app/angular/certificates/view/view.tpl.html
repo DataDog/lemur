@@ -137,7 +137,10 @@
                   <uib-tab-heading>Endpoints</uib-tab-heading>
                   <ul class="list-group">
                     <li class="list-group-item" ng-repeat="endpoint in certificate.endpoints">
-                      <span class="pull-right"><label class="label label-default">{{ endpoint.type }}</label></span>
+                      <span class="pull-right">
+                        <label class="label label-default">{{ endpoint.type }}</label>
+                        <label ng-if="endpoint.active === false" class="label label-danger">inactive</label>
+                      </span>
                       <ul class="list-unstyled">
                         <li>{{ endpoint.name }}</li>
                         <li><span class="text-muted">{{ endpoint.dnsname }}</span></li>
