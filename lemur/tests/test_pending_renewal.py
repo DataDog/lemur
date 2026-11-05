@@ -98,7 +98,8 @@ def test_group_expansion_ignores_unresolved_replacements(session, resolved, elig
     )
     due.not_after = arrow.utcnow().shift(days=10)
     peer.not_after = arrow.utcnow().shift(days=90)
-    pending = PendingCertificateFactory(resolved=resolved)
+    pending = PendingCertificateFactory()
+    pending.resolved = resolved
     pending.replaces = [peer]
     session.flush()
 
