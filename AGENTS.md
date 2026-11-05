@@ -1,1 +1,10 @@
 See [CLAUDE.md](./CLAUDE.md) for project documentation and guidelines.
+
+## Running periodic tasks by hand
+
+- Check a task's `soft_time_limit` against its schedule interval before assuming beat cannot overlap it with itself. `certificate_reissue` has a one hour limit against a daily schedule, so the scheduler alone cannot produce two concurrent runs of it and manual invocation is the realistic way to get them. That margin is not universal: limits in `lemur/common/celery.py` range from 600 to 10800 seconds and the intervals live in k8s-resources, so a long task such as `sync_source` (7200 seconds) can sit closer to its interval than it appears.
+- Before triggering a periodic task by hand (`certificate_reissue`, `certificate_rotate`, `sync_source`, `clean_source`, or any other `@celery_app.task` in `lemur/common/celery.py`), confirm the scheduled run is not already in flight. The schedule lives in `chart/config/lemur.conf.py` in k8s-resources, not in this repo.
+- Do not treat the in-task `is_task_active` guard as making this safe. It matches only the same task name with the same arguments, so it never excludes two different tasks that touch the same resource, and it fails open: when `celery_app.control.inspect().active()` returns `None` on a broker timeout, the guard returns `False` and the duplicate run proceeds.
+- Assume a duplicate run will collide rather than hoping it will not. Both runs read the same candidate set at startup and process it in the same order, so they act on the same records at the same time instead of drifting apart.
+- The failure mode is silent. Two runs can each read the same pre-change state and then both write the same external resource (an ACM ARN, a Vault path, a load balancer listener). The later write wins even when it carries older material, and both runs report success.
+- Prefer the narrowest entry point that does the job. Reissuing or syncing one named certificate or source narrows the exposure to that record instead of the whole batch.
