@@ -772,6 +772,11 @@ def test_acm_renewal_survives_delivery_failure(
         common_name="example.com",
         key_type="RSA2048",
         rotation=True,
+        extensions={
+            "sub_alt_names": {
+                "names": [x509.DNSName("example.com"), x509.DNSName("www.example.com")]
+            }
+        },
     )
     with (
         mock.patch.object(service, "create_certificate_roles", return_value=[]),

@@ -298,6 +298,7 @@ def include_grouped_certificates(pending):
     peers = (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
+        .filter(not_(Certificate.pending_cert.any(PendingCertificate.resolved == false())))
         .filter(Certificate.description.contains("[rotation-group:"))
     )
     for cert in peers:

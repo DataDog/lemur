@@ -16,6 +16,7 @@ from lemur.users.models import User
 
 def test_pending_renewal(app, session, crypto_authority, logged_in_user, monkeypatch):
     monkeypatch.setitem(app.config, "ACME_DISABLE_AUTORESOLVE", True)
+    monkeypatch.setitem(app.config, "LEMUR_ALLOW_WEEKEND_EXPIRATION", True)
     old = CertificateFactory(
         rotation=True, rotation_policy=RotationPolicyFactory(days=30)
     )
@@ -84,3 +85,23 @@ def test_pending_reissue_ignores_only_unresolved_replacements(
     candidates = service.get_all_pending_reissue()
     assert (old in candidates) is eligible
     assert other in candidates
+
+
+@pytest.mark.parametrize("resolved, eligible", [(False, False), (True, True)])
+def test_group_expansion_ignores_unresolved_replacements(session, resolved, eligible):
+    policy = RotationPolicyFactory(days=30)
+    due = CertificateFactory(
+        rotation=True, rotation_policy=policy, description="[rotation-group:pending-test]"
+    )
+    peer = CertificateFactory(
+        rotation=True, rotation_policy=policy, description=due.description
+    )
+    due.not_after = arrow.utcnow().shift(days=10)
+    peer.not_after = arrow.utcnow().shift(days=90)
+    pending = PendingCertificateFactory(resolved=resolved)
+    pending.replaces = [peer]
+    session.flush()
+
+    candidates = service.get_all_pending_reissue()
+    assert due in candidates
+    assert (peer in candidates) is eligible

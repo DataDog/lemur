@@ -16,10 +16,13 @@ from lemur.certificates.service import (
 def select_candidates(app):
     def select(pending, peers):
         with patch("lemur.certificates.service.Certificate") as model:
-            current = model.query.filter.return_value.filter.return_value
             due = MagicMock()
+            due.filter.return_value = due
             due.all.return_value = pending
-            current.filter.side_effect = [due, peers]
+            peer_query = MagicMock()
+            peer_query.filter.return_value = peer_query
+            peer_query.__iter__.return_value = iter(peers)
+            model.query.filter.side_effect = [due, peer_query]
             return get_all_pending_reissue()
 
     return select

@@ -15,6 +15,7 @@ def test_destination_upload_metrics(app, fails):
         body="body",
         private_key="key",
         chain="chain",
+        replaces=[],
     )
     destination = SimpleNamespace(
         label="test-destination",
