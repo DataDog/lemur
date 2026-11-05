@@ -135,7 +135,8 @@ def test_healthy_certificate_emits_all_zeros(app):
     ("notifications_disabled", {"notify": False}),
     ("autorotation_disabled_near_expiry", {
         "rotation": False, "endpoints": [SimpleNamespace(active=True)],
-        "not_after": NOW.shift(days=59, seconds=86399),
+        "not_after": NOW.shift(days=29),
+        "rotation_policy": SimpleNamespace(days=30),
     }),
     ("multiple_replacements", {"replaced": [certificate(id=43), certificate(id=44)]}),
     ("expiring_without_replacement", {"not_after": NOW.shift(days=30)}),
@@ -159,7 +160,7 @@ def test_each_reason_emits_one_failure(app, reason, overrides):
      "not_after": NOW.shift(days=1)},
     {"rotation": False, "not_after": NOW.shift(days=1)},
     {"rotation": False, "endpoints": [SimpleNamespace(active=True)],
-     "not_after": NOW.shift(days=60), "rotation_policy": SimpleNamespace(days=120)},
+     "not_after": NOW.shift(days=121), "rotation_policy": SimpleNamespace(days=120)},
     {"not_after": NOW.shift(days=30, seconds=1)},
     {"not_after": NOW.shift(days=1), "replaced": [certificate(id=43)]},
     {"replaces": [certificate(id=40), certificate(id=41)]},
@@ -283,6 +284,46 @@ def test_predicate_soft_timeout_aborts_without_summary(app):
         with pytest.raises(SoftTimeLimitExceeded):
             health.send_certificate_health_metrics()
     assert all(c.args[0] == "certificates.health_check_failed" for c in send.call_args_list)
+
+
+def test_autorotation_disabled_near_expiry_uses_cert_rotation_policy(app):
+    # Cert with a 90-day rotation policy: should fire when expiry < 90 days away.
+    cert = certificate(
+        rotation=False,
+        endpoints=[SimpleNamespace(active=True)],
+        rotation_policy=SimpleNamespace(days=90),
+        not_after=NOW.shift(days=89),
+    )
+    states, summary = emit([cert])
+    assert states[(42, "autorotation_disabled_near_expiry")] == 1
+    assert summary["failed_checks"] == 1
+
+
+def test_autorotation_disabled_near_expiry_not_fired_outside_policy_window(app):
+    # Cert with a 90-day rotation policy but expiry is 91 days away: should not fire.
+    cert = certificate(
+        rotation=False,
+        endpoints=[SimpleNamespace(active=True)],
+        rotation_policy=SimpleNamespace(days=90),
+        not_after=NOW.shift(days=91),
+    )
+    states, summary = emit([cert])
+    assert states[(42, "autorotation_disabled_near_expiry")] == 0
+    assert summary["failed_checks"] == 0
+
+
+def test_autorotation_disabled_near_expiry_falls_back_to_config_default(app):
+    # No rotation policy: should use LEMUR_DEFAULT_ROTATION_INTERVAL (default 60).
+    cert = certificate(
+        rotation=False,
+        endpoints=[SimpleNamespace(active=True)],
+        rotation_policy=None,
+        not_after=NOW.shift(days=59),
+    )
+    states, summary = emit([cert])
+    # rotation_enabled_without_policy fires too (rotation=False here, so it doesn't).
+    assert states[(42, "autorotation_disabled_near_expiry")] == 1
+    assert summary["failed_checks"] == 1
 
 
 def test_metric_transport_error_aborts_without_completed_summary(app):
