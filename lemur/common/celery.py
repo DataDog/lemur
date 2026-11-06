@@ -1572,17 +1572,29 @@ def emit_persist_record_metrics(active_by_ca=None):
 @celery_app.task(soft_time_limit=3600)
 def revalidate_dcv_domains():
     """
-    Proactively retrigger DCV validation (POST) for every base domain with an
-    active certificate, once per day. Complements emit_dcv_expiration_metrics
-    (which only observes); this task acts.
+    Optional extension: proactively retrigger DCV validation (POST) for every
+    base domain with an active certificate, once per day.
+
+    This task is a belt-and-suspenders complement to the monitoring signals
+    (emit_dcv_expiration_metrics / emit_persist_record_metrics). The three
+    alert tiers in dcv.health.domain_status, dcv.health.validated_until_days,
+    and dcv.health.continuous_validation are self-sufficient without it; this
+    task provides an additional revalidation backstop for environments where
+    DigiCert's 5-day background cron has been observed to fail (see CRDL023
+    Appendix 4 — MPIC failures).
+
+    Opt-in: set DCV_AUTO_REVALIDATE_ENABLED = True in deployment config to
+    activate. Disabled by default so that operators can verify monitoring is
+    healthy before enabling automatic revalidation.
 
     Calls revalidate_domain() on each issuer plugin that implements it
     (DigiCert, Sectigo). A short inter-call sleep avoids hammering the CA API.
 
     Emits:
-      dcv.revalidation.triggered   counter  {domain, ca}  -- successful POST
-      dcv.revalidation.error       counter  {domain, ca}  -- failed/not_found
-      dcv.revalidation.domains_processed  gauge  {ca}     -- count per CA
+      dcv.revalidation.triggered          counter  {domain, ca}  -- successful POST
+      dcv.revalidation.error              counter  {domain, ca}  -- failed/not_found
+      dcv.revalidation.domains_processed  gauge    {ca}          -- count per CA
+      dcv.revalidation.skipped            counter                -- task disabled
     """
     function = f"{__name__}.{sys._getframe().f_code.co_name}"
     task_id = None
