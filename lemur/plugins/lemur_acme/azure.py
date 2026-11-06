@@ -1,4 +1,5 @@
 import time
+import dns.exception
 
 from azure.core.exceptions import ResourceNotFoundError
 from azure.mgmt.dns import DnsManagementClient
@@ -69,12 +70,18 @@ def create_txt_record(host, value, account_number):
 
 
 def wait_for_dns_change(change_id, account_number=None):
-    _, zone, _, host, value = change_id
-    nameserver = dnsutil.get_authoritative_nameserver(zone)
+    _, _, _, host, value = change_id
+    last_error = None
     for _ in range(12):
-        if value in dnsutil.get_dns_records(host, "TXT", nameserver):
-            return
+        try:
+            if value in dnsutil.get_dns_records(host, "TXT", raise_errors=True):
+                return
+            last_error = None
+        except dns.exception.DNSException as error:
+            last_error = error
         time.sleep(5)
+    if last_error is not None:
+        raise RuntimeError(f"Azure DNS TXT lookup failed for {host}: {last_error}") from last_error
     raise RuntimeError(f"Azure DNS TXT record did not propagate for {host}")
 
 
