@@ -1990,6 +1990,40 @@ def test_send_certificate_expiration_metrics(certificate):
     assert failure == 0
 
 
+@pytest.mark.parametrize(
+    "endpoint_states, expected",
+    [([], False), ([False], False), ([True], True), ([False, True], True)],
+)
+def test_send_certificate_expiration_metrics_active_endpoints(
+    session, destination_plugin, endpoint_states, expected
+):
+    from lemur.certificates.service import send_certificate_expiration_metrics
+    from lemur.tests.factories import DestinationFactory, EndpointFactory
+
+    cert = create_cert_that_expires_in_days(10)
+    cert.destinations.append(DestinationFactory())
+    for active in endpoint_states:
+        cert.endpoints.append(EndpointFactory(active=active))
+    session.flush()
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        success, failure = send_certificate_expiration_metrics()
+
+    assert failure == 0
+    calls = [
+        call
+        for call in mock_metrics.send.call_args_list
+        if call.kwargs["metric_tags"]["cert_id"] == cert.id
+    ]
+    assert {call.args[0] for call in calls} == {
+        "certificates.days_until_expiration",
+        "certificates.by_destination",
+    }
+    assert all(
+        call.kwargs["metric_tags"]["has_active_endpoints"] is expected for call in calls
+    )
+
+
 def test_send_certificate_expiration_metrics_has_been_replaced_tag(
     session, destination_plugin
 ):
