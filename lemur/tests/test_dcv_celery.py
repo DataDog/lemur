@@ -774,10 +774,10 @@ def test_emit_dcv_expiration_metrics_alerts_on_orphan_expired_domain(
 @patch("lemur.common.celery.plugins")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_dcv_expiration_metrics_emits_days_until_expiry(
+def test_emit_dcv_expiration_metrics_emits_validated_until_days(
     mock_current_app, mock_metrics, mock_plugins, mock_active
 ):
-    # dcv.health.days_until_expiry should be emitted when validated_until is present.
+    # dcv.health.validated_until_days should be emitted when validated_until is present.
     mock_active.return_value = {"digicert": {"datad0g.com"}}
     fake_plugin = MagicMock()
     fake_plugin.slug = "digicert-issuer"
@@ -798,13 +798,23 @@ def test_emit_dcv_expiration_metrics_emits_days_until_expiry(
 
     days_calls = [
         c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[0] == "dcv.health.days_until_expiry"
+        if len(c.args) >= 2 and c.args[0] == "dcv.health.validated_until_days"
     ]
     assert len(days_calls) == 1
     assert days_calls[0].kwargs["metric_tags"]["domain"] == "datad0g.com"
     assert days_calls[0].kwargs["metric_tags"]["ca"] == "digicert"
     # days_left is a small positive or negative integer; just confirm it's numeric
     assert isinstance(days_calls[0].args[2], int)
+
+    # Also assert dcv.health.continuous_validation was emitted (persistent-txt → 1)
+    cv_calls = [
+        c for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2 and c.args[0] == "dcv.health.continuous_validation"
+    ]
+    assert len(cv_calls) == 1
+    assert cv_calls[0].args[2] == 1  # persistent-txt → enrolled
+    assert cv_calls[0].kwargs["metric_tags"]["domain"] == "datad0g.com"
+    assert cv_calls[0].kwargs["metric_tags"]["dcv_method"] == "persistent-txt"
 
 
 @patch("lemur.common.celery._active_domains_by_ca")
@@ -814,7 +824,7 @@ def test_emit_dcv_expiration_metrics_emits_days_until_expiry(
 def test_emit_dcv_expiration_metrics_no_days_gauge_when_no_validated_until(
     mock_current_app, mock_metrics, mock_plugins, mock_active
 ):
-    # No validated_until -> no dcv.health.days_until_expiry emitted (don't error).
+    # No validated_until -> no dcv.health.validated_until_days emitted (don't error).
     mock_active.return_value = {"sectigo": {"datad0g.com"}}
     fake_plugin = MagicMock()
     fake_plugin.slug = "sectigo-issuer"
@@ -835,6 +845,41 @@ def test_emit_dcv_expiration_metrics_no_days_gauge_when_no_validated_until(
 
     days_calls = [
         c for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[0] == "dcv.health.days_until_expiry"
+        if len(c.args) >= 2 and c.args[0] == "dcv.health.validated_until_days"
     ]
     assert len(days_calls) == 0
+
+
+@patch("lemur.common.celery._active_domains_by_ca")
+@patch("lemur.common.celery.plugins")
+@patch("lemur.common.celery.metrics")
+@patch("lemur.common.celery.current_app", new_callable=MagicMock)
+def test_emit_dcv_expiration_metrics_continuous_validation_non_persistent(
+    mock_current_app, mock_metrics, mock_plugins, mock_active
+):
+    # Domain on dns-cname-token -> continuous_validation gauge = 0 (not enrolled).
+    mock_active.return_value = {"digicert": {"datadog.design"}}
+    fake_plugin = MagicMock()
+    fake_plugin.slug = "digicert-issuer"
+    fake_plugin.get_dcv_expiration_data.return_value = [
+        {
+            "domain": "datadog.design",
+            "dcv_method": "dns-cname-token",
+            "dcv_status": "active",
+            "validation_type": "ov",
+            "org_id": "1376962",
+            "validated_until": "2027-03-01T00:00:00+00:00",
+        }
+    ]
+    mock_plugins.all.return_value = [fake_plugin]
+
+    from lemur.common.celery import emit_dcv_expiration_metrics
+    emit_dcv_expiration_metrics()
+
+    cv_calls = [
+        c for c in mock_metrics.send.call_args_list
+        if len(c.args) >= 2 and c.args[0] == "dcv.health.continuous_validation"
+    ]
+    assert len(cv_calls) == 1
+    assert cv_calls[0].args[2] == 0  # dns-cname-token → not enrolled
+    assert cv_calls[0].kwargs["metric_tags"]["dcv_method"] == "dns-cname-token"

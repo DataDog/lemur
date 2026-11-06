@@ -1458,10 +1458,10 @@ def emit_dcv_expiration_metrics():
                             "validation_type": validation_type,
                         },
                     )
-                    # Forewarning metric: days until DCV expires.
-                    # Alert threshold: < 3 days (page), < 7 days (warning).
-                    # Emitted alongside the binary gauge so monitors can alert
-                    # before status flips to expired.
+                    # Forewarning metric: days until CA-reported validation expires.
+                    # Alert threshold: < 3 days (DigiCert-confirmed, Case 05220593).
+                    # If the 5-day background revalidation cycle is healthy, this
+                    # stays 5-9 days out. Dropping below 3 means the cycle failed.
                     validated_until_str = entry.get("validated_until")
                     if validated_until_str:
                         try:
@@ -1478,7 +1478,7 @@ def emit_dcv_expiration_metrics():
                                 )
                             days_left = (exp_dt - datetime.now(timezone.utc)).days
                             metrics.send(
-                                "dcv.health.days_until_expiry",
+                                "dcv.health.validated_until_days",
                                 "gauge",
                                 days_left,
                                 metric_tags={
@@ -1489,10 +1489,31 @@ def emit_dcv_expiration_metrics():
                             )
                         except (ValueError, TypeError, IndexError) as e:
                             current_app.logger.warning(
-                                f"dcv.health.days_until_expiry: could not parse "
+                                f"dcv.health.validated_until_days: could not parse "
                                 f"validated_until={validated_until_str!r} for "
                                 f"{domain} ({ca_name}): {e}"
                             )
+
+                    # Configuration check: is this domain enrolled in the CA's
+                    # automated background revalidation cycle?
+                    # For DigiCert: dcv_method == "persistent-txt" means the domain
+                    # will be picked up by the 5-day background cron (SC-088v3).
+                    # Any other method means it won't be auto-revalidated.
+                    # Alert when 0 (separate lower-severity alert, not a hard page).
+                    # Note: dcv_method from the list endpoint is unreliable as a
+                    # sole health signal (DigiCert Case 05220593) but IS authoritative
+                    # for whether the domain is enrolled in background revalidation.
+                    is_enrolled = 1 if dcv_method.lower() == "persistent-txt" else 0
+                    metrics.send(
+                        "dcv.health.continuous_validation",
+                        "gauge",
+                        is_enrolled,
+                        metric_tags={
+                            "domain": domain,
+                            "ca": ca_name,
+                            "dcv_method": dcv_method,
+                        },
+                    )
                 if domain_broken:
                     broken_by_ca[ca_name] = broken_by_ca.get(ca_name, 0) + 1
             else:

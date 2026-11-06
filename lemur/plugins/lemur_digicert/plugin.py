@@ -524,10 +524,17 @@ class DigiCertIssuerPlugin(IssuerPlugin):
         Returns a list of dicts with a schema shared by all issuer plugins that
         implement this method (see lemur_sectigo):
           - domain: str
-          - validation_type: str  -- "ov" / "ev" (DigiCert)
+          - validation_type: str     -- "ov" / "ev" (DigiCert)
           - org_id: str
-          - dcv_method: str  -- e.g. dns-cname-token, persistent-txt
-          - dcv_status: str  -- active / pending / expired (DigiCert)
+          - dcv_method: str          -- e.g. "dns-cname-token", "persistent-txt".
+                                        "persistent-txt" means the domain is enrolled
+                                        in DigiCert's 5-day background revalidation
+                                        cycle (CA/B Forum SC-088v3). Any other value
+                                        means it will not be automatically revalidated.
+          - dcv_status: str          -- "active" / "pending" / "expired" (normalised)
+          - validated_until: str|None -- ISO-8601 datetime or date string for when
+                                        the CA-reported validation expires.
+                                        Alert when < 3 days away (DigiCert Case 05220593).
         """
         base_url = current_app.config.get("DIGICERT_URL")
         if not base_url:
