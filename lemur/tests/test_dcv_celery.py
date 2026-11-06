@@ -655,10 +655,10 @@ def test_emit_dcv_expiration_metrics_emits_broken_domains_count(
 @patch("lemur.common.celery._active_domains_by_ca")
 @patch("lemur.common.celery.metrics")
 @patch("lemur.common.celery.current_app", new_callable=MagicMock)
-def test_emit_persist_record_metrics_emits_dcv_health(
+def test_emit_persist_record_metrics_emits_persist_txt_record(
     mock_current_app, mock_metrics, mock_active_domains, mock_verify
 ):
-    # persist verification feeds the unified dcv.health gauge per (domain, ca).
+    # persist verification emits dcv.health.persist_txt_record per (domain, ca).
     mock_current_app.config.get.return_value = {
         "digicert.com": "https://digicert.com/account/abc",
         "sectigo.com": "acct:1@sectigo.com",
@@ -680,7 +680,7 @@ def test_emit_persist_record_metrics_emits_dcv_health(
     health = [
         c
         for c in mock_metrics.send.call_args_list
-        if len(c.args) >= 2 and c.args[1] == "gauge" and c.args[0] == "dcv.health"
+        if len(c.args) >= 2 and c.args[1] == "gauge" and c.args[0] == "dcv.health.persist_txt_record"
     ]
     assert len(health) == 3
     by_status = {c.kwargs["metric_tags"]["persist_record_status"]: c.args[2] for c in health}

@@ -1478,16 +1478,20 @@ def emit_dcv_expiration_metrics():
 
 def emit_persist_record_metrics():
     """
-    Verify _validation-persist.<domain> records directly from DNS and emit the
-    persist-record component of the unified dcv.health gauge.
+    Verify _validation-persist.<domain> records directly from DNS and emit
+    dcv.health.persist_txt_record per (domain, ca).
 
     DNS-native complement to emit_dcv_expiration_metrics(): instead of trusting
-    only the CA's reported status, check the persistent record we publish.
-    Both feed the same dcv.health metric family -- this function emits
-    dcv.health{domain, ca, persist_record_status} == 1 when the record is ok,
-    0 when missing / wrong / unparseable / expired / dns_error -- so a single
-    monitor on dcv.health aggregates the CA component (from
-    emit_dcv_expiration_metrics) and this DNS component.
+    only the CA's reported status, verify the persistent record we publish is
+    correct from our own DNS. Emits:
+      dcv.health.persist_txt_record{domain, ca, persist_record_status} == 1 ok
+                                                                         == 0 broken
+
+    This is a DIAGNOSTIC metric, not a paging alert. If the persist record is
+    broken, emit_dcv_expiration_metrics will surface the problem via
+    dcv.health.domain_status at the next CA evaluation cycle. The DNS check
+    provides early warning (before the CA's next 5-day revalidation attempt)
+    and is surfaced in dashboards only.
 
     The domain set is computed from the lemur database (active certificates) via
     the domain-scoped _active_domains_by_ca(), so no cross-environment records
@@ -1518,7 +1522,7 @@ def emit_persist_record_metrics():
         if not ok:
             broken_by_ca[r["ca"]] = broken_by_ca.get(r["ca"], 0) + 1
         metrics.send(
-            "dcv.health",
+            "dcv.health.persist_txt_record",
             "gauge",
             ok,
             metric_tags={
