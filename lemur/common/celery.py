@@ -17,6 +17,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import (
     after_setup_logger,
     after_setup_task_logger,
+    before_task_publish,
     task_failure,
     task_prerun,
     task_received,
@@ -34,6 +35,7 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
+from lemur.common.task_events import mark_scheduled_child, notify_task_failure
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -100,6 +102,27 @@ def make_celery(app):
 
 
 celery_app = make_celery(flask_app)
+
+
+@before_task_publish.connect
+def mark_scheduled_task_children(headers=None, **kwargs):
+    mark_scheduled_child(headers, celery_app.current_task, celery_app.conf.beat_schedule)
+
+
+@task_failure.connect
+def notify_failed_scheduled_task(sender=None, task_id=None, exception=None, **kwargs):
+    # Keep notification failures separate from the existing failure metrics and logs.
+    with flask_app.app_context():
+        try:
+            notify_task_failure(
+                sender,
+                task_id,
+                exception,
+                current_app.config,
+                lambda **event: plugins.get("statsd-metrics").statsd.event(**event),
+            )
+        except Exception:
+            current_app.logger.exception("Unable to submit scheduled task failure event")
 
 
 def report_worker_utilization(consumer):
