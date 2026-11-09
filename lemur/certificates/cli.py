@@ -29,7 +29,6 @@ from lemur.certificates.service import (
     get_by_name,
     get_all_valid_certs,
     get,
-    get_all_certs_attached_to_endpoint_without_autorotate,
     get_all_certs_attached_to_destination_without_autorotate,
     revoke as revoke_certificate,
     list_duplicate_certs_by_authority,
@@ -740,54 +739,6 @@ def check_revoked():
         "gauge",
         (page - 1) * count + len(certs),
     )
-
-
-@manager.command
-def automatically_enable_autorotate_with_endpoint():
-    """
-    This function automatically enables auto-rotation for unexpired certificates that are
-    attached to an endpoint but do not have autorotate enabled.
-
-    WARNING: This will overwrite the Auto-rotate toggle!
-    """
-    log_data = {
-        "function": f"{__name__}.{sys._getframe().f_code.co_name}",
-        "message": "Enabling auto-rotate for certificate",
-    }
-
-    permitted_authorities = current_app.config.get("ENABLE_AUTO_ROTATE_AUTHORITY", [])
-
-    eligible_certs = get_all_certs_attached_to_endpoint_without_autorotate()
-    for cert in eligible_certs:
-
-        if cert.authority_id not in permitted_authorities:
-            continue
-
-        log_data["certificate"] = cert.name
-        log_data["certificate_id"] = cert.id
-        log_data["authority_id"] = cert.authority_id
-        log_data["authority_name"] = authorities_get_by_id(cert.authority_id).name
-        if cert.destinations:
-            log_data["destination_names"] = ", ".join(
-                [d.label for d in cert.destinations]
-            )
-        else:
-            log_data["destination_names"] = "NONE"
-        current_app.logger.info(log_data)
-        metrics.send(
-            "automatically_enable_autorotate_with_endpoint",
-            "counter",
-            1,
-            metric_tags={
-                "certificate": log_data["certificate"],
-                "certificate_id": log_data["certificate_id"],
-                "authority_id": log_data["authority_id"],
-                "authority_name": log_data["authority_name"],
-                "destination_names": log_data["destination_names"],
-            },
-        )
-        cert.rotation = True
-        database.update(cert)
 
 
 @manager.command

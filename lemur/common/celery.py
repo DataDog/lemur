@@ -983,30 +983,6 @@ def send_security_expiration_summary():
 
 
 @celery_app.task(soft_time_limit=3600)
-def enable_autorotate_for_certs_attached_to_endpoint():
-    """
-    This celery task automatically enables autorotation for unexpired certificates that are
-    attached to an endpoint but do not have autorotate enabled.
-    :return:
-    """
-    function = f"{__name__}.{sys._getframe().f_code.co_name}"
-    task_id = None
-    if celery_app.current_task:
-        task_id = celery_app.current_task.request.id
-
-    log_data = {
-        "function": function,
-        "task_id": task_id,
-        "message": "Enabling autorotate to eligible certificates",
-    }
-    current_app.logger.debug(log_data)
-
-    cli_certificate.automatically_enable_autorotate_with_endpoint()
-    metrics.send(f"{function}.success", "counter", 1)
-    return log_data
-
-
-@celery_app.task(soft_time_limit=3600)
 def enable_autorotate_for_certs_attached_to_destination():
     """
     This celery task automatically enables autorotation for unexpired certificates that are

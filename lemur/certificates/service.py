@@ -184,22 +184,6 @@ def get_all_pending_cleaning_expired(source):
     )
 
 
-def get_all_certs_attached_to_endpoint_without_autorotate():
-    """
-    Retrieves all certificates that are attached to an endpoint, but that do not have autorotate enabled.
-
-    :return: list of certificates attached to an endpoint without autorotate
-    """
-    return (
-        Certificate.query.filter(Certificate.endpoints.any())
-        .filter(Certificate.rotation == false())
-        .filter(Certificate.revoked == false())
-        .filter(Certificate.not_after >= arrow.now())
-        .filter(not_(Certificate.replaced.any()))
-        .all()  # noqa
-    )
-
-
 def get_all_certs_attached_to_destination_without_autorotate(plugin_name=None):
     """
     Retrieves all certificates that are attached to a destination, but that do not have autorotate enabled.
