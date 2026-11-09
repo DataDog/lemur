@@ -2002,8 +2002,7 @@ def test_send_certificate_expiration_metrics_active_endpoints(
 
     cert = create_cert_that_expires_in_days(10)
     cert.destinations.append(DestinationFactory())
-    for active in endpoint_states:
-        cert.endpoints.append(EndpointFactory(active=active))
+    cert.endpoints = [EndpointFactory(active=active) for active in endpoint_states]
     session.flush()
 
     with patch("lemur.certificates.service.metrics") as mock_metrics:
