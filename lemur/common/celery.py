@@ -35,7 +35,9 @@ from lemur.certificates import cli as cli_certificate
 from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
-from lemur.common.task_events import mark_scheduled_child, notify_task_failure
+from lemur.common.task_events import (
+    ScheduledTaskErrorHandler, mark_scheduled_child, notify_task_failure,
+)
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
 from lemur.factory import create_app, json_log_formatter
@@ -85,6 +87,12 @@ def make_celery(app):
             for handler in logger.handlers:
                 handler.setFormatter(formatter)
 
+        if not any(isinstance(handler, ScheduledTaskErrorHandler) for handler in logger.handlers):
+            logger.addHandler(ScheduledTaskErrorHandler(
+                lambda: celery.current_task, app.config,
+                lambda **event: plugins.get("statsd-metrics").statsd.event(**event),
+            ))
+
     after_setup_logger.connect(_configure_worker_logging, weak=False)
     after_setup_task_logger.connect(_configure_worker_logging, weak=False)
 
@@ -122,7 +130,7 @@ def notify_failed_scheduled_task(sender=None, task_id=None, exception=None, **kw
                 lambda **event: plugins.get("statsd-metrics").statsd.event(**event),
             )
         except Exception:
-            current_app.logger.exception("Unable to submit scheduled task failure event")
+            current_app.logger.warning("Unable to submit scheduled task failure event")
 
 
 def report_worker_utilization(consumer):

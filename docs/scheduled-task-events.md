@@ -1,8 +1,12 @@
 # Scheduled task failure events
 
-Lemur can send a Datadog error event on a Celery `task_failure` signal. There is
-no recovery event or ongoing monitor state. Celery retries (`task_retry`) do not
-notify; a final failure does. Repeated failed executions generate separate events.
+Lemur sends a Datadog error event when a scheduled task logs ERROR or CRITICAL,
+even if it catches the error and returns success. The `task_failure` signal
+remains a fallback for unlogged failures. Neither hook changes task behavior.
+There is no recovery event or ongoing monitor state. The first error is reported
+once per task request, deduplicating later logs and the failure callback.
+The retry signal itself does not notify, but an error logged before a retry does.
+A retry starts a new request and can report another error, even with the same task ID.
 
 Configure both settings in each deployment to enable notifications:
 
@@ -27,8 +31,7 @@ Events include the task name, execution ID, exception class and a time-bounded
 logs link. Raw arguments, exception messages and tracebacks stay out of events
 to avoid leaking secrets or interpreting arbitrary text as notification mentions.
 
-This reports failures Celery observes. Exceptions caught and swallowed by task
-code, application-level failures returned as successful results, expired/revoked
-tasks and missing executions are not covered. Keep task heartbeat and certificate
+Errors that are not logged at ERROR or CRITICAL and do not escape the task,
+expired/revoked tasks and missing executions are not covered. Keep task heartbeat and certificate
 health monitors. DogStatsD delivery is best effort, not an exactly-once notification
-guarantee; event aggregation keys do not provide application-level deduplication.
+guarantee. Deduplication is local to the request, not durable across worker restarts.

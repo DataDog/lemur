@@ -1,6 +1,7 @@
 """Tests without app services: python3 lemur/tests/test_task_events.py."""
 
 import importlib.util
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -128,6 +129,68 @@ class TaskEventsTest(unittest.TestCase):
     def test_false_marker_does_not_qualify(self):
         self.notify(task("manual", {events.SCHEDULED_HEADER: False}))
         self.send.assert_not_called()
+
+    def error_logger(self, sender):
+        logger = logging.Logger("isolated-task-test", logging.DEBUG)
+        logger.addHandler(events.ScheduledTaskErrorHandler(lambda: sender, self.config, self.send))
+        return logger
+
+    def test_error_log_and_failure_callback_are_deduplicated(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        logger = self.error_logger(sender)
+        logger.error("secret @all")
+        logger.critical("another error")
+        self.notify(sender)
+        self.send.assert_called_once()
+        self.assertIn("reported an error", self.send.call_args.kwargs["title"])
+        self.assertNotIn("secret", self.send.call_args.kwargs["message"])
+
+    def test_warning_and_logs_outside_execution_do_not_notify(self):
+        sender = task()
+        logger = self.error_logger(sender)
+        logger.error("no execution")
+        sender.request.id = "execution-1"
+        logger.warning("warning only")
+        self.error_logger(None).error("outside task")
+        sender.name = "manual"
+        logger.error("manual task")
+        self.send.assert_not_called()
+
+    def test_failure_callback_then_error_log_is_deduplicated(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        self.notify(sender)
+        self.error_logger(sender).error("later error")
+        self.send.assert_called_once()
+
+    def test_recursive_transport_logging_does_not_recurse(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        logger = self.error_logger(sender)
+        self.send.side_effect = lambda **kwargs: logger.error("transport error")
+        logger.error("task error")
+        self.send.assert_called_once()
+
+    def test_transport_failure_does_not_escape_or_prevent_fallback(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        self.send.side_effect = RuntimeError("transport failure")
+        self.error_logger(sender).error("task error")
+        self.assertFalse(sender.request._lemur_reporting_error)
+        self.assertFalse(getattr(sender.request, "_lemur_error_reported", False))
+        self.send.side_effect = None
+        self.notify(sender)
+        self.assertEqual(self.send.call_count, 2)
+
+    def test_new_request_can_report_again(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        logger = self.error_logger(sender)
+        logger.error("first")
+        sender.request = SimpleNamespace(id="execution-2", headers=None)
+        logger.error("second")
+        self.assertEqual(self.send.call_count, 2)
 
 
 if __name__ == "__main__":
