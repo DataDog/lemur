@@ -44,7 +44,7 @@ def notify_task_failure(task, task_id, exception, config, send_event):
     ).format(task.name, task_id, type(exception).__name__, link, recipients)
     send_event(
         title="[Lemur] Scheduled task failed: {}".format(task.name),
-        text=message,
+        message=message,
         alert_type="error",
         aggregation_key=task_id,
         tags=["service:lemur", "task_name:" + task.name, "task_id:" + task_id],

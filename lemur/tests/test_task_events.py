@@ -1,11 +1,13 @@
-"""Dependency-free tests: python3 lemur/tests/test_task_events.py."""
+"""Tests without app services: python3 lemur/tests/test_task_events.py."""
 
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import create_autospec, patch
 from urllib.parse import parse_qs, urlsplit
+
+from datadog import DogStatsd
 
 
 # Loading this small helper directly avoids starting Flask, Redis or a database.
@@ -27,7 +29,7 @@ class TaskEventsTest(unittest.TestCase):
             "CELERY_FAILURE_EVENT_RECIPIENTS": "@slack-test-channel",
             "CELERY_FAILURE_EVENT_LOGS_URL": "https://example.test/logs?storage=flex_tier",
         }
-        self.send = Mock()
+        self.send = create_autospec(DogStatsd().event)
 
     def notify(self, sender=None, execution="execution-1"):
         events.notify_task_failure(
@@ -63,11 +65,11 @@ class TaskEventsTest(unittest.TestCase):
         self.assertEqual(event["alert_type"], "error")
         self.assertEqual(event["aggregation_key"], "execution-1")
         self.assertIn("task_name:scheduled", event["tags"])
-        self.assertIn("ValueError", event["text"])
-        self.assertIn("@slack-test-channel", event["text"])
-        self.assertNotIn("secret", event["text"])
-        self.assertNotIn("@all", event["text"])
-        link = event["text"].split("[Failure logs](", 1)[1].split(")", 1)[0]
+        self.assertIn("ValueError", event["message"])
+        self.assertIn("@slack-test-channel", event["message"])
+        self.assertNotIn("secret", event["message"])
+        self.assertNotIn("@all", event["message"])
+        link = event["message"].split("[Failure logs](", 1)[1].split(")", 1)[0]
         query = parse_qs(urlsplit(link).query)
         self.assertEqual(query["storage"], ["flex_tier"])
         self.assertEqual(query["query"], ['service:lemur "execution-1"'])
@@ -78,7 +80,20 @@ class TaskEventsTest(unittest.TestCase):
     def test_logs_url_without_existing_query(self):
         self.config["CELERY_FAILURE_EVENT_LOGS_URL"] = "https://example.test/logs"
         self.notify()
-        self.assertIn("/logs?query=", self.send.call_args.kwargs["text"])
+        self.assertIn("/logs?query=", self.send.call_args.kwargs["message"])
+
+    def test_real_dogstatsd_client_serializes_event_without_sending(self):
+        client = DogStatsd()
+        with patch.object(client, "_send") as transport:
+            events.notify_task_failure(
+                task(), "execution-1", ValueError("secret @all"), self.config, client.event
+            )
+        transport.assert_called_once()
+        packet = transport.call_args.args[0]
+        self.assertTrue(packet.startswith("_e{"))
+        self.assertIn("Execution: execution-1", packet)
+        self.assertIn("@slack-test-channel", packet)
+        self.assertNotIn("secret", packet)
 
     def test_each_failed_execution_emits_an_event(self):
         self.notify(execution="first")
