@@ -43,6 +43,7 @@ from lemur.extensions import metrics
 from lemur.plugins import lemur_aws as aws, ExpirationNotificationPlugin
 from lemur.plugins.bases import DestinationPlugin, ExportDestinationPlugin, SourcePlugin
 from lemur.plugins.lemur_aws import acm, iam, s3, elb, ec2, sns, cloudfront
+from lemur.plugins.lemur_aws import acm_endpoints
 
 
 def get_region_from_dns(dns):
@@ -91,7 +92,7 @@ def format_elb_cipher_policy(policy):
     return dict(name=name, ciphers=ciphers)
 
 
-def get_elb_endpoints(account_number, region, elb_dict, use_certificate_arn=False):
+def get_elb_endpoints(account_number, region, elb_dict):
     """
     Retrieves endpoint information from elb response data.
     :param account_number:
@@ -113,8 +114,7 @@ def get_elb_endpoints(account_number, region, elb_dict, use_certificate_arn=Fals
             type="elb",
             port=listener["Listener"]["LoadBalancerPort"],
             primary_certificate=dict(
-                name=(listener["Listener"]["SSLCertificateId"] if use_certificate_arn else
-                      iam.get_name_from_arn(listener["Listener"]["SSLCertificateId"])),
+                name=iam.get_name_from_arn(listener["Listener"]["SSLCertificateId"]),
                 path=iam.get_path_from_arn(listener["Listener"]["SSLCertificateId"]),
                 registry_type=iam.get_registry_type_from_arn(
                     listener["Listener"]["SSLCertificateId"]
@@ -138,7 +138,7 @@ def get_elb_endpoints(account_number, region, elb_dict, use_certificate_arn=Fals
     return endpoints
 
 
-def get_elb_endpoints_v2(account_number, region, elb_dict, use_certificate_arn=False):
+def get_elb_endpoints_v2(account_number, region, elb_dict):
     """
     Retrieves endpoint information from elbv2 response data.
     :param account_number:
@@ -180,8 +180,7 @@ def get_elb_endpoints_v2(account_number, region, elb_dict, use_certificate_arn=F
         endpoint["sni_certificates"] = []
         for certificate in listener_certificates["Certificates"]:
             crt = dict(
-                name=(certificate["CertificateArn"] if use_certificate_arn else
-                      iam.get_name_from_arn(certificate["CertificateArn"])),
+                name=iam.get_name_from_arn(certificate["CertificateArn"]),
                 path=iam.get_path_from_arn(certificate["CertificateArn"]),
                 registry_type=iam.get_registry_type_from_arn(
                     certificate["CertificateArn"]
@@ -203,7 +202,7 @@ def get_elb_endpoints_v2(account_number, region, elb_dict, use_certificate_arn=F
     return endpoints
 
 
-def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict, acm_only=False):
+def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict):
     """
     Constructs endpoint data from a distribution response, or None if it does
     not represent a distribution Lemur cares about.
@@ -219,24 +218,21 @@ def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict, acm_
     # Ignore distributions using the default cert for the cloudfront.net domain
     if cert.get("CloudFrontDefaultCertificate"):
         return None
-    if acm_only:
-        cert_arn = cert.get("ACMCertificateArn")
-        if not cert_arn:
-            return None
-        cert_name = cert_arn
-    else:
-        if cert.get("ACMCertificateArn"):
-            return None
-        iam_cert_id = cert.get("IAMCertificateId")
-        if not iam_cert_id:
-            return None
-        cert_arn = cert_id_to_arn.get(iam_cert_id)
-        cert_name = iam.get_name_from_arn(cert_arn) if cert_arn else None
-        if not cert_name:
-            current_app.logger.warning(
-                f"get_distribution_endpoints: no IAM certificate with id {iam_cert_id}"
-            )
-            return None
+    # Ignore ACM certificates, since these are auto-rotated
+    if cert.get("ACMCertificateArn"):
+        return None
+
+    iam_cert_id = cert.get("IAMCertificateId")
+    if not iam_cert_id:
+        return None
+
+    cert_arn = cert_id_to_arn.get(iam_cert_id)
+    cert_name = iam.get_name_from_arn(cert_arn)
+    if not cert_name:
+        current_app.logger.warning(
+            f"get_distribution_endpoints: no IAM certificate with id {iam_cert_id}"
+        )
+        return None
 
     policy = dict(name="cloudfront-none", ciphers=[])
     minimum_version = cert.get("MinimumProtocolVersion")
@@ -692,19 +688,17 @@ class ACMSourcePlugin(SourcePlugin):
         # Do not turn failed discovery into an empty inventory: sync expires
         # endpoints that have not been refreshed within its TTL.
         for load_balancer in elb.get_all_elbs(account_number=account_number, region=region):
-            endpoints.extend(get_elb_endpoints(
-                account_number, region, load_balancer, use_certificate_arn=True
+            endpoints.extend(acm_endpoints.get_elb_endpoints(
+                account_number, region, load_balancer
             ))
         for load_balancer in elb.get_all_elbs_v2(account_number=account_number, region=region):
-            endpoints.extend(get_elb_endpoints_v2(
-                account_number, region, load_balancer, use_certificate_arn=True
+            endpoints.extend(acm_endpoints.get_elb_endpoints_v2(
+                account_number, region, load_balancer
             ))
         # CloudFront's ACM viewer certificates live in us-east-1.
         if region == "us-east-1":
             for distribution in cloudfront.get_all_distributions(account_number=account_number):
-                endpoint = get_distribution_endpoint(
-                    account_number, {}, distribution, acm_only=True
-                )
+                endpoint = acm_endpoints.get_distribution_endpoint(distribution)
                 if endpoint:
                     endpoints.append(endpoint)
 

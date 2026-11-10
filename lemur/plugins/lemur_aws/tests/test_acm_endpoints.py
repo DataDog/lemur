@@ -38,8 +38,9 @@ def test_acm_discovery_reuses_helpers_and_keeps_full_arns(app):
     )
     with mock.patch.object(plugin.elb, "get_all_elbs", return_value=[{}]), \
             mock.patch.object(plugin.elb, "get_all_elbs_v2", return_value=[{}]), \
-            mock.patch.object(plugin, "get_elb_endpoints", return_value=[endpoint()]) as classic, \
-            mock.patch.object(plugin, "get_elb_endpoints_v2", return_value=[alb]) as v2, \
+            mock.patch.object(plugin.acm_endpoints, "get_elb_endpoints",
+                              return_value=[endpoint()]) as classic, \
+            mock.patch.object(plugin.acm_endpoints, "get_elb_endpoints_v2", return_value=[alb]) as v2, \
             mock.patch.object(plugin.cloudfront, "get_all_distributions", return_value=[distribution]), \
             mock.patch.object(plugin.acm, "get_imported_certificates", return_value=[
                 {"arn": ARN}, {"arn": SNI_ARN}
@@ -49,15 +50,15 @@ def test_acm_discovery_reuses_helpers_and_keeps_full_arns(app):
     assert result[1]["sni_certificates"][0]["name"] == SNI_ARN
     assert result[2]["primary_certificate"]["name"] == ARN
     assert result[2]["aliases"] == ["alias.example.com"]
-    classic.assert_called_once_with(ACCOUNT, "us-east-1", {}, use_certificate_arn=True)
-    v2.assert_called_once_with(ACCOUNT, "us-east-1", {}, use_certificate_arn=True)
+    classic.assert_called_once_with(ACCOUNT, "us-east-1", {})
+    v2.assert_called_once_with(ACCOUNT, "us-east-1", {})
     inventory.assert_called_once_with(account_number=ACCOUNT, region="us-east-1")
 
 
 def test_acm_discovery_skips_unmanaged_certificates_and_other_regions_cloudfront(app):
     with mock.patch.object(plugin.elb, "get_all_elbs", return_value=[{}]), \
             mock.patch.object(plugin.elb, "get_all_elbs_v2", return_value=[]), \
-            mock.patch.object(plugin, "get_elb_endpoints", return_value=[endpoint()]), \
+            mock.patch.object(plugin.acm_endpoints, "get_elb_endpoints", return_value=[endpoint()]), \
             mock.patch.object(plugin.cloudfront, "get_all_distributions") as cloudfront, \
             mock.patch.object(plugin.acm, "get_imported_certificates", return_value=[]):
         assert plugin.ACMSourcePlugin().get_endpoints(options("us-west-2")) == []
@@ -78,7 +79,7 @@ def test_cloudfront_iam_behavior_unchanged(app):
     iam_arn = f"arn:aws:iam::{ACCOUNT}:server-certificate/test"
     result = plugin.get_distribution_endpoint(ACCOUNT, {"iam-id": iam_arn}, distribution)
     assert result["primary_certificate"]["name"] == "test"
-    assert plugin.get_distribution_endpoint(ACCOUNT, {}, distribution, acm_only=True) is None
+    assert plugin.acm_endpoints.get_distribution_endpoint(distribution) is None
 
 
 def test_acm_lookup_reads_current_body_without_cached_inventory(app):
@@ -140,7 +141,7 @@ def test_listener_helpers_preserve_acm_arns_without_changing_iam_defaults(app):
                    )])
     assert plugin.get_elb_endpoints(ACCOUNT, "us-east-1", classic)[0][
         "primary_certificate"]["name"] == "primary"
-    assert plugin.get_elb_endpoints(ACCOUNT, "us-east-1", classic, use_certificate_arn=True)[0][
+    assert plugin.acm_endpoints.get_elb_endpoints(ACCOUNT, "us-east-1", classic)[0][
         "primary_certificate"]["name"] == ARN
 
     alb = dict(LoadBalancerName="alb", DNSName="alb.example.com", LoadBalancerArn="lb")
@@ -152,7 +153,7 @@ def test_listener_helpers_preserve_acm_arns_without_changing_iam_defaults(app):
         "Certificates": [dict(CertificateArn=ARN, IsDefault=True),
                          dict(CertificateArn=SNI_ARN, IsDefault=False)]
     }) as certificates:
-        result = plugin.get_elb_endpoints_v2(ACCOUNT, "us-east-1", alb, use_certificate_arn=True)
+        result = plugin.acm_endpoints.get_elb_endpoints_v2(ACCOUNT, "us-east-1", alb)
     assert len(result) == 1
     assert result[0]["primary_certificate"]["name"] == ARN
     assert result[0]["sni_certificates"][0]["name"] == SNI_ARN
@@ -171,3 +172,49 @@ def test_acm_sync_creates_unowned_endpoint(app):
         assert service.sync_endpoints(source) == (1, 0, 1)
     assert create.call_args.kwargs["source"] is source
     assert create.call_args.kwargs["primary_certificate"]["certificate"] is certificate
+
+
+def test_acm_inventory_skips_mixed_listeners(app):
+    alb = dict(LoadBalancerName="alb", DNSName="alb.example.com", LoadBalancerArn="lb")
+    iam_arn = f"arn:aws:iam::{ACCOUNT}:server-certificate/test"
+    with mock.patch.object(plugin.elb, "describe_listeners_v2", return_value={
+        "Listeners": [dict(Protocol="HTTPS", ListenerArn="listener", Port=443)]
+    }), mock.patch.object(plugin.elb, "describe_listener_certificates_v2", return_value={
+        "Certificates": [dict(CertificateArn=ARN, IsDefault=True),
+                         dict(CertificateArn=iam_arn, IsDefault=False)]
+    }), mock.patch.object(plugin.elb, "describe_ssl_policies_v2") as policy:
+        assert plugin.acm_endpoints.get_elb_endpoints_v2(ACCOUNT, "us-east-1", alb) == []
+    policy.assert_not_called()
+
+
+def test_acm_inventory_rejects_missing_default_certificate(app):
+    alb = dict(LoadBalancerName="alb", DNSName="alb.example.com", LoadBalancerArn="lb")
+    with mock.patch.object(plugin.elb, "describe_listeners_v2", return_value={
+        "Listeners": [dict(Protocol="HTTPS", ListenerArn="listener", Port=443)]
+    }), mock.patch.object(plugin.elb, "describe_listener_certificates_v2", return_value={
+        "Certificates": [dict(CertificateArn=ARN, IsDefault=False)]
+    }):
+        with pytest.raises(ValueError, match="default certificate"):
+            plugin.acm_endpoints.get_elb_endpoints_v2(ACCOUNT, "us-east-1", alb)
+
+
+def test_acm_cloudfront_skips_default_and_invalid_certificates(app):
+    for viewer in [{}, {"CloudFrontDefaultCertificate": True},
+                   {"ACMCertificateArn": "arn:invalid"}]:
+        assert plugin.acm_endpoints.get_distribution_endpoint({"ViewerCertificate": viewer}) is None
+
+
+def test_acm_formatters_do_not_call_iam_formatters(app):
+    distribution = dict(Id="distribution", DomainName="test.cloudfront.net",
+                        ViewerCertificate={"ACMCertificateArn": ARN})
+    with mock.patch.object(plugin, "get_distribution_endpoint", side_effect=AssertionError), \
+            mock.patch.object(plugin, "get_elb_endpoints", side_effect=AssertionError), \
+            mock.patch.object(plugin, "get_elb_endpoints_v2", side_effect=AssertionError):
+        assert plugin.acm_endpoints.get_distribution_endpoint(distribution)
+        assert plugin.acm_endpoints.get_elb_endpoints(
+            ACCOUNT, "us-east-1", {"ListenerDescriptions": []}
+        ) == []
+        with mock.patch.object(plugin.elb, "describe_listeners_v2", return_value={"Listeners": []}):
+            assert plugin.acm_endpoints.get_elb_endpoints_v2(
+                ACCOUNT, "us-east-1", {"LoadBalancerArn": "lb"}
+            ) == []
