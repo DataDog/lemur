@@ -81,7 +81,7 @@ def get_imported_certificates(**kwargs):
 
 @sts_client("acm")
 def get_certificate(arn, **kwargs):
-    """Read the current material at an ARN without scanning regional inventory."""
+    """Fetch the certificate currently stored at this ACM ARN."""
     certificate = kwargs.pop("client").get_certificate(CertificateArn=arn)
     return {"body": certificate["Certificate"], "chain": certificate.get("CertificateChain")}
 
