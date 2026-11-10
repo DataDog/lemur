@@ -1679,7 +1679,9 @@ class CertificateRevoke(AuthenticatedResource):
 
         if cert.endpoints:
             for endpoint in cert.endpoints:
-                if service.is_attached_to_endpoint(cert.name, endpoint.name):
+                if service.is_attached_to_endpoint(
+                    cert.name, endpoint.name, endpoint=endpoint
+                ):
                     return (
                         dict(
                             message="Cannot revoke certificate. Endpoints are deployed with the given certificate."
