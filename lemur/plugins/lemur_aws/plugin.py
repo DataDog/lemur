@@ -232,11 +232,11 @@ def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict, acm_
             return None
         cert_arn = cert_id_to_arn.get(iam_cert_id)
         cert_name = iam.get_name_from_arn(cert_arn) if cert_arn else None
-    if not cert_name:
-        current_app.logger.warning(
-            f"get_distribution_endpoints: no IAM certificate with id {iam_cert_id}"
-        )
-        return None
+        if not cert_name:
+            current_app.logger.warning(
+                f"get_distribution_endpoints: no IAM certificate with id {iam_cert_id}"
+            )
+            return None
 
     policy = dict(name="cloudfront-none", ciphers=[])
     minimum_version = cert.get("MinimumProtocolVersion")
