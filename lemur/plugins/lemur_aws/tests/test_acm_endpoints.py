@@ -49,8 +49,8 @@ def test_acm_discovery_reuses_helpers_and_keeps_full_arns(app):
     assert result[1]["sni_certificates"][0]["name"] == SNI_ARN
     assert result[2]["primary_certificate"]["name"] == ARN
     assert result[2]["aliases"] == ["alias.example.com"]
-    classic.assert_called_once_with(ACCOUNT, "us-east-1", {}, preserve_arn=True)
-    v2.assert_called_once_with(ACCOUNT, "us-east-1", {}, preserve_arn=True)
+    classic.assert_called_once_with(ACCOUNT, "us-east-1", {}, use_certificate_arn=True)
+    v2.assert_called_once_with(ACCOUNT, "us-east-1", {}, use_certificate_arn=True)
     inventory.assert_called_once_with(account_number=ACCOUNT, region="us-east-1")
 
 
@@ -140,7 +140,7 @@ def test_listener_helpers_preserve_acm_arns_without_changing_iam_defaults(app):
                    )])
     assert plugin.get_elb_endpoints(ACCOUNT, "us-east-1", classic)[0][
         "primary_certificate"]["name"] == "primary"
-    assert plugin.get_elb_endpoints(ACCOUNT, "us-east-1", classic, preserve_arn=True)[0][
+    assert plugin.get_elb_endpoints(ACCOUNT, "us-east-1", classic, use_certificate_arn=True)[0][
         "primary_certificate"]["name"] == ARN
 
     alb = dict(LoadBalancerName="alb", DNSName="alb.example.com", LoadBalancerArn="lb")
@@ -152,7 +152,7 @@ def test_listener_helpers_preserve_acm_arns_without_changing_iam_defaults(app):
         "Certificates": [dict(CertificateArn=ARN, IsDefault=True),
                          dict(CertificateArn=SNI_ARN, IsDefault=False)]
     }) as certificates:
-        result = plugin.get_elb_endpoints_v2(ACCOUNT, "us-east-1", alb, preserve_arn=True)
+        result = plugin.get_elb_endpoints_v2(ACCOUNT, "us-east-1", alb, use_certificate_arn=True)
     assert len(result) == 1
     assert result[0]["primary_certificate"]["name"] == ARN
     assert result[0]["sni_certificates"][0]["name"] == SNI_ARN

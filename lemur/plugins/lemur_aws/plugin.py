@@ -91,7 +91,7 @@ def format_elb_cipher_policy(policy):
     return dict(name=name, ciphers=ciphers)
 
 
-def get_elb_endpoints(account_number, region, elb_dict, preserve_arn=False):
+def get_elb_endpoints(account_number, region, elb_dict, use_certificate_arn=False):
     """
     Retrieves endpoint information from elb response data.
     :param account_number:
@@ -113,7 +113,7 @@ def get_elb_endpoints(account_number, region, elb_dict, preserve_arn=False):
             type="elb",
             port=listener["Listener"]["LoadBalancerPort"],
             primary_certificate=dict(
-                name=(listener["Listener"]["SSLCertificateId"] if preserve_arn else
+                name=(listener["Listener"]["SSLCertificateId"] if use_certificate_arn else
                       iam.get_name_from_arn(listener["Listener"]["SSLCertificateId"])),
                 path=iam.get_path_from_arn(listener["Listener"]["SSLCertificateId"]),
                 registry_type=iam.get_registry_type_from_arn(
@@ -138,7 +138,7 @@ def get_elb_endpoints(account_number, region, elb_dict, preserve_arn=False):
     return endpoints
 
 
-def get_elb_endpoints_v2(account_number, region, elb_dict, preserve_arn=False):
+def get_elb_endpoints_v2(account_number, region, elb_dict, use_certificate_arn=False):
     """
     Retrieves endpoint information from elbv2 response data.
     :param account_number:
@@ -180,7 +180,7 @@ def get_elb_endpoints_v2(account_number, region, elb_dict, preserve_arn=False):
         endpoint["sni_certificates"] = []
         for certificate in listener_certificates["Certificates"]:
             crt = dict(
-                name=(certificate["CertificateArn"] if preserve_arn else
+                name=(certificate["CertificateArn"] if use_certificate_arn else
                       iam.get_name_from_arn(certificate["CertificateArn"])),
                 path=iam.get_path_from_arn(certificate["CertificateArn"]),
                 registry_type=iam.get_registry_type_from_arn(
@@ -693,11 +693,11 @@ class ACMSourcePlugin(SourcePlugin):
         # endpoints that have not been refreshed within its TTL.
         for load_balancer in elb.get_all_elbs(account_number=account_number, region=region):
             endpoints.extend(get_elb_endpoints(
-                account_number, region, load_balancer, preserve_arn=True
+                account_number, region, load_balancer, use_certificate_arn=True
             ))
         for load_balancer in elb.get_all_elbs_v2(account_number=account_number, region=region):
             endpoints.extend(get_elb_endpoints_v2(
-                account_number, region, load_balancer, preserve_arn=True
+                account_number, region, load_balancer, use_certificate_arn=True
             ))
         # CloudFront's ACM viewer certificates live in us-east-1.
         if region == "us-east-1":
