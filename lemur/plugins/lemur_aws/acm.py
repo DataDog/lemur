@@ -88,14 +88,7 @@ def get_certificate(arn, **kwargs):
 
 @sts_client("acm")
 def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
-    """Import new certificates, or reimport an explicit replacement at the same ARN.
-
-    Reimport deploys the renewal to all consumers of the ARN as AWS propagates it.
-    It does not wait for Lemur's endpoint rotation task.
-
-    ACM list results are eventually consistent, so rapid concurrent or post-timeout
-    retries can import duplicates before the first import becomes visible.
-    """
+    """Import a certificate, reusing its predecessor's ARN when replacing it."""
     assert isinstance(private_key, str)
     client = kwargs.pop("client")
     fingerprint = certificate_fingerprint(body)
