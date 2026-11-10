@@ -693,8 +693,7 @@ class ACMSourcePlugin(SourcePlugin):
         account_number = self.get_option("accountNumber", options)
         region = self.get_option("region", options)
         endpoints = []
-        # Do not turn failed discovery into an empty inventory: sync expires
-        # endpoints that have not been refreshed within its TTL.
+        # Fail on discovery errors to avoid deleting valid endpoint records.
         for load_balancer in elb.get_all_elbs(account_number=account_number, region=region):
             endpoints.extend(acm_endpoints.get_elb_endpoints(
                 account_number, region, load_balancer
@@ -710,8 +709,7 @@ class ACMSourcePlugin(SourcePlugin):
                 if endpoint:
                     endpoints.append(endpoint)
 
-        # Imported certificates only. Build one fresh ARN lookup for this discovery,
-        # not a plugin-level cache that could survive a reimport.
+        # Refresh the ARN inventory to account for certificates added or deleted since the last sync.
         inventory = {
             cert["arn"]: cert for cert in acm.get_imported_certificates(
                 account_number=account_number, region=region
