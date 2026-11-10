@@ -91,7 +91,7 @@ def format_elb_cipher_policy(policy):
     return dict(name=name, ciphers=ciphers)
 
 
-def get_elb_endpoints(account_number, region, elb_dict):
+def get_elb_endpoints(account_number, region, elb_dict, preserve_arn=False):
     """
     Retrieves endpoint information from elb response data.
     :param account_number:
@@ -113,7 +113,8 @@ def get_elb_endpoints(account_number, region, elb_dict):
             type="elb",
             port=listener["Listener"]["LoadBalancerPort"],
             primary_certificate=dict(
-                name=iam.get_name_from_arn(listener["Listener"]["SSLCertificateId"]),
+                name=(listener["Listener"]["SSLCertificateId"] if preserve_arn else
+                      iam.get_name_from_arn(listener["Listener"]["SSLCertificateId"])),
                 path=iam.get_path_from_arn(listener["Listener"]["SSLCertificateId"]),
                 registry_type=iam.get_registry_type_from_arn(
                     listener["Listener"]["SSLCertificateId"]
@@ -137,7 +138,7 @@ def get_elb_endpoints(account_number, region, elb_dict):
     return endpoints
 
 
-def get_elb_endpoints_v2(account_number, region, elb_dict):
+def get_elb_endpoints_v2(account_number, region, elb_dict, preserve_arn=False):
     """
     Retrieves endpoint information from elbv2 response data.
     :param account_number:
@@ -179,7 +180,8 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
         endpoint["sni_certificates"] = []
         for certificate in listener_certificates["Certificates"]:
             crt = dict(
-                name=iam.get_name_from_arn(certificate["CertificateArn"]),
+                name=(certificate["CertificateArn"] if preserve_arn else
+                      iam.get_name_from_arn(certificate["CertificateArn"])),
                 path=iam.get_path_from_arn(certificate["CertificateArn"]),
                 registry_type=iam.get_registry_type_from_arn(
                     certificate["CertificateArn"]
@@ -201,7 +203,7 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
     return endpoints
 
 
-def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict):
+def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict, acm_only=False):
     """
     Constructs endpoint data from a distribution response, or None if it does
     not represent a distribution Lemur cares about.
@@ -217,16 +219,19 @@ def get_distribution_endpoint(account_number, cert_id_to_arn, distrib_dict):
     # Ignore distributions using the default cert for the cloudfront.net domain
     if cert.get("CloudFrontDefaultCertificate"):
         return None
-    # Ignore ACM certificates, since these are auto-rotated
-    if cert.get("ACMCertificateArn"):
-        return None
-
-    iam_cert_id = cert.get("IAMCertificateId")
-    if not iam_cert_id:
-        return None
-
-    cert_arn = cert_id_to_arn.get(iam_cert_id)
-    cert_name = iam.get_name_from_arn(cert_arn)
+    if acm_only:
+        cert_arn = cert.get("ACMCertificateArn")
+        if not cert_arn:
+            return None
+        cert_name = cert_arn
+    else:
+        if cert.get("ACMCertificateArn"):
+            return None
+        iam_cert_id = cert.get("IAMCertificateId")
+        if not iam_cert_id:
+            return None
+        cert_arn = cert_id_to_arn.get(iam_cert_id)
+        cert_name = iam.get_name_from_arn(cert_arn) if cert_arn else None
     if not cert_name:
         current_app.logger.warning(
             f"get_distribution_endpoints: no IAM certificate with id {iam_cert_id}"
@@ -648,7 +653,7 @@ class ACMSourcePlugin(SourcePlugin):
     sync_replaced_certificates = True
     title = "AWS-ACM"
     slug = "aws-acm-source"
-    description = "Discovers imported certificates in one AWS ACM account and region"
+    description = "Discovers imported ACM certificates and their endpoints in one account and region"
     version = aws.VERSION
 
     author = "Datadog"
@@ -681,7 +686,50 @@ class ACMSourcePlugin(SourcePlugin):
         ]
 
     def get_endpoints(self, options, **kwargs):
-        return []
+        account_number = self.get_option("accountNumber", options)
+        region = self.get_option("region", options)
+        endpoints = []
+        # Do not turn failed discovery into an empty inventory: sync expires
+        # endpoints that have not been refreshed within its TTL.
+        for load_balancer in elb.get_all_elbs(account_number=account_number, region=region):
+            endpoints.extend(get_elb_endpoints(
+                account_number, region, load_balancer, preserve_arn=True
+            ))
+        for load_balancer in elb.get_all_elbs_v2(account_number=account_number, region=region):
+            endpoints.extend(get_elb_endpoints_v2(
+                account_number, region, load_balancer, preserve_arn=True
+            ))
+        # CloudFront's ACM viewer certificates live in us-east-1.
+        if region == "us-east-1":
+            for distribution in cloudfront.get_all_distributions(account_number=account_number):
+                endpoint = get_distribution_endpoint(
+                    account_number, {}, distribution, acm_only=True
+                )
+                if endpoint:
+                    endpoints.append(endpoint)
+
+        # Imported certificates only. Build one fresh ARN lookup for this discovery,
+        # not a plugin-level cache that could survive a reimport.
+        inventory = {
+            cert["arn"]: cert for cert in acm.get_imported_certificates(
+                account_number=account_number, region=region
+            )
+        }
+        return [endpoint for endpoint in endpoints if all(
+            cert["name"] in inventory for cert in
+            [endpoint["primary_certificate"]] + endpoint.get("sni_certificates", [])
+        )]
+
+    def get_certificate_by_name(self, certificate_name, options):
+        account_number = self.get_option("accountNumber", options)
+        region = self.get_option("region", options)
+        parts = certificate_name.split(":", 5)
+        if (len(parts) != 6 or parts[2] != "acm" or parts[3] != region
+                or parts[4] != account_number):
+            raise ValueError("ACM endpoint certificate ARN does not match the source")
+        return acm.get_certificate(
+            certificate_name, account_number=account_number, region=region
+        )
 
 
 class AWSDestinationPlugin(DestinationPlugin):

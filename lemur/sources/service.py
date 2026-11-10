@@ -108,6 +108,12 @@ def sync_endpoints(source):
             else:
                 raise e
 
+        if (source.plugin_name == "aws-acm-source" and exists and exists.source
+                and exists.source.plugin_name == "aws-source"):
+            # IAM owns consumer updates for these endpoints. ACM discovery must
+            # not take ownership or change their certificate associations.
+            continue
+
         if "primary_certificate" in endpoint:
             crt_name = endpoint["primary_certificate"]["name"]
             current_app.logger.debug(

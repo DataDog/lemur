@@ -224,7 +224,6 @@ def test_acm_source_returns_only_certificate_material(app):
         result = source.get_certificates(options)
 
     assert result == [{"body": SAN_CERT_STR, "chain": INTERMEDIATE_CERT_STR}]
-    assert source.get_endpoints(options) == []
     get_certificates.assert_called_once_with(
         account_number="123456789012", region="us-west-2"
     )

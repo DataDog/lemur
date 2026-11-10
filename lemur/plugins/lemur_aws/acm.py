@@ -80,6 +80,13 @@ def get_imported_certificates(**kwargs):
 
 
 @sts_client("acm")
+def get_certificate(arn, **kwargs):
+    """Read the current material at an ARN without scanning regional inventory."""
+    certificate = kwargs.pop("client").get_certificate(CertificateArn=arn)
+    return {"body": certificate["Certificate"], "chain": certificate.get("CertificateChain")}
+
+
+@sts_client("acm")
 def upload_cert(body, private_key, cert_chain=None, replaces=(), **kwargs):
     """Import new certificates, or reimport an explicit replacement at the same ARN.
 
