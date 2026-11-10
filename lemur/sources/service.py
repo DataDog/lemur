@@ -110,8 +110,7 @@ def sync_endpoints(source):
 
         if (source.plugin_name == "aws-acm-source" and exists and exists.source
                 and exists.source.plugin_name == "aws-source"):
-            # IAM owns consumer updates for these endpoints. ACM discovery must
-            # not take ownership or change their certificate associations.
+            # Prefer IAM ownership: IAM rotates endpoints; ACM only inventories them.
             continue
 
         if "primary_certificate" in endpoint:
