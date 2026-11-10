@@ -56,8 +56,8 @@ def get_elb_endpoints_v2(account_number, region, load_balancer):
         if not certificates or not all(is_acm(cert["CertificateArn"]) for cert in certificates):
             continue
         primary = [cert for cert in certificates if cert.get("IsDefault", False)]
-        if len(primary) != 1:
-            raise ValueError("Expected one default certificate on an ACM listener")
+        if len(primary) > 1:
+            raise ValueError("Multiple default certificates on an ACM listener")
         policy = dict(name="elbv2-none", ciphers=[])
         if listener.get("SslPolicy"):
             policies = elb.describe_ssl_policies_v2(
@@ -66,13 +66,15 @@ def get_elb_endpoints_v2(account_number, region, load_balancer):
             for item in policies:
                 policy["name"] = item["Name"]
                 policy["ciphers"].extend(cipher["Name"] for cipher in item["Ciphers"])
-        endpoints.append(dict(
+        endpoint = dict(
             name=load_balancer["LoadBalancerName"], dnsname=load_balancer["DNSName"],
             type="elbv2", port=listener["Port"], policy=policy,
-            primary_certificate=certificate_reference(primary[0]["CertificateArn"]),
             sni_certificates=[certificate_reference(cert["CertificateArn"])
                               for cert in certificates if not cert.get("IsDefault", False)],
-        ))
+        )
+        if primary:
+            endpoint["primary_certificate"] = certificate_reference(primary[0]["CertificateArn"])
+        endpoints.append(endpoint)
     return endpoints
 
 
