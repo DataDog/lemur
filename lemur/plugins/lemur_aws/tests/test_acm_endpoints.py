@@ -171,3 +171,120 @@ def test_acm_sync_creates_unowned_endpoint(app):
         assert service.sync_endpoints(source) == (1, 0, 1)
     assert create.call_args.kwargs["source"] is source
     assert create.call_args.kwargs["primary_certificate"]["certificate"] is certificate
+
+
+def test_acm_discovery_keeps_listener_without_default_certificate(app):
+    """primary_certificate is optional: a listener may carry SNI certificates only."""
+    sni_only = dict(
+        name="sni-only", dnsname="sni.example.com", port=443, type="elbv2",
+        sni_certificates=[dict(name=SNI_ARN, path="", registry_type="acm")],
+        policy=dict(name="sni-only", ciphers=[]),
+    )
+    with mock.patch.object(plugin.elb, "get_all_elbs", return_value=[]), \
+            mock.patch.object(plugin.elb, "get_all_elbs_v2", return_value=[{}]), \
+            mock.patch.object(plugin, "get_elb_endpoints_v2", return_value=[sni_only]), \
+            mock.patch.object(plugin.cloudfront, "get_all_distributions", return_value=[]), \
+            mock.patch.object(plugin.acm, "get_imported_certificates",
+                              return_value=[{"arn": SNI_ARN}]):
+        result = plugin.ACMSourcePlugin().get_endpoints(options())
+    assert [e["name"] for e in result] == ["sni-only"]
+
+
+def test_acm_discovery_drops_endpoint_without_any_certificate(app):
+    """An endpoint carrying no certificate at all does not belong to the ACM source."""
+    bare = dict(name="bare", dnsname="bare.example.com", port=443, type="elbv2",
+                policy=dict(name="bare", ciphers=[]))
+    with mock.patch.object(plugin.elb, "get_all_elbs", return_value=[]), \
+            mock.patch.object(plugin.elb, "get_all_elbs_v2", return_value=[{}]), \
+            mock.patch.object(plugin, "get_elb_endpoints_v2", return_value=[bare]), \
+            mock.patch.object(plugin.cloudfront, "get_all_distributions", return_value=[]), \
+            mock.patch.object(plugin.acm, "get_imported_certificates", return_value=[]):
+        assert plugin.ACMSourcePlugin().get_endpoints(options()) == []
+
+
+def test_acm_discovery_excludes_mixed_iam_and_acm_listener(app):
+    """An IAM primary with an ACM SNI stays owned by the IAM source."""
+    mixed = endpoint(arn=f"arn:aws:iam::{ACCOUNT}:server-certificate/legacy")
+    mixed["primary_certificate"]["registry_type"] = "iam"
+    mixed["sni_certificates"] = [dict(name=SNI_ARN, path="", registry_type="acm")]
+    with mock.patch.object(plugin.elb, "get_all_elbs", return_value=[]), \
+            mock.patch.object(plugin.elb, "get_all_elbs_v2", return_value=[{}]), \
+            mock.patch.object(plugin, "get_elb_endpoints_v2", return_value=[mixed]), \
+            mock.patch.object(plugin.cloudfront, "get_all_distributions", return_value=[]), \
+            mock.patch.object(plugin.acm, "get_imported_certificates",
+                              return_value=[{"arn": SNI_ARN}]):
+        assert plugin.ACMSourcePlugin().get_endpoints(options()) == []
+
+
+def test_acm_discovery_excludes_endpoint_with_unimported_certificate(app):
+    """One AWS-issued certificate on the listener excludes the whole endpoint."""
+    alb = endpoint()
+    alb["sni_certificates"] = [dict(name=SNI_ARN, path="", registry_type="acm")]
+    with mock.patch.object(plugin.elb, "get_all_elbs", return_value=[]), \
+            mock.patch.object(plugin.elb, "get_all_elbs_v2", return_value=[{}]), \
+            mock.patch.object(plugin, "get_elb_endpoints_v2", return_value=[alb]), \
+            mock.patch.object(plugin.cloudfront, "get_all_distributions", return_value=[]), \
+            mock.patch.object(plugin.acm, "get_imported_certificates",
+                              return_value=[{"arn": ARN}]):
+        assert plugin.ACMSourcePlugin().get_endpoints(options()) == []
+
+
+def test_acm_only_still_skips_cloudfront_default_certificate(app):
+    """The *.cloudfront.net default certificate is skipped in ACM mode too."""
+    distribution = dict(
+        Id="distribution", DomainName="test.cloudfront.net",
+        ViewerCertificate={"CloudFrontDefaultCertificate": True,
+                           "ACMCertificateArn": ARN},
+    )
+    assert plugin.get_distribution_endpoint(
+        ACCOUNT, {}, distribution, acm_only=True
+    ) is None
+
+
+@pytest.mark.parametrize("certificate_name", [
+    "primary",
+    f"arn:aws:iam::{ACCOUNT}:server-certificate/primary",
+    f"arn:aws:acm:us-west-2:{ACCOUNT}:certificate/primary",
+    "arn:aws:acm:us-east-1:999999999999:certificate/primary",
+])
+def test_acm_lookup_rejects_foreign_arns(app, certificate_name):
+    with pytest.raises(ValueError):
+        plugin.ACMSourcePlugin().get_certificate_by_name(certificate_name, options())
+
+
+def test_discovery_failure_does_not_expire_endpoints(app):
+    """A failed discovery must abort the sync, not look like an empty inventory.
+    expire_endpoints deletes endpoints past ttl_hours, which defaults to 2."""
+    source = SimpleNamespace(plugin_name="aws-acm-source", label="acm", options=[])
+    with mock.patch.object(service, "sync_certificates", return_value=(0, 0, 0)), \
+            mock.patch.object(service, "sync_endpoints",
+                              side_effect=RuntimeError("denied")), \
+            mock.patch.object(service, "expire_endpoints") as expire, \
+            mock.patch.object(service, "capture_exception"), \
+            mock.patch.object(service, "metrics"):
+        with pytest.raises(RuntimeError, match="denied"):
+            service.sync(source, user=None)
+    expire.assert_not_called()
+
+
+def test_endpoint_follows_reimported_material(app):
+    """Reimport changes the body behind a stable ARN. Resolution keys on the body,
+    so the endpoint follows the new certificate with no rotation step."""
+    source = SimpleNamespace(plugin_name="aws-acm-source", label="acm", options=[])
+    old_certificate, new_certificate = object(), object()
+    acm_source = mock.Mock()
+    acm_source.get_certificate_by_name.side_effect = [{"body": "old"}, {"body": "new"}]
+    with mock.patch.object(service.plugins, "get", return_value=acm_source), \
+            mock.patch.object(service.certificate_service, "get_by_name",
+                              return_value=None), \
+            mock.patch.object(service, "find_cert", side_effect=[
+                ([old_certificate], 1), ([new_certificate], 1)
+            ]) as find:
+        first, _ = service.get_cert_for_endpoint(source, endpoint(), ARN)
+        second, _ = service.get_cert_for_endpoint(source, endpoint(), ARN)
+    assert first is old_certificate
+    assert second is new_certificate
+    # Same ARN both times, but find_cert saw the current material each time.
+    assert [call.args[0]["body"] for call in find.call_args_list] == ["old", "new"]
+    assert [call.args[0] for call in acm_source.get_certificate_by_name.call_args_list] \
+        == [ARN, ARN]

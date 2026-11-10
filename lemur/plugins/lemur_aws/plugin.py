@@ -648,8 +648,16 @@ class AWSSourcePlugin(SourcePlugin):
         return certificate_names
 
 
+def _endpoint_certificates(endpoint):
+    """Every certificate on an endpoint. The primary is optional: an ALB listener
+    can list SNI certificates without a default, and sync_endpoints already
+    treats primary_certificate as optional."""
+    primary = endpoint.get("primary_certificate")
+    return ([primary] if primary else []) + endpoint.get("sni_certificates", [])
+
+
 class ACMSourcePlugin(SourcePlugin):
-    # Reimport replaces the old certificate in ACM while keeping the same ARN.
+    # Reimport removes the predecessor's material from ACM without deleting its ARN.
     sync_replaced_certificates = True
     title = "AWS-ACM"
     slug = "aws-acm-source"
@@ -715,10 +723,12 @@ class ACMSourcePlugin(SourcePlugin):
                 account_number=account_number, region=region
             )
         }
-        return [endpoint for endpoint in endpoints if all(
-            cert["name"] in inventory for cert in
-            [endpoint["primary_certificate"]] + endpoint.get("sni_certificates", [])
-        )]
+        return [
+            endpoint for endpoint in endpoints
+            if _endpoint_certificates(endpoint)
+            and all(cert["name"] in inventory
+                    for cert in _endpoint_certificates(endpoint))
+        ]
 
     def get_certificate_by_name(self, certificate_name, options):
         account_number = self.get_option("accountNumber", options)
