@@ -649,7 +649,7 @@ class AWSSourcePlugin(SourcePlugin):
 
 
 class ACMSourcePlugin(SourcePlugin):
-    # Reimport removes the predecessor's material from ACM without deleting its ARN.
+    # Reimport replaces the old certificate in ACM while keeping the same ARN.
     sync_replaced_certificates = True
     title = "AWS-ACM"
     slug = "aws-acm-source"
