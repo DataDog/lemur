@@ -17,6 +17,7 @@ from sqlalchemy import cast
 from sqlalchemy_utils import ArrowType
 
 from lemur import database
+from lemur.common.coa_isolation import validate_coa_paths
 from lemur.sources.models import Source
 from lemur.certificates.models import Certificate
 from lemur.certificates import service as certificate_service
@@ -75,6 +76,7 @@ def sync_update_destination(certificate, source):
 
 
 def sync_endpoints(source):
+    validate_coa_paths(source.plugin_name, source.options)
     new, updated, updated_by_hash = 0, 0, 0
     current_app.logger.debug("Retrieving endpoints from {0}".format(source.label))
     s = plugins.get(source.plugin_name)
@@ -326,6 +328,7 @@ def find_cert(certificate):
 
 # TODO this is very slow as we don't batch update certificates
 def sync_certificates(source, user):
+    validate_coa_paths(source.plugin_name, source.options)
     new, updated, updated_by_hash, unlinked = 0, 0, 0, 0
 
     current_app.logger.debug("Retrieving certificates from {0}".format(source.label))
@@ -444,6 +447,7 @@ def create(label, plugin_name, options, description=None):
     :rtype: Source
     :return: New source
     """
+    validate_coa_paths(plugin_name, options)
     source = Source(
         label=label, options=options, plugin_name=plugin_name, description=description
     )
@@ -463,6 +467,7 @@ def update(source_id, label, plugin_name, options, description):
     :rtype: Source
     :return:
     """
+    validate_coa_paths(plugin_name, options)
     source = get(source_id)
 
     source.label = label

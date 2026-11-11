@@ -15,6 +15,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from inflection import camelize, underscore
 from marshmallow import Schema, post_dump, pre_load
+from lemur.common.coa_isolation import CoaPathViolation
 
 
 class LemurSchema(Schema):
@@ -157,6 +158,8 @@ def validate_schema(input_schema, output_schema):
 
             try:
                 resp = f(*args, **kwargs)
+            except CoaPathViolation as e:
+                return dict(message=e.description), 400
             except Exception as e:
                 capture_exception()
                 current_app.logger.exception(e)
