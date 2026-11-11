@@ -62,9 +62,7 @@ def test_get_imported_certificates_paginates_all_statuses_and_key_types():
     assert result[1]["chain"] is None
     assert client.list_certificates.call_args_list == [
         mock.call(Includes={"keyTypes": acm.ACM_KEY_TYPES}),
-        mock.call(
-            Includes={"keyTypes": acm.ACM_KEY_TYPES}, NextToken="next-page"
-        ),
+        mock.call(Includes={"keyTypes": acm.ACM_KEY_TYPES}, NextToken="next-page"),
     ]
     client.get_certificate.assert_has_calls(
         [
@@ -176,6 +174,24 @@ def test_upload_cert_does_not_import_after_inventory_failure(app):
             acm.upload_cert.__wrapped__(SAN_CERT_STR, SAN_CERT_KEY, client=client)
 
     client.import_certificate.assert_not_called()
+
+
+def test_delete_imported_cert_deletes_matching_fingerprint(app):
+    from lemur.plugins.lemur_aws import acm
+
+    client = mock.Mock()
+    with mock.patch.object(
+        acm,
+        "_get_imported_certificates",
+        return_value=[
+            {"arn": "arn:other", "body": ROOTCA_CERT_STR, "chain": None},
+            {"arn": "arn:matching", "body": SAN_CERT_STR, "chain": None},
+        ],
+    ):
+        deleted = acm.delete_imported_cert.__wrapped__(SAN_CERT_STR, client=client)
+
+    assert deleted == "arn:matching"
+    client.delete_certificate.assert_called_once_with(CertificateArn="arn:matching")
 
 
 def test_acm_source_returns_only_certificate_material(app):
