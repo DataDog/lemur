@@ -11,7 +11,7 @@ from datetime import timedelta
 import arrow
 import json
 from cryptography import x509
-from flask import current_app
+from flask import current_app, g
 from idna.core import InvalidCodepoint
 from sentry_sdk import capture_exception
 from sqlalchemy import (
@@ -229,13 +229,20 @@ class Certificate(db.Model):
         self.roles = list(set(kwargs.get("roles", [])))
         self.replaces = kwargs.get("replaces", [])
         self.rotation = kwargs.get("rotation")
-        self.rotation_policy = kwargs.get("rotation_policy") or RotationPolicy.query.filter_by(name="default").first()
+        self.rotation_policy = (
+            kwargs.get("rotation_policy")
+            or RotationPolicy.query.filter_by(name="default").first()
+        )
         self.key_type = kwargs.get("key_type")
         self.signing_algorithm = defaults.signing_algorithm(cert)
         self.bits = defaults.bitstrength(cert)
         self.external_id = kwargs.get("external_id")
-        self.authority_id = kwargs.get("authority_id") or getattr(kwargs.get("authority"), "id", None)  # authority_id if passed, else derive it from the authority object
-        self.user_id = kwargs.get("user_id") or getattr(kwargs.get("creator"), "id", None)  # user_id if passed, else derive it from the creator object
+        self.authority_id = kwargs.get("authority_id") or \
+            getattr(kwargs.get("authority"), "id", None)
+        # authority_id if passed, else derive it from the authority object
+        self.user_id = kwargs.get("user_id") or \
+            getattr(kwargs.get("creator"), "id", None)
+        # user_id if passed, else derive it from the creator object
         self.dns_provider_id = kwargs.get("dns_provider_id")
 
         for domain in defaults.domains(cert):
@@ -434,7 +441,7 @@ class Certificate(db.Model):
                     return_extensions["crl_distribution_points"] = {
                         "include_crl_dp": value
                     }
-        except InvalidCodepoint as e:
+        except InvalidCodepoint:
             capture_exception()
             current_app.logger.warning(
                 "Unable to parse extensions due to underscore in dns name"
@@ -492,6 +499,8 @@ def update_destinations(target, value, initiator):
     """
     Attempt to upload certificate to the new destination
 
+    Scope: operate only on the specific Certificate instance being modified (``target``).
+
     :param target:
     :param value:
     :param initiator:
@@ -505,12 +514,17 @@ def update_destinations(target, value, initiator):
         )
         return
 
+    # Use the destination plugin for this single target certificate only.
     destination_plugin = plugins.get(value.plugin_name)
     status = FAILURE_METRIC_STATUS
 
+    # Do not attempt uploads for expired certificates.
     if target.expired:
         return
+
     try:
+        # Only upload when the certificate has a private key if the plugin requires one,
+        # or when the plugin does not require a key.
         if target.private_key or not destination_plugin.requires_key:
             destination_plugin.upload(
                 target.name,
@@ -520,6 +534,18 @@ def update_destinations(target, value, initiator):
                 value.options,
             )
             status = SUCCESS_METRIC_STATUS
+
+            # Record an audit log entry for API-driven changes when a user is present.
+            try:
+                if hasattr(g, "current_user") and g.current_user is not None:
+                    # Import here to avoid circular imports at module import time.
+                    from lemur.logs import service as log_service
+
+                    # Log as an update to the certificate so it appears in /api/1/logs
+                    log_service.create(g.current_user, "update_cert", certificate=target)
+            except Exception:
+                # Best-effort: don't block upload on logging failures.
+                capture_exception()
     except Exception:
         capture_exception()
         raise
@@ -533,6 +559,23 @@ def update_destinations(target, value, initiator):
         if datacenter:
             metric_tags["datacenter"] = datacenter
         metrics.send("destination_upload", "counter", 1, metric_tags=metric_tags)
+
+
+@event.listens_for(Certificate.destinations, "remove")
+def remove_destination_log(target, value, initiator):
+    """
+    Audit-log a destination removal from a certificate. This does not perform the
+    removal itself (that is handled by service functions), but ensures an entry
+    exists in the logs table when a user triggers the change.
+    """
+    try:
+        if hasattr(g, "current_user") and g.current_user is not None:
+            # Import here to avoid circular imports at module import time.
+            from lemur.logs import service as log_service
+
+            log_service.create(g.current_user, "update_cert", certificate=target)
+    except Exception:
+        capture_exception()
 
 
 @event.listens_for(Certificate.replaces, "append")

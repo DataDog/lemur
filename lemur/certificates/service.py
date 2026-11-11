@@ -9,7 +9,7 @@
 import json
 import re
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from itertools import groupby
 
 import arrow
@@ -274,50 +274,14 @@ def get_all_pending_reissue():
     policy to determine how many days from expiration the certificate must be
     for rotation to be pending.
 
-    Also includes rotation group members with autorotation enabled and no replacement.
-
     :return:
     """
-    pending = (
+    return (
         Certificate.query.filter(Certificate.rotation == true())
         .filter(not_(Certificate.replaced.any()))
         .filter(Certificate.in_rotation_window == true())
         .all()
-    )
-    return include_grouped_certificates(pending)
-
-
-def include_grouped_certificates(pending):
-    """Include current autorotating members of due rotation groups once."""
-    groups = {rotation_group(cert) for cert in pending} - {None}
-    if not groups:
-        return pending
-
-    selected = {cert.id: cert for cert in pending}
-    peers = (
-        Certificate.query.filter(Certificate.rotation == true())
-        .filter(not_(Certificate.replaced.any()))
-        .filter(Certificate.description.contains("[rotation-group:"))
-    )
-    for cert in peers:
-        if rotation_group(cert) in groups:
-            selected[cert.id] = cert
-    group_sizes = Counter(rotation_group(cert) for cert in selected.values())
-    for cert in selected.values():
-        group = rotation_group(cert)
-        if group is not None and group_sizes[group] == 1:
-            current_app.logger.error(
-                "Rotation group %s has no other eligible member for certificate %s; "
-                "check group tags, autorotation, and replacements. Renewing this certificate alone.",
-                group, cert.id,
-            )
-    return list(selected.values())
-
-
-def rotation_group(certificate):
-    """Read the rotation group identifier, independently of key type or CN."""
-    match = re.search(r"\[rotation-group:([^\[\]\s]+)\]", certificate.description or "")
-    return match.group(1) if match else None
+    )  # noqa
 
 
 def find_duplicates(cert):
