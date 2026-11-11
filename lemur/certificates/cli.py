@@ -144,6 +144,11 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
     :param commit:
     :return:
     """
+    if endpoint.source and endpoint.source.plugin_name == "aws-acm-source":
+        # ACM reimport replaces the certificate at the same ARN, so no endpoint
+        # rotation is needed.
+        return
+
     status = FAILURE_METRIC_STATUS
     if commit:
         try:

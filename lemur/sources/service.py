@@ -110,6 +110,11 @@ def sync_endpoints(source):
             else:
                 raise e
 
+        if (source.plugin_name == "aws-acm-source" and exists and exists.source
+                and exists.source.plugin_name == "aws-source"):
+            # Prefer IAM ownership: IAM rotates endpoints; ACM only inventories them.
+            continue
+
         if "primary_certificate" in endpoint:
             crt_name = endpoint["primary_certificate"]["name"]
             current_app.logger.debug(
@@ -339,7 +344,9 @@ def sync_certificates(source, user):
     )
 
     existing_certificates_with_source_by_id = {}
-    for e in certificate_service.get_all_valid_certificates_with_source(source.id):
+    for e in certificate_service.get_all_valid_certificates_with_source(
+        source.id, include_replaced=getattr(s, "sync_replaced_certificates", False)
+    ):
         existing_certificates_with_source_by_id[e.id] = e
 
     for certificate in certificates:

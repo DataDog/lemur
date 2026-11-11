@@ -43,6 +43,7 @@ from lemur.extensions import metrics
 from lemur.plugins import lemur_aws as aws, ExpirationNotificationPlugin
 from lemur.plugins.bases import DestinationPlugin, ExportDestinationPlugin, SourcePlugin
 from lemur.plugins.lemur_aws import acm, iam, s3, elb, ec2, sns, cloudfront
+from lemur.plugins.lemur_aws import acm_endpoints
 
 
 def get_region_from_dns(dns):
@@ -643,10 +644,20 @@ class AWSSourcePlugin(SourcePlugin):
         return certificate_names
 
 
+def _endpoint_certificates(endpoint):
+    """Every certificate on an endpoint. The primary is optional: an ALB listener
+    can list SNI certificates without a default, and sync_endpoints already
+    treats primary_certificate as optional."""
+    primary = endpoint.get("primary_certificate")
+    return ([primary] if primary else []) + endpoint.get("sni_certificates", [])
+
+
 class ACMSourcePlugin(SourcePlugin):
+    # Reimport removes the predecessor's material from ACM without deleting its ARN.
+    sync_replaced_certificates = True
     title = "AWS-ACM"
     slug = "aws-acm-source"
-    description = "Discovers imported certificates in one AWS ACM account and region"
+    description = "Discovers imported ACM certificates and their endpoints in one account and region"
     version = aws.VERSION
 
     author = "Datadog"
@@ -679,7 +690,48 @@ class ACMSourcePlugin(SourcePlugin):
         ]
 
     def get_endpoints(self, options, **kwargs):
-        return []
+        account_number = self.get_option("accountNumber", options)
+        region = self.get_option("region", options)
+        endpoints = []
+        # Fail on discovery errors to avoid deleting valid endpoint records.
+        for load_balancer in elb.get_all_elbs(account_number=account_number, region=region):
+            endpoints.extend(acm_endpoints.get_elb_endpoints(
+                account_number, region, load_balancer
+            ))
+        for load_balancer in elb.get_all_elbs_v2(account_number=account_number, region=region):
+            endpoints.extend(acm_endpoints.get_elb_endpoints_v2(
+                account_number, region, load_balancer
+            ))
+        # CloudFront's ACM viewer certificates live in us-east-1.
+        if region == "us-east-1":
+            for distribution in cloudfront.get_all_distributions(account_number=account_number):
+                endpoint = acm_endpoints.get_distribution_endpoint(distribution)
+                if endpoint:
+                    endpoints.append(endpoint)
+
+        # Refresh the ARN inventory to account for certificates added or deleted since the last sync.
+        inventory = {
+            cert["arn"]: cert for cert in acm.get_imported_certificates(
+                account_number=account_number, region=region
+            )
+        }
+        return [
+            endpoint for endpoint in endpoints
+            if _endpoint_certificates(endpoint)
+            and all(cert["name"] in inventory
+                    for cert in _endpoint_certificates(endpoint))
+        ]
+
+    def get_certificate_by_name(self, certificate_name, options):
+        account_number = self.get_option("accountNumber", options)
+        region = self.get_option("region", options)
+        parts = certificate_name.split(":", 5)
+        if (len(parts) != 6 or parts[2] != "acm" or parts[3] != region
+                or parts[4] != account_number):
+            raise ValueError("ACM endpoint certificate ARN does not match the source")
+        return acm.get_certificate(
+            certificate_name, account_number=account_number, region=region
+        )
 
 
 class AWSDestinationPlugin(DestinationPlugin):
@@ -734,7 +786,11 @@ class AWSDestinationPlugin(DestinationPlugin):
 class ACMDestinationPlugin(DestinationPlugin):
     title = "AWS-ACM"
     slug = "aws-acm-destination"
-    description = "Imports certificates into one AWS ACM account and region"
+    description = (
+        "Imports certificates into one AWS ACM account and region. Renewals reuse the "
+        "existing ARN and update all its consumers on upload, without waiting for "
+        "endpoint rotation."
+    )
     version = aws.VERSION
     sync_as_source = True
     sync_as_source_name = ACMSourcePlugin.slug
@@ -763,6 +819,7 @@ class ACMDestinationPlugin(DestinationPlugin):
             body,
             private_key,
             cert_chain=cert_chain,
+            replaces=kwargs.get("replaces", ()),
             account_number=self.get_option("accountNumber", options),
             region=self.get_option("region", options),
         )
