@@ -29,7 +29,7 @@ def get_all_distributions(**kwargs):
             if not list:
                 return distributions
 
-            distributions += list["Items"]
+            distributions += list.get("Items", [])
 
             if not list.get("IsTruncated"):
                 return distributions

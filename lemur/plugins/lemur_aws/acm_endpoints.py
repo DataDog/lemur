@@ -40,6 +40,9 @@ def get_elb_endpoints(account_number, region, load_balancer):
 
 
 def get_elb_endpoints_v2(account_number, region, load_balancer):
+    # Gateway Load Balancers do not terminate TLS or expose listener protocols.
+    if load_balancer.get("Type") == "gateway":
+        return []
     endpoints = []
     response = elb.describe_listeners_v2(
         account_number=account_number, region=region,
