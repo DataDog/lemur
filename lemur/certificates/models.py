@@ -443,7 +443,7 @@ class Certificate(db.Model):
         except ValueError as e:
             capture_exception()
             current_app.logger.warning("Unable to parse")
-            current_app.logger.exception(e)
+            current_app.logger.exception("Failed to parse extensions for certificate %s: %s", self.name, e)
 
         return return_extensions
 

@@ -175,7 +175,8 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
                 }
             )
             current_app.logger.exception(
-                f"Error rotating certificate: {new_certificate.name}", exc_info=True
+                f"Failed to rotate endpoint {endpoint.name} from certificate "
+                f"{old_certificate.name} to {new_certificate.name}", exc_info=True
             )
             print(
                 "[!] Failed to rotate endpoint {0} to certificate {1} reason: {2}".format(
@@ -496,7 +497,10 @@ def reissue(old_certificate_name, notify, commit):
             print("[+] Done!")
     except Exception as e:
         capture_exception()
-        current_app.logger.exception("Error reissuing certificate.", exc_info=True)
+        current_app.logger.exception(
+            "Certificate reissuance failed (requested certificate=%s, commit=%s)",
+            old_certificate_name or "all due certificates", commit, exc_info=True
+        )
         print("[!] Failed to reissue certificates. Reason: {}".format(e))
 
     metrics.send(
@@ -892,7 +896,7 @@ def deactivate_entrust_certificates():
         except Exception as e:
             current_app.logger.info(log_data)
             capture_exception()
-            current_app.logger.exception(e)
+            current_app.logger.exception("Failed to deactivate Entrust certificate %s: %s", cert.name, e)
 
 
 @manager.option(

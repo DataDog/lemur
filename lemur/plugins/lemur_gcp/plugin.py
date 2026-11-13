@@ -151,7 +151,7 @@ class GCPSourcePlugin(SourcePlugin):
             )
         except Exception as e:
             current_app.logger.error(
-                f"Issue with fetching certificate by name from GCP. Action failed with the following log: {e}",
+                f"Failed to fetch GCP certificate {certificate_name}: {e}",
                 exc_info=True,
             )
             raise Exception(f"Issue fetching certificate from GCP: {e}")

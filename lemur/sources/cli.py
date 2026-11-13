@@ -95,7 +95,9 @@ def execute_clean(plugin, certificate, source):
         certificate_service.database.update(certificate)
         return SUCCESS_METRIC_STATUS
     except Exception as e:
-        current_app.logger.exception(e)
+        current_app.logger.exception(
+            "Failed to clean certificate %s from source %s: %s", certificate.name, source.label, e
+        )
         capture_exception()
 
 
