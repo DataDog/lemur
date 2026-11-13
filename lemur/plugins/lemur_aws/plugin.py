@@ -728,7 +728,10 @@ class ACMSourcePlugin(SourcePlugin):
         parts = certificate_name.split(":", 5)
         if (len(parts) != 6 or parts[2] != "acm" or parts[3] != region
                 or parts[4] != account_number):
-            raise ValueError("ACM endpoint certificate ARN does not match the source")
+            raise ValueError(
+                f"ACM endpoint certificate ARN {certificate_name!r} does not match the source "
+                f"(expected account {account_number!r}, region {region!r})"
+            )
         return acm.get_certificate(
             certificate_name, account_number=account_number, region=region
         )
