@@ -2,7 +2,7 @@
 
 import logging
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 
 SCHEDULED_HEADER = "lemur_scheduled_task"
@@ -35,14 +35,25 @@ def notify_task_failure(task, task_id, exception, config, send_event):
         return
 
     now = int(time.time() * 1000)
+    hard_limit, soft_limit = getattr(task.request, "timelimit", None) or (None, None)
+    hard_limit = hard_limit or getattr(task, "time_limit", None)
+    soft_limit = soft_limit or getattr(task, "soft_time_limit", None)
+    # Start at the first error so even a late error leaves room for completion logs.
+    # Tasks without a configured limit retain the five-minute fallback.
+    log_window = (hard_limit or soft_limit or 0) + 5 * 60
     query = {
-        "query": 'service:lemur "{}"'.format(task_id),
+        "query": 'service:lemur @task_id:"{}"'.format(task_id),
         "from_ts": now - 15 * 60 * 1000,
-        "to_ts": now + 5 * 60 * 1000,
+        "to_ts": now + int(log_window * 1000),
         "live": "false",
     }
     separator = "&" if "?" in logs_url else "?"
     link = logs_url + separator + urlencode(query)
+    environment = {
+        "us2.ddog-gov.com": "Government",
+        "ddstaging.datadoghq.com": "Sandbox",
+        "app.datadoghq.com": "Commercial",
+    }.get(urlsplit(logs_url).hostname, "Unknown")
     # Exception messages and task arguments can contain secrets or notification handles.
     message = (
         "Task: {}\nExecution: {}\nError type: {}\n[Failure logs]({})\n\n{}"
@@ -50,7 +61,7 @@ def notify_task_failure(task, task_id, exception, config, send_event):
     task.request._lemur_reporting_error = True
     try:
         send_event(
-            title="[Lemur] Scheduled task reported an error: {}".format(task.name),
+            title="[Lemur][{}] Scheduled task reported an error: {}".format(environment, task.name),
             message=message,
             alert_type="error",
             aggregation_key=task_id,
@@ -59,6 +70,42 @@ def notify_task_failure(task, task_id, exception, config, send_event):
         task.request._lemur_error_reported = True
     finally:
         task.request._lemur_reporting_error = False
+
+
+def configure_worker_logging(logger, app_logger, current_task, config, send_event, formatter=None):
+    """Share worker logging setup without importing application services."""
+    for handler in app_logger.handlers:
+        handler.close()
+    app_logger.handlers.clear()
+    app_logger.propagate = True
+
+    if formatter is not None:
+        for handler in logger.handlers:
+            handler.setFormatter(formatter)
+
+    if not any(isinstance(handler, ScheduledTaskErrorHandler) for handler in logger.handlers):
+        logger.addHandler(ScheduledTaskErrorHandler(current_task, config, send_event))
+
+    # Handler filters also enrich records propagated from child loggers.
+    for handler in logger.handlers:
+        if not any(isinstance(f, TaskErrorContextFilter) for f in handler.filters):
+            handler.addFilter(TaskErrorContextFilter(current_task))
+
+
+class TaskErrorContextFilter(logging.Filter):
+    """Correlate task logs before output handlers serialize the record."""
+
+    def __init__(self, current_task):
+        super().__init__()
+        self.current_task = current_task
+
+    def filter(self, record):
+        task = self.current_task()
+        task_id = getattr(task.request, "id", None) if task is not None else None
+        if task_id:
+            record.task_id = task_id
+            record.task_name = task.name
+        return True
 
 
 class ScheduledTaskErrorHandler(logging.Handler):

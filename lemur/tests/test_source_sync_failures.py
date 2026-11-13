@@ -12,7 +12,7 @@ from lemur.sources import cli
     [[False], [True], [False, False], [True, False], [False, True], [True, True]],
 )
 def test_sync_finishes_batch_before_reporting_failure(app, failures):
-    sources = [SimpleNamespace(label=f"source-{i}") for i in range(len(failures))]
+    sources = [SimpleNamespace(label=f"source-{i}", options=[]) for i in range(len(failures))]
     user = object()
     outcomes = [
         (
@@ -28,6 +28,7 @@ def test_sync_finishes_batch_before_reporting_failure(app, failures):
         patch.object(cli.source_service, "sync", side_effect=outcomes) as sync,
         patch.object(cli, "capture_exception") as capture,
         patch.object(cli.metrics, "send") as metric,
+        patch.object(cli.current_app.logger, "exception") as log_exception,
     ):
         if any(failures):
             with pytest.raises(RuntimeError) as error:
@@ -42,6 +43,10 @@ def test_sync_finishes_batch_before_reporting_failure(app, failures):
             call(source, user, ttl_hours=2) for source in sources
         ]
         assert capture.call_count == sum(failures)
+        assert log_exception.call_args_list == [
+            call("Source sync failed for %s (connection options: {}): %s", source.label, outcome)
+            for source, failed, outcome in zip(sources, failures, outcomes) if failed
+        ]
         expected_metrics = []
         for source, failed in zip(sources, failures):
             tags = {

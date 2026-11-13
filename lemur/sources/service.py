@@ -237,8 +237,9 @@ def get_cert_for_endpoint(source, endpoint, certificate_name):
 
             if len(lemur_matching_cert) > 1:
                 current_app.logger.error(
-                    "Too Many Certificates Found{0}. Name: {1} Endpoint: {2}".format(
-                        len(lemur_matching_cert), certificate_name, endpoint_name
+                    "Found {0} matching certificates for {1}, endpoint {2}, source {3}; "
+                    "using the first match.".format(
+                        len(lemur_matching_cert), certificate_name, endpoint_name, source.label
                     )
                 )
                 metrics.send(
@@ -254,7 +255,10 @@ def get_cert_for_endpoint(source, endpoint, certificate_name):
         if not crt:
             current_app.logger.error(
                 {
-                    "message": "Certificate Not Found",
+                    "message": (
+                        f"Certificate {certificate_name} not found while syncing endpoint "
+                        f"{endpoint_name} (DNS name {dns_name}) from source {source.label}"
+                    ),
                     "certificate_name": certificate_name,
                     "endpoint_name": endpoint_name,
                     "dns_name": dns_name,

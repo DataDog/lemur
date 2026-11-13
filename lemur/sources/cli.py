@@ -95,7 +95,9 @@ def execute_clean(plugin, certificate, source):
         certificate_service.database.update(certificate)
         return SUCCESS_METRIC_STATUS
     except Exception as e:
-        current_app.logger.exception(e)
+        current_app.logger.exception(
+            "Failed to clean certificate %s from source %s: %s", certificate.name, source.label, e
+        )
         capture_exception()
 
 
@@ -151,7 +153,15 @@ def sync(source_strings, ttl):
 
         except Exception as e:
             failed_sources.append(source.label)
-            current_app.logger.exception(e)
+            current_app.logger.exception(
+                "Source sync failed for %s (connection options: {connection}): %s".format(
+                    connection={
+                        o.get("name"): o.get("value") for o in (source.options or [])
+                        if o.get("name") in ("hostname", "port", "use_xdcgw")
+                    }
+                ),
+                source.label, e,
+            )
 
             print("[X] Failed syncing source {label}!\n".format(label=source.label))
 

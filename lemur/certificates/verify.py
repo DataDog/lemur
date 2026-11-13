@@ -193,7 +193,7 @@ def verify(cert_path, issuer_chain_path):
         try:
             cert = parse_certificate(c.read())
         except ValueError as e:
-            current_app.logger.error(e)
+            current_app.logger.error("Failed to parse certificate file %s for revocation checks: %s", cert_path, e)
             return None
 
     # OCSP is our main source of truth, in a lot of cases CRLs

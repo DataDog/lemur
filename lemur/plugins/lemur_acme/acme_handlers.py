@@ -305,7 +305,7 @@ class AcmeHandler:
         except (errors.ConflictError, errors.ClientError, errors.Error) as e:
             # Certificate already revoked.
             current_app.logger.error(
-                "Certificate revocation failed with message: " + e.detail
+                "ACME revocation failed for certificate %s: %s", certificate.name, e.detail
             )
             metrics.send("acme_revoke_certificate_failure", "counter", 1)
             return False

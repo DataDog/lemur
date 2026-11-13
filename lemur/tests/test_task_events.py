@@ -1,6 +1,8 @@
 """Tests without app services: python3 lemur/tests/test_task_events.py."""
 
 import importlib.util
+import io
+import json
 import logging
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +11,7 @@ from unittest.mock import create_autospec, patch
 from urllib.parse import parse_qs, urlsplit
 
 from datadog import DogStatsd
+import logmatic
 
 
 # Loading this small helper directly avoids starting Flask, Redis or a database.
@@ -73,7 +76,7 @@ class TaskEventsTest(unittest.TestCase):
         link = event["message"].split("[Failure logs](", 1)[1].split(")", 1)[0]
         query = parse_qs(urlsplit(link).query)
         self.assertEqual(query["storage"], ["flex_tier"])
-        self.assertEqual(query["query"], ['service:lemur "execution-1"'])
+        self.assertEqual(query["query"], ['service:lemur @task_id:"execution-1"'])
         self.assertEqual(query["from_ts"], ["1100000"])
         self.assertEqual(query["to_ts"], ["2300000"])
         self.assertEqual(query["live"], ["false"])
@@ -82,6 +85,41 @@ class TaskEventsTest(unittest.TestCase):
         self.config["CELERY_FAILURE_EVENT_LOGS_URL"] = "https://example.test/logs"
         self.notify()
         self.assertIn("/logs?query=", self.send.call_args.kwargs["message"])
+
+    def test_log_window_covers_task_limit_plus_buffer(self):
+        for hard, soft, overrides, expected in (
+            (None, 7200, None, 7200),
+            (10800, 7200, None, 10800),
+            (10800, 7200, (1860, 1800), 1860),
+            (None, None, (None, 600), 600),
+            (None, None, None, 0),
+        ):
+            with self.subTest(hard=hard, soft=soft, overrides=overrides):
+                sender = task()
+                sender.time_limit, sender.soft_time_limit = hard, soft
+                sender.request.timelimit = overrides
+                with patch.object(events.time, "time", return_value=2000):
+                    self.notify(sender)
+                link = self.send.call_args.kwargs["message"].split("[Failure logs](", 1)[1]
+                query = parse_qs(urlsplit(link.split(")", 1)[0]).query)
+                self.assertEqual(int(query["to_ts"][0]), (2000 + expected + 300) * 1000)
+
+    def test_event_title_identifies_environment(self):
+        for host, label in (
+            ("us2.ddog-gov.com", "Government"),
+            ("ddstaging.datadoghq.com", "Sandbox"),
+            ("app.datadoghq.com", "Commercial"),
+            ("example.test", "Unknown"),
+        ):
+            with self.subTest(environment=label):
+                self.config["CELERY_FAILURE_EVENT_LOGS_URL"] = (
+                    "https://{}/logs?storage=flex_tier".format(host)
+                )
+                self.notify()
+                self.assertEqual(
+                    self.send.call_args.kwargs["title"],
+                    "[Lemur][{}] Scheduled task reported an error: scheduled".format(label),
+                )
 
     def test_real_dogstatsd_client_serializes_event_without_sending(self):
         client = DogStatsd()
@@ -151,6 +189,7 @@ class TaskEventsTest(unittest.TestCase):
         logger = self.error_logger(sender)
         logger.error("no execution")
         sender.request.id = "execution-1"
+        logger.info("progress only")
         logger.warning("warning only")
         self.error_logger(None).error("outside task")
         sender.name = "manual"
@@ -191,6 +230,68 @@ class TaskEventsTest(unittest.TestCase):
         sender.request = SimpleNamespace(id="execution-2", headers=None)
         logger.error("second")
         self.assertEqual(self.send.call_count, 2)
+
+    def test_task_errors_include_context_in_serialized_logs(self):
+        sender = task("manual")
+        sender.request.id = "execution-1"
+        output = io.StringIO()
+        handler = logging.StreamHandler(output)
+        handler.setFormatter(logmatic.JsonFormatter())
+        handler.addFilter(events.TaskErrorContextFilter(lambda: sender))
+        parent = logging.Logger("isolated-parent", logging.DEBUG)
+        parent.addHandler(handler)
+        child = logging.Logger("isolated-parent.child", logging.DEBUG)
+        child.parent = parent
+        try:
+            raise ValueError("test error")
+        except ValueError:
+            child.exception("operation failed")
+        sender.request.id = "execution-2"
+        child.critical("second failure")
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual([row["task_id"] for row in rows], ["execution-1", "execution-2"])
+        self.assertTrue(all(row["task_name"] == "manual" for row in rows))
+        self.assertEqual(rows[0]["message"], "operation failed")
+        self.assertIn("ValueError: test error", rows[0]["exc_info"])
+
+    def test_context_filter_leaves_other_logs_unchanged(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        for active, level in ((None, logging.INFO), (None, logging.WARNING),
+                              (None, logging.ERROR), (task(), logging.ERROR)):
+            with self.subTest(active=active, level=level):
+                record = logging.LogRecord("test", level, __file__, 1, "message", (), None)
+                original = record.__dict__.copy()
+                self.assertTrue(events.TaskErrorContextFilter(lambda: active).filter(record))
+                self.assertEqual(record.__dict__, original)
+
+    def test_info_and_warning_logs_include_context_without_alerts(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        output = io.StringIO()
+        handler = logging.StreamHandler(output)
+        handler.setFormatter(logmatic.JsonFormatter())
+        handler.addFilter(events.TaskErrorContextFilter(lambda: sender))
+        logger = self.error_logger(sender)
+        logger.addHandler(handler)
+        logger.info("progress")
+        logger.warning("warning")
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual([row["message"] for row in rows], ["progress", "warning"])
+        self.assertTrue(all(row["task_id"] == "execution-1" for row in rows))
+        self.assertTrue(all(row["task_name"] == "scheduled" for row in rows))
+        self.send.assert_not_called()
+
+    def test_callback_message_is_rendered_as_text_with_traceback_fields(self):
+        record = logging.LogRecord("test", logging.ERROR, __file__, 1, {
+            "message": "Celery Task Failure",
+            "traceback": "test traceback",
+            "task_id": "execution-1",
+        }, (), None)
+        row = json.loads(logmatic.JsonFormatter().format(record))
+        self.assertEqual(row["message"], "Celery Task Failure")
+        self.assertEqual(row["traceback"], "test traceback")
+        self.assertEqual(row["task_id"], "execution-1")
 
 
 if __name__ == "__main__":
