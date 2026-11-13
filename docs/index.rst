@@ -28,6 +28,7 @@ Administration
     :maxdepth: 2
 
     administration
+    readonly-api
 
 Developers
 ----------
