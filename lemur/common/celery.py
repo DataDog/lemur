@@ -36,7 +36,7 @@ from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.common.task_events import (
-    ScheduledTaskErrorHandler, mark_scheduled_child, notify_task_failure,
+    ScheduledTaskErrorHandler, TaskErrorContextFilter, mark_scheduled_child, notify_task_failure,
 )
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
@@ -92,6 +92,11 @@ def make_celery(app):
                 lambda: celery.current_task, app.config,
                 lambda **event: plugins.get("statsd-metrics").statsd.event(**event),
             ))
+
+        # Enrich each handler before formatting, including errors from child loggers.
+        for handler in logger.handlers:
+            if not any(isinstance(f, TaskErrorContextFilter) for f in handler.filters):
+                handler.addFilter(TaskErrorContextFilter(lambda: celery.current_task))
 
     after_setup_logger.connect(_configure_worker_logging, weak=False)
     after_setup_task_logger.connect(_configure_worker_logging, weak=False)

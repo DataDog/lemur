@@ -36,7 +36,7 @@ def notify_task_failure(task, task_id, exception, config, send_event):
 
     now = int(time.time() * 1000)
     query = {
-        "query": 'service:lemur "{}"'.format(task_id),
+        "query": 'service:lemur @task_id:"{}"'.format(task_id),
         "from_ts": now - 15 * 60 * 1000,
         "to_ts": now + 5 * 60 * 1000,
         "live": "false",
@@ -64,6 +64,23 @@ def notify_task_failure(task, task_id, exception, config, send_event):
         task.request._lemur_error_reported = True
     finally:
         task.request._lemur_reporting_error = False
+
+
+class TaskErrorContextFilter(logging.Filter):
+    """Correlate task errors before output handlers serialize the record."""
+
+    def __init__(self, current_task):
+        super().__init__()
+        self.current_task = current_task
+
+    def filter(self, record):
+        if record.levelno >= logging.ERROR:
+            task = self.current_task()
+            task_id = getattr(task.request, "id", None) if task is not None else None
+            if task_id:
+                record.task_id = task_id
+                record.task_name = task.name
+        return True
 
 
 class ScheduledTaskErrorHandler(logging.Handler):
