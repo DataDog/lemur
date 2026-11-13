@@ -1,6 +1,7 @@
 """Real worker logging regression, using only in-memory broker and result storage."""
 
 import ast
+import importlib.util
 from contextlib import nullcontext
 import io
 import json
@@ -15,7 +16,11 @@ from celery import Celery, signals
 from celery.contrib.testing.worker import start_worker
 import logmatic
 
-from test_task_events import events
+spec = importlib.util.spec_from_file_location(
+    "task_events", Path(__file__).parents[1] / "common" / "task_events.py"
+)
+events = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(events)
 
 
 class TaskEventWorkerTest(unittest.TestCase):
