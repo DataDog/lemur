@@ -1,6 +1,8 @@
 """Tests without app services: python3 lemur/tests/test_task_events.py."""
 
 import importlib.util
+import io
+import json
 import logging
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +11,7 @@ from unittest.mock import create_autospec, patch
 from urllib.parse import parse_qs, urlsplit
 
 from datadog import DogStatsd
+import logmatic
 
 
 # Loading this small helper directly avoids starting Flask, Redis or a database.
@@ -73,7 +76,7 @@ class TaskEventsTest(unittest.TestCase):
         link = event["message"].split("[Failure logs](", 1)[1].split(")", 1)[0]
         query = parse_qs(urlsplit(link).query)
         self.assertEqual(query["storage"], ["flex_tier"])
-        self.assertEqual(query["query"], ['service:lemur "execution-1"'])
+        self.assertEqual(query["query"], ['service:lemur @task_id:"execution-1"'])
         self.assertEqual(query["from_ts"], ["1100000"])
         self.assertEqual(query["to_ts"], ["2300000"])
         self.assertEqual(query["live"], ["false"])
@@ -191,6 +194,40 @@ class TaskEventsTest(unittest.TestCase):
         sender.request = SimpleNamespace(id="execution-2", headers=None)
         logger.error("second")
         self.assertEqual(self.send.call_count, 2)
+
+    def test_task_errors_include_context_in_serialized_logs(self):
+        sender = task("manual")
+        sender.request.id = "execution-1"
+        output = io.StringIO()
+        handler = logging.StreamHandler(output)
+        handler.setFormatter(logmatic.JsonFormatter())
+        handler.addFilter(events.TaskErrorContextFilter(lambda: sender))
+        parent = logging.Logger("isolated-parent", logging.DEBUG)
+        parent.addHandler(handler)
+        child = logging.Logger("isolated-parent.child", logging.DEBUG)
+        child.parent = parent
+        try:
+            raise ValueError("test error")
+        except ValueError:
+            child.exception("operation failed")
+        sender.request.id = "execution-2"
+        child.critical("second failure")
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual([row["task_id"] for row in rows], ["execution-1", "execution-2"])
+        self.assertTrue(all(row["task_name"] == "manual" for row in rows))
+        self.assertEqual(rows[0]["message"], "operation failed")
+        self.assertIn("ValueError: test error", rows[0]["exc_info"])
+
+    def test_context_filter_leaves_other_logs_unchanged(self):
+        sender = task()
+        sender.request.id = "execution-1"
+        for active, level in ((sender, logging.INFO), (sender, logging.WARNING),
+                              (None, logging.ERROR), (task(), logging.ERROR)):
+            with self.subTest(active=active, level=level):
+                record = logging.LogRecord("test", level, __file__, 1, "message", (), None)
+                original = record.__dict__.copy()
+                self.assertTrue(events.TaskErrorContextFilter(lambda: active).filter(record))
+                self.assertEqual(record.__dict__, original)
 
 
 if __name__ == "__main__":
