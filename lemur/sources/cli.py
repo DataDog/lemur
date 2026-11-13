@@ -151,7 +151,7 @@ def sync(source_strings, ttl):
 
         except Exception as e:
             failed_sources.append(source.label)
-            current_app.logger.exception(e)
+            current_app.logger.exception("Source sync failed for %s: %s", source.label, e)
 
             print("[X] Failed syncing source {label}!\n".format(label=source.label))
 
