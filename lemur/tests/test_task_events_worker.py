@@ -55,12 +55,15 @@ class TaskEventWorkerTest(unittest.TestCase):
         previous_handlers, previous_level = root.handlers[:], root.level
         root.handlers = [handler]
 
-        @app.task(name="test.caught")
+        @app.task(name="test.caught", soft_time_limit=7200)
         def caught():
+            app_logger.info("starting test operation")
+            app_logger.warning("test warning")
             try:
                 raise ValueError("caught test failure")
             except ValueError:
                 app_logger.exception("caught test error")
+            app_logger.info("finished test operation")
             return "still succeeds"
 
         @app.task(name="test.uncaught")
@@ -78,6 +81,14 @@ class TaskEventWorkerTest(unittest.TestCase):
             callback.assert_called_once()
             self.assertEqual(callback.call_args.kwargs["task_id"], second.id)
             self.assertEqual(send.call_count, 2)
+            for message in ("starting test operation", "test warning", "finished test operation"):
+                row = next(row for row in rows if row.get("message") == message)
+                self.assertEqual(row["task_id"], first.id)
+                self.assertEqual(row["task_name"], "test.caught")
+            completion = next(row for row in rows
+                              if "succeeded in" in row.get("message", "")
+                              and first.id in row["message"])
+            self.assertEqual(completion["task_id"], first.id)
             for result, name in ((first, "test.caught"), (second, "test.uncaught")):
                 errors = [row for row in rows if row.get("levelname") == "ERROR"
                           and row.get("task_id") == result.id]
@@ -89,6 +100,10 @@ class TaskEventWorkerTest(unittest.TestCase):
                 link = event["message"].split("[Failure logs](", 1)[1].split(")", 1)[0]
                 self.assertEqual(parse_qs(urlsplit(link).query)["query"],
                                  ['service:lemur @task_id:"{}"'.format(result.id)])
+                if result == first:
+                    query = parse_qs(urlsplit(link).query)
+                    self.assertEqual(int(query["to_ts"][0]) - int(query["from_ts"][0]),
+                                     (7200 + 300 + 900) * 1000)
         finally:
             signals.after_setup_logger.disconnect(setup)
             signals.after_setup_task_logger.disconnect(setup)

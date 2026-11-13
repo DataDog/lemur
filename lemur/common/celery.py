@@ -338,7 +338,7 @@ def report_failed_task(**kwargs):
     with flask_app.app_context():
         log_data = {
             "function": f"{__name__}.{sys._getframe().f_code.co_name}",
-            "Message": "Celery Task Failure",
+            "message": "Celery Task Failure",
         }
         error_tags = get_celery_request_tags(**kwargs)
         _emit_task_duration(_task_status_from_failure(**kwargs), error_tags)
@@ -363,7 +363,7 @@ def report_revoked_task(**kwargs):
     with flask_app.app_context():
         log_data = {
             "function": f"{__name__}.{sys._getframe().f_code.co_name}",
-            "Message": "Celery Task Revoked",
+            "message": "Celery Task Revoked",
         }
 
         error_tags = get_celery_request_tags(**kwargs)

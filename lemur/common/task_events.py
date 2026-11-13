@@ -35,10 +35,16 @@ def notify_task_failure(task, task_id, exception, config, send_event):
         return
 
     now = int(time.time() * 1000)
+    hard_limit, soft_limit = getattr(task.request, "timelimit", None) or (None, None)
+    hard_limit = hard_limit or getattr(task, "time_limit", None)
+    soft_limit = soft_limit or getattr(task, "soft_time_limit", None)
+    # Start at the first error so even a late error leaves room for completion logs.
+    # Tasks without a configured limit retain the five-minute fallback.
+    log_window = (hard_limit or soft_limit or 0) + 5 * 60
     query = {
         "query": 'service:lemur @task_id:"{}"'.format(task_id),
         "from_ts": now - 15 * 60 * 1000,
-        "to_ts": now + 5 * 60 * 1000,
+        "to_ts": now + int(log_window * 1000),
         "live": "false",
     }
     separator = "&" if "?" in logs_url else "?"
@@ -87,19 +93,18 @@ def configure_worker_logging(logger, app_logger, current_task, config, send_even
 
 
 class TaskErrorContextFilter(logging.Filter):
-    """Correlate task errors before output handlers serialize the record."""
+    """Correlate task logs before output handlers serialize the record."""
 
     def __init__(self, current_task):
         super().__init__()
         self.current_task = current_task
 
     def filter(self, record):
-        if record.levelno >= logging.ERROR:
-            task = self.current_task()
-            task_id = getattr(task.request, "id", None) if task is not None else None
-            if task_id:
-                record.task_id = task_id
-                record.task_name = task.name
+        task = self.current_task()
+        task_id = getattr(task.request, "id", None) if task is not None else None
+        if task_id:
+            record.task_id = task_id
+            record.task_name = task.name
         return True
 
 
