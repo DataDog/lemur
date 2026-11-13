@@ -1,10 +1,29 @@
 import json
 import unittest
+from unittest.mock import patch
+
+import dns.exception
 from lemur.dns_providers import util as dnsutil
 from lemur.dns_providers.schemas import dns_provider_output_schema
 
 
 class TestDNSProvider(unittest.TestCase):
+    @patch("lemur.dns_providers.util.dns.query.udp", side_effect=dns.exception.Timeout)
+    @patch("lemur.dns_providers.util.dns.resolver.get_default_resolver")
+    def test_authoritative_nameserver_timeout(self, mock_resolver, mock_udp):
+        mock_resolver.return_value.nameservers = ["192.0.2.53"]
+
+        with self.assertRaisesRegex(
+            dnsutil.DNSResolveError, "Timed out querying nameserver 192.0.2.53"
+        ) as error:
+            dnsutil.get_authoritative_nameserver("example.com")
+
+        self.assertIsInstance(error.exception.__cause__, dns.exception.Timeout)
+        mock_udp.assert_called_once()
+        timeout = mock_udp.call_args.kwargs["timeout"]
+        self.assertGreater(timeout, 0)
+        self.assertLessEqual(timeout, 30)
+
     def test_is_valid_domain(self):
         self.assertTrue(dnsutil.is_valid_domain("example.com"))
         self.assertTrue(dnsutil.is_valid_domain("foo.bar.org"))
