@@ -2,7 +2,7 @@
 
 import logging
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 
 SCHEDULED_HEADER = "lemur_scheduled_task"
@@ -43,6 +43,11 @@ def notify_task_failure(task, task_id, exception, config, send_event):
     }
     separator = "&" if "?" in logs_url else "?"
     link = logs_url + separator + urlencode(query)
+    environment = {
+        "us2.ddog-gov.com": "Government",
+        "ddstaging.datadoghq.com": "Sandbox",
+        "app.datadoghq.com": "Commercial",
+    }.get(urlsplit(logs_url).hostname, "Unknown")
     # Exception messages and task arguments can contain secrets or notification handles.
     message = (
         "Task: {}\nExecution: {}\nError type: {}\n[Failure logs]({})\n\n{}"
@@ -50,7 +55,7 @@ def notify_task_failure(task, task_id, exception, config, send_event):
     task.request._lemur_reporting_error = True
     try:
         send_event(
-            title="[Lemur] Scheduled task reported an error: {}".format(task.name),
+            title="[Lemur][{}] Scheduled task reported an error: {}".format(environment, task.name),
             message=message,
             alert_type="error",
             aggregation_key=task_id,

@@ -83,6 +83,23 @@ class TaskEventsTest(unittest.TestCase):
         self.notify()
         self.assertIn("/logs?query=", self.send.call_args.kwargs["message"])
 
+    def test_event_title_identifies_environment(self):
+        for host, label in (
+            ("us2.ddog-gov.com", "Government"),
+            ("ddstaging.datadoghq.com", "Sandbox"),
+            ("app.datadoghq.com", "Commercial"),
+            ("example.test", "Unknown"),
+        ):
+            with self.subTest(environment=label):
+                self.config["CELERY_FAILURE_EVENT_LOGS_URL"] = (
+                    "https://{}/logs?storage=flex_tier".format(host)
+                )
+                self.notify()
+                self.assertEqual(
+                    self.send.call_args.kwargs["title"],
+                    "[Lemur][{}] Scheduled task reported an error: scheduled".format(label),
+                )
+
     def test_real_dogstatsd_client_serializes_event_without_sending(self):
         client = DogStatsd()
         with patch.object(client, "_send") as transport:
