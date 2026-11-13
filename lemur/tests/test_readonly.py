@@ -105,8 +105,19 @@ def test_metadata_search_pagination_and_detail(client, readonly_token, certifica
     assert not {"body", "chain", "csr", "privateKey", "user", "sources"} & response.json.keys()
     for destination in response.json["destinations"]:
         assert set(destination) == {"id", "label"}
+    first_page = client.get("/api/1/readonly/certificates?count=1", headers=headers).json
+    assert len(first_page["items"]) == 1
+    next_page = client.get("/api/1/readonly/certificates?page=2&count=1", headers=headers).json
+    assert next_page["total"] == first_page["total"]
+    if next_page["items"]:
+        assert next_page["items"][0]["id"] < first_page["items"][0]["id"]
+    empty_page = first_page["total"] // 100 + 2
     assert (
-        client.get("/api/1/readonly/certificates?page=2&count=100", headers=headers).json["items"]
+        client.get(
+            "/api/1/readonly/certificates",
+            query_string={"page": empty_page, "count": 100},
+            headers=headers,
+        ).json["items"]
         == []
     )
     for suffix in ("?count=101", "?page=0", "?target=other", "?page=1&page=2"):
