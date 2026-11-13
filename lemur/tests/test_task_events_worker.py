@@ -1,13 +1,10 @@
 """Real worker logging regression, using only in-memory broker and result storage."""
 
-import ast
 import importlib.util
-from contextlib import nullcontext
 import io
 import json
 import logging
 from pathlib import Path
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
@@ -37,32 +34,18 @@ class TaskEventWorkerTest(unittest.TestCase):
             "CELERY_FAILURE_EVENT_LOGS_URL": "https://example.test/logs",
         }
         send = Mock()
-        flask = SimpleNamespace(
-            config=config, logger=logging.getLogger("isolated-flask"), app_context=nullcontext,
-        )
-        # Load the actual logging setup and failure callback without importing
-        # the application module, which initializes database and Redis clients.
-        source = Path(__file__).parents[1] / "common" / "celery.py"
-        tree = ast.parse(source.read_text())
-        make_celery = next(n for n in tree.body if getattr(n, "name", None) == "make_celery")
-        configure = next(n for n in make_celery.body
-                         if getattr(n, "name", None) == "_configure_worker_logging")
-        failure = next(n for n in tree.body
-                       if getattr(n, "name", None) == "notify_failed_scheduled_task")
-        failure.decorator_list = []
-        namespace = {
-            "app": flask, "flask_app": flask, "current_app": flask, "celery": app,
-            "json_log_formatter": logmatic.JsonFormatter,
-            "ScheduledTaskErrorHandler": events.ScheduledTaskErrorHandler,
-            "TaskErrorContextFilter": events.TaskErrorContextFilter,
-            "notify_task_failure": events.notify_task_failure,
-            "plugins": SimpleNamespace(get=lambda name: SimpleNamespace(
-                statsd=SimpleNamespace(event=send))),
-        }
-        exec(compile(ast.Module(body=[configure, failure], type_ignores=[]), str(source), "exec"),
-             namespace)
-        setup = namespace["_configure_worker_logging"]
-        callback = Mock(wraps=namespace["notify_failed_scheduled_task"])
+        app_logger = logging.getLogger("isolated-flask")
+
+        def setup(logger, **kwargs):
+            events.configure_worker_logging(
+                logger, app_logger, lambda: app.current_task, config, send,
+                logmatic.JsonFormatter(),
+            )
+
+        def failure(sender=None, task_id=None, exception=None, **kwargs):
+            events.notify_task_failure(sender, task_id, exception, config, send)
+
+        callback = Mock(wraps=failure)
         signals.after_setup_logger.connect(setup, weak=False)
         signals.after_setup_task_logger.connect(setup, weak=False)
         signals.task_failure.connect(callback, weak=False)
@@ -77,7 +60,7 @@ class TaskEventWorkerTest(unittest.TestCase):
             try:
                 raise ValueError("caught test failure")
             except ValueError:
-                flask.logger.exception("caught test error")
+                app_logger.exception("caught test error")
             return "still succeeds"
 
         @app.task(name="test.uncaught")

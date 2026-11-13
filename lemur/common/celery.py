@@ -36,7 +36,7 @@ from lemur.certificates import health as certificate_health
 from lemur.certificates import service as certificate_service
 from lemur.common.redis import RedisHandler
 from lemur.common.task_events import (
-    ScheduledTaskErrorHandler, TaskErrorContextFilter, mark_scheduled_child, notify_task_failure,
+    configure_worker_logging, mark_scheduled_child, notify_task_failure,
 )
 from lemur.dns_providers import cli as cli_dns_providers
 from lemur.extensions import metrics
@@ -73,30 +73,11 @@ def make_celery(app):
     celery.conf.update(app.config)
 
     def _configure_worker_logging(logger, **kwargs):
-        # Web logging owns its handler and disables propagation. Celery owns
-        # the root handler, so route current_app.logger through that instead.
-        for handler in app.logger.handlers:
-            handler.close()
-        app.logger.handlers.clear()
-        app.logger.propagate = True
-
-        # Give Celery's own handlers the same JSON shape as the Flask app so
-        # worker and web logs are ingested identically.
-        if app.config.get("LOG_JSON", False):
-            formatter = json_log_formatter()
-            for handler in logger.handlers:
-                handler.setFormatter(formatter)
-
-        if not any(isinstance(handler, ScheduledTaskErrorHandler) for handler in logger.handlers):
-            logger.addHandler(ScheduledTaskErrorHandler(
-                lambda: celery.current_task, app.config,
-                lambda **event: plugins.get("statsd-metrics").statsd.event(**event),
-            ))
-
-        # Enrich each handler before formatting, including errors from child loggers.
-        for handler in logger.handlers:
-            if not any(isinstance(f, TaskErrorContextFilter) for f in handler.filters):
-                handler.addFilter(TaskErrorContextFilter(lambda: celery.current_task))
+        configure_worker_logging(
+            logger, app.logger, lambda: celery.current_task, app.config,
+            lambda **event: plugins.get("statsd-metrics").statsd.event(**event),
+            json_log_formatter() if app.config.get("LOG_JSON", False) else None,
+        )
 
     after_setup_logger.connect(_configure_worker_logging, weak=False)
     after_setup_task_logger.connect(_configure_worker_logging, weak=False)

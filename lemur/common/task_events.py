@@ -66,6 +66,26 @@ def notify_task_failure(task, task_id, exception, config, send_event):
         task.request._lemur_reporting_error = False
 
 
+def configure_worker_logging(logger, app_logger, current_task, config, send_event, formatter=None):
+    """Share worker logging setup without importing application services."""
+    for handler in app_logger.handlers:
+        handler.close()
+    app_logger.handlers.clear()
+    app_logger.propagate = True
+
+    if formatter is not None:
+        for handler in logger.handlers:
+            handler.setFormatter(formatter)
+
+    if not any(isinstance(handler, ScheduledTaskErrorHandler) for handler in logger.handlers):
+        logger.addHandler(ScheduledTaskErrorHandler(current_task, config, send_event))
+
+    # Handler filters also enrich records propagated from child loggers.
+    for handler in logger.handlers:
+        if not any(isinstance(f, TaskErrorContextFilter) for f in handler.filters):
+            handler.addFilter(TaskErrorContextFilter(current_task))
+
+
 class TaskErrorContextFilter(logging.Filter):
     """Correlate task errors before output handlers serialize the record."""
 
