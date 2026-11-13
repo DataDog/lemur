@@ -106,6 +106,10 @@ def login_required(f):
 
         try:
             header_data = fetch_token_header(token)
+            # Management tokens are issued locally with HS256. External JWTs
+            # belong only to explicitly configured authentication boundaries.
+            if header_data.get("alg") != "HS256":
+                return dict(message="Token is invalid"), 403
             payload = jwt.decode(
                 token,
                 current_app.config["LEMUR_TOKEN_SECRET"],
