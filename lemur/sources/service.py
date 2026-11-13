@@ -255,7 +255,10 @@ def get_cert_for_endpoint(source, endpoint, certificate_name):
         if not crt:
             current_app.logger.error(
                 {
-                    "message": f"Certificate not found while syncing endpoint from source {source.label}",
+                    "message": (
+                        f"Certificate {certificate_name} not found while syncing endpoint "
+                        f"{endpoint_name} (DNS name {dns_name}) from source {source.label}"
+                    ),
                     "certificate_name": certificate_name,
                     "endpoint_name": endpoint_name,
                     "dns_name": dns_name,
