@@ -36,6 +36,7 @@ from werkzeug.utils import cached_property
 
 
 from lemur.common import defaults, utils, validators
+from lemur.common.coa_isolation import validate_coa_paths
 from lemur.constants import SUCCESS_METRIC_STATUS, FAILURE_METRIC_STATUS
 from lemur.database import db
 from lemur.domains.models import Domain
@@ -442,7 +443,7 @@ class Certificate(db.Model):
         except ValueError as e:
             capture_exception()
             current_app.logger.warning("Unable to parse")
-            current_app.logger.exception(e)
+            current_app.logger.exception("Failed to parse extensions for certificate %s: %s", self.name, e)
 
         return return_extensions
 
@@ -505,6 +506,7 @@ def update_destinations(target, value, initiator):
         )
         return
 
+    validate_coa_paths(value.plugin_name, value.options)
     destination_plugin = plugins.get(value.plugin_name)
     status = FAILURE_METRIC_STATUS
 
@@ -518,21 +520,22 @@ def update_destinations(target, value, initiator):
                 target.private_key,
                 target.chain,
                 value.options,
+                replaces=[certificate.body for certificate in target.replaces],
             )
             status = SUCCESS_METRIC_STATUS
-    except Exception as e:
+    except Exception:
         capture_exception()
         raise
-
-    metric_tags = {
-        "status": status,
-        "certificate": target.name,
-        "destination": value.label,
-    }
-    datacenter = _datacenter_from_description(value.description)
-    if datacenter:
-        metric_tags["datacenter"] = datacenter
-    metrics.send("destination_upload", "counter", 1, metric_tags=metric_tags)
+    finally:
+        metric_tags = {
+            "status": status,
+            "certificate": target.name,
+            "destination": value.label,
+        }
+        datacenter = _datacenter_from_description(value.description)
+        if datacenter:
+            metric_tags["datacenter"] = datacenter
+        metrics.send("destination_upload", "counter", 1, metric_tags=metric_tags)
 
 
 @event.listens_for(Certificate.replaces, "append")

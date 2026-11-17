@@ -80,9 +80,13 @@ def wait_for_dns_change(change_id, account_number=None):
     change = _get_client(account_number).zone(zone_name).changes()
     change.name = change_name
     change.reload()
-    while change.status != "done":
+    for _ in range(12):
+        if change.status == "done":
+            return
         time.sleep(5)
         change.reload()
+    if change.status != "done":
+        raise TimeoutError(f"GCP Cloud DNS change {change_name} in zone {zone_name} is still pending")
 
 
 def delete_txt_record(change_ids, account_number, host, value):

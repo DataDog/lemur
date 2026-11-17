@@ -130,7 +130,7 @@ class SFTPDestinationPlugin(DestinationPlugin):
                 ssh.connect(host, username=user, port=port, pkey=pkey)
             else:
                 current_app.logger.error(
-                    "No password or private key provided. Can't proceed"
+                    "SFTP authentication is not configured for %s:%s", host, port
                 )
                 raise AuthenticationException
 
@@ -138,12 +138,12 @@ class SFTPDestinationPlugin(DestinationPlugin):
             return ssh.open_sftp(), ssh
 
         except AuthenticationException as e:
-            current_app.logger.error("ERROR in {0}: {1}".format(e.__class__, e))
+            current_app.logger.error("SFTP authentication failed for %s:%s: %s", host, port, e)
             raise AuthenticationException(
                 "Couldn't connect to {0}, due to an Authentication exception."
             )
         except NoValidConnectionsError as e:
-            current_app.logger.error("ERROR in {0}: {1}".format(e.__class__, e))
+            current_app.logger.error("SFTP connection failed for %s:%s: %s", host, port, e)
             raise NoValidConnectionsError(
                 "Couldn't connect to {0}, possible timeout or invalid hostname"
             )
@@ -227,7 +227,7 @@ class SFTPDestinationPlugin(DestinationPlugin):
         except (AuthenticationException, NoValidConnectionsError) as e:
             raise e
         except Exception as e:
-            current_app.logger.error("ERROR in {0}: {1}".format(e.__class__, e))
+            current_app.logger.error("SFTP file deletion failed under %s: %s", dst_path, e)
             try:
                 ssh.close()
             except BaseException:
@@ -301,7 +301,7 @@ class SFTPDestinationPlugin(DestinationPlugin):
         except (AuthenticationException, NoValidConnectionsError) as e:
             raise e
         except Exception as e:
-            current_app.logger.error("ERROR in {0}: {1}".format(e.__class__, e))
+            current_app.logger.error("SFTP file upload failed under %s: %s", dst_path, e)
             try:
                 ssh.close()
             except BaseException:

@@ -129,7 +129,10 @@ class AcmeHttpChallenge(AcmeChallenge):
                     deployed_challenges.append(challenge.chall.path)
                     acme_client.answer_challenge(challenge, response)
                 except Exception as e:
-                    current_app.logger.error(e)
+                    current_app.logger.error(
+                        "Failed to deploy or answer HTTP-01 challenge for ACME order %s: %s",
+                        orderr.uri, e
+                    )
                     raise Exception(
                         "Failure while trying to deploy token to configure destination. See logs for more information"
                     )

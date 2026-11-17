@@ -90,9 +90,10 @@ cert-manager==3.0.0
     # via -r requirements-datadog.in
 certbot==5.4.0
     # via -r requirements-base.in
-certifi==2026.2.25
+certifi==2026.10.19
     # via
     #   -r requirements-base.in
+    #   -r requirements-datadog.in
     #   httpcore
     #   httpx
     #   msrest

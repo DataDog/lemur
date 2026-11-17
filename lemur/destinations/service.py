@@ -10,6 +10,7 @@ from sqlalchemy import func
 from flask import current_app
 
 from lemur import database
+from lemur.common.coa_isolation import validate_coa_paths
 from lemur.models import certificate_destination_associations
 from lemur.destinations.models import Destination
 from lemur.certificates.models import Certificate
@@ -27,6 +28,7 @@ def create(label, plugin_name, options, description=None):
     :rtype: Destination
     :return: New destination
     """
+    validate_coa_paths(plugin_name, options)
     # remove any sub-plugin objects before try to save the json options
     for option in options:
         if "plugin" in option["type"]:
@@ -59,6 +61,7 @@ def update(destination_id, label, plugin_name, options, description):
     :rtype: Destination
     :return:
     """
+    validate_coa_paths(plugin_name, options)
     destination = get(destination_id)
 
     destination.label = label

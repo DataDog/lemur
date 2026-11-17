@@ -17,6 +17,7 @@ from sqlalchemy import cast
 from sqlalchemy_utils import ArrowType
 
 from lemur import database
+from lemur.common.coa_isolation import validate_coa_paths
 from lemur.sources.models import Source
 from lemur.certificates.models import Certificate
 from lemur.certificates import service as certificate_service
@@ -75,6 +76,7 @@ def sync_update_destination(certificate, source):
 
 
 def sync_endpoints(source):
+    validate_coa_paths(source.plugin_name, source.options)
     new, updated, updated_by_hash = 0, 0, 0
     current_app.logger.debug("Retrieving endpoints from {0}".format(source.label))
     s = plugins.get(source.plugin_name)
@@ -107,6 +109,11 @@ def sync_endpoints(source):
                 )
             else:
                 raise e
+
+        if (source.plugin_name == "aws-acm-source" and exists and exists.source
+                and exists.source.plugin_name == "aws-source"):
+            # Prefer IAM ownership: IAM rotates endpoints; ACM only inventories them.
+            continue
 
         if "primary_certificate" in endpoint:
             crt_name = endpoint["primary_certificate"]["name"]
@@ -230,8 +237,9 @@ def get_cert_for_endpoint(source, endpoint, certificate_name):
 
             if len(lemur_matching_cert) > 1:
                 current_app.logger.error(
-                    "Too Many Certificates Found{0}. Name: {1} Endpoint: {2}".format(
-                        len(lemur_matching_cert), certificate_name, endpoint_name
+                    "Found {0} matching certificates for {1}, endpoint {2}, source {3}; "
+                    "using the first match.".format(
+                        len(lemur_matching_cert), certificate_name, endpoint_name, source.label
                     )
                 )
                 metrics.send(
@@ -247,7 +255,10 @@ def get_cert_for_endpoint(source, endpoint, certificate_name):
         if not crt:
             current_app.logger.error(
                 {
-                    "message": "Certificate Not Found",
+                    "message": (
+                        f"Certificate {certificate_name} not found while syncing endpoint "
+                        f"{endpoint_name} (DNS name {dns_name}) from source {source.label}"
+                    ),
                     "certificate_name": certificate_name,
                     "endpoint_name": endpoint_name,
                     "dns_name": dns_name,
@@ -321,6 +332,7 @@ def find_cert(certificate):
 
 # TODO this is very slow as we don't batch update certificates
 def sync_certificates(source, user):
+    validate_coa_paths(source.plugin_name, source.options)
     new, updated, updated_by_hash, unlinked = 0, 0, 0, 0
 
     current_app.logger.debug("Retrieving certificates from {0}".format(source.label))
@@ -336,7 +348,9 @@ def sync_certificates(source, user):
     )
 
     existing_certificates_with_source_by_id = {}
-    for e in certificate_service.get_all_valid_certificates_with_source(source.id):
+    for e in certificate_service.get_all_valid_certificates_with_source(
+        source.id, include_replaced=getattr(s, "sync_replaced_certificates", False)
+    ):
         existing_certificates_with_source_by_id[e.id] = e
 
     for certificate in certificates:
@@ -437,6 +451,7 @@ def create(label, plugin_name, options, description=None):
     :rtype: Source
     :return: New source
     """
+    validate_coa_paths(plugin_name, options)
     source = Source(
         label=label, options=options, plugin_name=plugin_name, description=description
     )
@@ -456,6 +471,7 @@ def update(source_id, label, plugin_name, options, description):
     :rtype: Source
     :return:
     """
+    validate_coa_paths(plugin_name, options)
     source = get(source_id)
 
     source.label = label

@@ -1,5 +1,7 @@
 from unittest.mock import Mock, patch
 
+import pytest
+
 from lemur.plugins.lemur_acme import gcp
 
 OPTIONS = {
@@ -198,3 +200,48 @@ def test_wait_for_dns_change_skips_existing_value(mock_get_client):
     )
 
     mock_get_client.assert_not_called()
+
+
+@patch("lemur.plugins.lemur_acme.gcp.time.sleep")
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_wait_for_dns_change_times_out(mock_get_client, mock_sleep):
+    change = mock_get_client.return_value.zone.return_value.changes.return_value
+    change.status = "pending"
+
+    with pytest.raises(TimeoutError, match="change-1 in zone example is still pending"):
+        gcp.wait_for_dns_change(("example", "change-1", "host", "token"), OPTIONS)
+
+    assert change.reload.call_count == 13
+    assert mock_sleep.call_count == 12
+
+
+@patch("lemur.plugins.lemur_acme.gcp.time.sleep")
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_wait_for_completed_dns_change_does_not_sleep(mock_get_client, mock_sleep):
+    change = mock_get_client.return_value.zone.return_value.changes.return_value
+    change.status = "done"
+
+    gcp.wait_for_dns_change(("example", "change-1", "host", "token"), OPTIONS)
+
+    change.reload.assert_called_once_with()
+    mock_sleep.assert_not_called()
+
+
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_wait_for_dns_change_propagates_api_error(mock_get_client):
+    change = mock_get_client.return_value.zone.return_value.changes.return_value
+    change.reload.side_effect = PermissionError("DNS change lookup denied")
+
+    with pytest.raises(PermissionError, match="DNS change lookup denied"):
+        gcp.wait_for_dns_change(("example", "change-1", "host", "token"), OPTIONS)
+
+
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_create_txt_record_rejects_private_or_unrelated_zones(mock_get_client):
+    mock_get_client.return_value.list_zones.return_value = [
+        zone("private", "example.com.", public=False),
+        zone("other", "other.com."),
+    ]
+
+    with pytest.raises(ValueError, match="Unable to find a GCP Cloud DNS zone"):
+        gcp.create_txt_record("_acme-challenge.test.example.com", "token", OPTIONS)

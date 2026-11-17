@@ -21,7 +21,7 @@
                         </td>
                         <td data-title="'Name'" sortable="'name'" filter="{ 'name': 'text' }">
                             <ul class="list-unstyled">
-                                <li>{{ endpoint.name }}</li>
+                                <li>{{ endpoint.name }} <span ng-if="!endpoint.active" class="label label-default">Inactive</span></li>
                                 <li><span class="text-muted">{{ endpoint.dnsname }}</span></li>
                             </ul>
                         </td>
@@ -37,7 +37,11 @@
                             </ul>
                         </td>
                         <td data-title="''" filter="{ 'ciphers' : 'select'}" filter-data="ciphers" class="centered-cell">
-                            <div class="btn-group-vertical pull-right">
+                            <div class="btn-group pull-right">
+                                <button class="btn btn-sm" ng-class="endpoint.active ? 'btn-danger' : 'btn-primary'"
+                                        ng-click="setActive(endpoint, !endpoint.active)" ng-disabled="endpoint.updatingActive">
+                                    {{ endpoint.active ? 'Deactivate' : 'Reactivate' }}
+                                </button>
                                 <button ng-model="endpoint.toggle" class="btn btn-sm btn-info" uib-btn-checkbox
                                         btn-checkbox-true="1"
                                         btn-checkbox-false="0">More

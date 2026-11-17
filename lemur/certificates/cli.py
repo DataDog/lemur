@@ -144,6 +144,11 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
     :param commit:
     :return:
     """
+    if endpoint.source and endpoint.source.plugin_name == "aws-acm-source":
+        # ACM reimport replaces the certificate at the same ARN, so no endpoint
+        # rotation is needed.
+        return
+
     status = FAILURE_METRIC_STATUS
     if commit:
         try:
@@ -170,7 +175,8 @@ def request_rotation(endpoint, old_certificate, new_certificate, message, commit
                 }
             )
             current_app.logger.exception(
-                f"Error rotating certificate: {new_certificate.name}", exc_info=True
+                f"Failed to rotate endpoint {endpoint.name} from certificate "
+                f"{old_certificate.name} to {new_certificate.name}", exc_info=True
             )
             print(
                 "[!] Failed to rotate endpoint {0} to certificate {1} reason: {2}".format(
@@ -236,6 +242,7 @@ def request_reissue(certificate, notify, commit):
         1,
         metric_tags={"status": status, "certificate": certificate.name},
     )
+    return status == SUCCESS_METRIC_STATUS
 
 
 @manager.option(
@@ -476,22 +483,32 @@ def reissue(old_certificate_name, notify, commit):
     try:
         old_cert = validate_certificate(old_certificate_name)
 
+        failed = 0
         if not old_cert:
             for certificate in get_all_pending_reissue():
-                request_reissue(certificate, notify, commit)
+                if not request_reissue(certificate, notify, commit):
+                    failed += 1
         else:
-            request_reissue(old_cert, notify, commit)
+            if not request_reissue(old_cert, notify, commit):
+                failed += 1
 
-        status = SUCCESS_METRIC_STATUS
-        print("[+] Done!")
+        if not failed:
+            status = SUCCESS_METRIC_STATUS
+            print("[+] Done!")
     except Exception as e:
         capture_exception()
-        current_app.logger.exception("Error reissuing certificate.", exc_info=True)
+        current_app.logger.exception(
+            "Certificate reissuance failed (requested certificate=%s, commit=%s)",
+            old_certificate_name or "all due certificates", commit, exc_info=True
+        )
         print("[!] Failed to reissue certificates. Reason: {}".format(e))
 
     metrics.send(
         "certificate_reissue_job", "counter", 1, metric_tags={"status": status}
     )
+    if status == FAILURE_METRIC_STATUS:
+        # Let Celery report a failed task after processing the remaining certificates.
+        raise RuntimeError("Certificate reissuance failed; see certificate errors above.")
 
 
 @manager.option(
@@ -879,7 +896,7 @@ def deactivate_entrust_certificates():
         except Exception as e:
             current_app.logger.info(log_data)
             capture_exception()
-            current_app.logger.exception(e)
+            current_app.logger.exception("Failed to deactivate Entrust certificate %s: %s", cert.name, e)
 
 
 @manager.option(

@@ -6,12 +6,13 @@
 .. moduleauthor:: Kevin Glisson <kglisson@netflix.com>
 """
 
-from flask import Blueprint, g
+from flask import Blueprint, g, request
 from flask_restful import reqparse, Api
 
 from lemur.common.utils import paginated_parser
 from lemur.common.schema import validate_schema
 from lemur.auth.service import AuthenticatedResource
+from lemur.auth.permissions import write_permission
 
 from lemur.endpoints import service
 from lemur.endpoints.schemas import endpoint_output_schema, endpoints_output_schema
@@ -105,5 +106,23 @@ class Endpoints(AuthenticatedResource):
         return service.get(endpoint_id)
 
 
+class EndpointActive(AuthenticatedResource):
+    @write_permission.require(http_exception=403)
+    def post(self, endpoint_id):
+        """Set inventory status without probing or changing the cloud resource."""
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or not isinstance(payload.get("active"), bool):
+            return {"message": "active must be a JSON boolean"}, 400
+        endpoint = service.set_active(endpoint_id, payload["active"])
+        if endpoint is None:
+            return {"message": "Endpoint not found"}, 404
+        return endpoint
+
+
 api.add_resource(EndpointsList, "/endpoints", endpoint="endpoints")
 api.add_resource(Endpoints, "/endpoints/<int:endpoint_id>", endpoint="endpoint")
+api.add_resource(
+    EndpointActive,
+    "/endpoints/<int:endpoint_id>/active",
+    endpoint="endpoint_active",
+)

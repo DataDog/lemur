@@ -16,7 +16,7 @@ from lemur.plugins.base import plugins
 class Destination(db.Model):
     __tablename__ = "destinations"
     id = Column(Integer, primary_key=True)
-    label = Column(String(32))
+    label = Column(String(32), unique=True)
     options = Column(JSONType)
     description = Column(Text())
     plugin_name = Column(String(32))

@@ -24,14 +24,14 @@ def find_zone_id(host):
         try:
             zone = cf.zones.get(params={"name": domain, "per_page": 1})
         except Exception as e:
-            current_app.logger.error("Cloudflare API error: %s" % e)
+            current_app.logger.error("Cloudflare zone lookup failed for %s: %s", domain, e)
             pass
 
         if len(zone) == 1:
             break
 
     if len(zone) == 0:
-        current_app.logger.error("No zone found")
+        current_app.logger.error("No Cloudflare DNS zone found for %s", host)
         return
     else:
         return zone[0]["id"]
@@ -78,4 +78,7 @@ def delete_txt_record(change_ids, account_number, host, value):
         try:
             cf.zones.dns_records.delete(zone_id, record_id)
         except Exception as e:
-            current_app.logger.error("/zones.dns_records.post: %s" % e)
+            current_app.logger.error(
+                "Cloudflare TXT cleanup failed for %s (zone=%s, record=%s): %s",
+                host, zone_id, record_id, e
+            )

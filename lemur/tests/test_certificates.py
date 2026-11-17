@@ -302,8 +302,41 @@ def test_get_certificate_primitives(certificate, logged_in_user):
 
     with freeze_time(datetime.date(year=2016, month=10, day=30)):
         primitives = get_certificate_primitives(certificate)
-        assert len(primitives) == 26
+        assert len(primitives) == 25
         assert primitives["key_type"] == "RSA2048"
+
+
+@pytest.mark.parametrize("csr_names", [[], [x509.DNSName("san.example.org")]])
+def test_reissue_preserves_issued_sans(
+    certificate, crypto_authority, logged_in_user, csr_names
+):
+    from lemur.certificates.service import get_certificate_primitives, reissue_certificate
+
+    certificate.authority = crypto_authority
+    certificate.csr, _ = create_csr(
+        owner=certificate.owner,
+        common_name=certificate.cn,
+        key_type="RSA2048",
+        extensions={"sub_alt_names": {"names": x509.SubjectAlternativeName(csr_names)}},
+    )
+    expected = set(
+        certificate.parsed_cert.extensions.get_extension_for_class(
+            x509.SubjectAlternativeName
+        ).value
+    )
+    assert set(csr_names) < expected
+
+    primitives = get_certificate_primitives(certificate)
+    assert not primitives.get("csr")
+    assert set(primitives["extensions"]["sub_alt_names"]["names"]) == expected
+
+    renewed = reissue_certificate(certificate, replace=True)
+    assert renewed.cn == certificate.cn
+    assert set(
+        renewed.parsed_cert.extensions.get_extension_for_class(
+            x509.SubjectAlternativeName
+        ).value
+    ) == expected
 
 
 def test_certificate_output_schema(session, certificate, issuer_plugin):
@@ -1955,6 +1988,39 @@ def test_send_certificate_expiration_metrics(certificate):
 
     success, failure = send_certificate_expiration_metrics()
     assert failure == 0
+
+
+@pytest.mark.parametrize(
+    "endpoint_states, expected",
+    [([], False), ([False], False), ([True], True), ([False, True], True)],
+)
+def test_send_certificate_expiration_metrics_active_endpoints(
+    session, destination_plugin, endpoint_states, expected
+):
+    from lemur.certificates.service import send_certificate_expiration_metrics
+    from lemur.tests.factories import DestinationFactory, EndpointFactory
+
+    cert = create_cert_that_expires_in_days(10)
+    cert.destinations.append(DestinationFactory())
+    cert.endpoints = [EndpointFactory(active=active) for active in endpoint_states]
+    session.flush()
+
+    with patch("lemur.certificates.service.metrics") as mock_metrics:
+        success, failure = send_certificate_expiration_metrics()
+
+    assert failure == 0
+    calls = [
+        call
+        for call in mock_metrics.send.call_args_list
+        if call.kwargs["metric_tags"]["cert_id"] == cert.id
+    ]
+    assert {call.args[0] for call in calls} == {
+        "certificates.days_until_expiration",
+        "certificates.by_destination",
+    }
+    assert all(
+        call.kwargs["metric_tags"]["has_active_endpoints"] is expected for call in calls
+    )
 
 
 def test_send_certificate_expiration_metrics_has_been_replaced_tag(

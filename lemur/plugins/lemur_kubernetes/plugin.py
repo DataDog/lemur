@@ -212,12 +212,14 @@ class KubernetesDestinationPlugin(DestinationPlugin):
 
         except Exception as e:
             current_app.logger.exception(
-                "Exception in upload: {}".format(e), exc_info=True
+                "Failed to upload Kubernetes certificate %s: %s", name, e, exc_info=True
             )
             raise
 
         if err is not None:
-            current_app.logger.error("Error deploying resource: %s", err)
+            current_app.logger.error(
+                "Failed to deploy Kubernetes secret %s for certificate %s: %s", secret_name, name, err
+            )
             raise Exception("Error uploading secret: " + err)
 
     def k8s_bearer(self, options):

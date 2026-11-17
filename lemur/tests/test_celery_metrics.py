@@ -105,7 +105,7 @@ def test_task_duration_emitted_on_failure_with_timeout_status(mock_metrics):
     _celery_module._task_started_at.clear()
     _celery_module._task_started_at["task-2"] = 50.0
 
-    with patch.object(_celery_module, "current_app", MagicMock()), patch(
+    with patch.object(_celery_module, "current_app", MagicMock()) as app, patch(
         "lemur.common.celery.time.monotonic", return_value=51.5
     ), patch("lemur.common.celery.time.time", return_value=2000):
         fake_task = FakeTask(task_id="task-2")
@@ -114,6 +114,10 @@ def test_task_duration_emitted_on_failure_with_timeout_status(mock_metrics):
             request=fake_task.request,
             einfo=FakeEinfo(_celery_module.SoftTimeLimitExceeded()),
         )
+        log = app.logger.error.call_args.args[0]
+        assert log["message"] == "Celery Task Failure"
+        assert "Message" not in log
+        assert log["traceback"] == "fake traceback"
 
     duration_calls = [c for c in mock_metrics.send.call_args_list if c.args[0] == "celery.task_duration"]
     assert len(duration_calls) == 1

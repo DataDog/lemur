@@ -1,4 +1,5 @@
 from flask_script import Manager
+from celery.exceptions import SoftTimeLimitExceeded
 
 import sys
 from sentry_sdk import capture_exception
@@ -32,6 +33,8 @@ def get_all_zones():
         try:
             zones = acme_dns_handler.get_all_zones(dns_provider)
             set_domains(dns_provider, zones)
+        except SoftTimeLimitExceeded:
+            raise
         except Exception as e:
             print("[+] Error with DNS Provider {}: {}".format(dns_provider.name, e))
             log_data["message"] = f"get all zones failed for {dns_provider} {e}."
