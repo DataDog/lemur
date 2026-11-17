@@ -281,7 +281,7 @@ def test_sync_endpoints_retry_uses_the_same_key(session):
     with mock.patch.object(
         AWSSourcePlugin, "get_endpoints", side_effect=get_endpoints
     ), mock.patch.object(
-        endpoint_service, "get_by_dedupe_key", side_effect=[connection_lost, None]
+        endpoint_service, "get_by_dedupe_key", side_effect=[connection_lost, {}]
     ) as lookup, mock.patch(
         "lemur.sources.service.database.rollback"
     ):
@@ -290,7 +290,7 @@ def test_sync_endpoints_retry_uses_the_same_key(session):
     assert (new, updated) == (1, 0)
     assert lookup.call_count == 2
     for call in lookup.call_args_list:
-        assert call.args == ("dedupe3.example.com", 443, source, "/vault/path/dedupe-3")
+        assert call.args == ("dedupe3.example.com", 443, [source], "/vault/path/dedupe-3")
 
 
 def test_get_by_dedupe_key(session):
@@ -305,12 +305,81 @@ def test_get_by_dedupe_key(session):
     session.commit()
 
     find = endpoint_service.get_by_dedupe_key
-    assert find("dk.example.com", 443, source_a, "dk-name") == endpoint
+    assert find("dk.example.com", 443, [source_a], "dk-name") == {source_a.id: endpoint}
     # Each part of the key is part of the match.
-    assert find("other.example.com", 443, source_a, "dk-name") is None
-    assert find("dk.example.com", 8443, source_a, "dk-name") is None
-    assert find("dk.example.com", 443, source_b, "dk-name") is None
-    assert find("dk.example.com", 443, source_a, "other-name") is None
+    assert find("other.example.com", 443, [source_a], "dk-name") == {}
+    assert find("dk.example.com", 8443, [source_a], "dk-name") == {}
+    assert find("dk.example.com", 443, [source_b], "dk-name") == {}
+    assert find("dk.example.com", 443, [source_a], "other-name") == {}
+    assert find("dk.example.com", 443, [], "dk-name") == {}
+
+
+def test_get_by_dedupe_key_returns_one_row_for_each_source(session):
+    from lemur.endpoints import service as endpoint_service
+    from lemur.tests.factories import EndpointFactory, SourceFactory
+
+    iam = SourceFactory(plugin_name="aws-source")
+    acm = SourceFactory(plugin_name="aws-acm-source")
+    other = SourceFactory()
+    acm_row = EndpointFactory(name="lb", dnsname="m.example.com", port=443, source=acm)
+    session.commit()
+
+    find = endpoint_service.get_by_dedupe_key
+    # Only the ACM row exists.
+    assert find("m.example.com", 443, [iam, acm], "lb") == {acm.id: acm_row}
+    # A source that is not in the input does not match.
+    assert find("m.example.com", 443, [iam, other], "lb") == {}
+
+    # With an IAM row too, the result has both. The caller chooses.
+    iam_row = EndpointFactory(name="lb", dnsname="m.example.com", port=443, source=iam)
+    session.commit()
+    assert find("m.example.com", 443, [iam, acm], "lb") == {
+        iam.id: iam_row,
+        acm.id: acm_row,
+    }
+
+
+def test_get_by_dedupe_key_keeps_the_lowest_id_for_a_duplicate(session):
+    from unittest import mock
+    from lemur.endpoints import service as endpoint_service
+    from lemur.tests.factories import EndpointFactory, SourceFactory
+
+    source = SourceFactory()
+    first = EndpointFactory(name="dup", dnsname="d.example.com", port=443, source=source)
+    session.commit()
+    EndpointFactory(name="dup", dnsname="d.example.com", port=443, source=source)
+    session.commit()
+
+    with mock.patch.object(endpoint_service.current_app.logger, "warning") as warning:
+        rows = endpoint_service.get_by_dedupe_key("d.example.com", 443, [source], "dup")
+
+    assert rows == {source.id: first}
+    assert warning.call_count == 1
+
+
+def test_acm_source_skips_an_endpoint_that_iam_owns(session):
+    from unittest import mock
+    from lemur.sources import service as source_service
+    from lemur.tests.factories import CertificateFactory, EndpointFactory, SourceFactory
+    from lemur.plugins.lemur_aws.plugin import ACMSourcePlugin
+    from lemur.endpoints.models import Endpoint
+
+    source_service.plugins.register(ACMSourcePlugin)
+    iam = SourceFactory(plugin_name="aws-source")
+    acm = SourceFactory(plugin_name="aws-acm-source")
+    EndpointFactory(name="/vault/path/lb", dnsname="own.example.com", port=443, source=iam)
+    crt = CertificateFactory()
+    session.commit()
+
+    with mock.patch.object(
+        ACMSourcePlugin,
+        "get_endpoints",
+        return_value=[_reported_endpoint(crt, "/vault/path/lb", "own.example.com")],
+    ):
+        assert source_service.sync_endpoints(acm)[:2] == (0, 0)
+
+    rows = Endpoint.query.filter(Endpoint.dnsname == "own.example.com").all()
+    assert [row.source_id for row in rows] == [iam.id]
 
 
 def test_get_by_dnsname_and_port_is_deprecated(session):
