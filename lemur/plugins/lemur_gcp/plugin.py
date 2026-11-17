@@ -1,5 +1,6 @@
 from flask import current_app
 from google.api_core import exceptions
+from lemur.exceptions import CertificateNotManaged
 
 from lemur.plugins.bases import DestinationPlugin, SourcePlugin
 from lemur.plugins import lemur_gcp as gcp
@@ -149,6 +150,8 @@ class GCPSourcePlugin(SourcePlugin):
             return certificates.fetch_by_name(
                 project_id, credentials, certificate_name, region
             )
+        except CertificateNotManaged:
+            raise
         except Exception as e:
             current_app.logger.error(
                 f"Failed to fetch GCP certificate {certificate_name}: {e}",
