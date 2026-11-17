@@ -108,6 +108,9 @@ def get_elb_endpoints(account_number, region, elb_dict):
         if listener["Listener"]["SSLCertificateId"] == "Invalid-Certificate":
             continue
 
+        if acm_endpoints.is_acm(listener["Listener"]["SSLCertificateId"]):
+            continue
+
         endpoint = dict(
             name=elb_dict["LoadBalancerName"],
             dnsname=elb_dict["DNSName"],
@@ -179,6 +182,8 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
 
         endpoint["sni_certificates"] = []
         for certificate in listener_certificates["Certificates"]:
+            if acm_endpoints.is_acm(certificate["CertificateArn"]):
+                continue
             crt = dict(
                 name=iam.get_name_from_arn(certificate["CertificateArn"]),
                 path=iam.get_path_from_arn(certificate["CertificateArn"]),
@@ -190,6 +195,9 @@ def get_elb_endpoints_v2(account_number, region, elb_dict):
                 endpoint["primary_certificate"] = crt
             else:
                 endpoint["sni_certificates"].append(crt)
+
+        if "primary_certificate" not in endpoint:
+            continue
 
         if listener["SslPolicy"]:
             policy = elb.describe_ssl_policies_v2(
