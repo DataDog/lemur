@@ -24,6 +24,7 @@ from lemur.certificates import service as certificate_service
 from lemur.endpoints import service as endpoint_service
 from lemur.endpoints.models import Endpoint
 from lemur.extensions import metrics
+from lemur.exceptions import CertificateNotManaged
 from lemur.destinations import service as destination_service
 from lemur.certificates.schemas import CertificateUploadInputSchema
 from lemur.common.utils import find_matching_certificates_by_hash, parse_certificate
@@ -218,6 +219,15 @@ def get_cert_for_endpoint(source, endpoint, certificate_name):
             certificate_attached_to_endpoint = s.get_certificate_by_name(
                 certificate_name, source.options
             )
+        except CertificateNotManaged as e:
+            current_app.logger.info(
+                "Skipping certificate %s on endpoint %s from source %s: %s",
+                certificate_name,
+                endpoint_name,
+                source.label,
+                e,
+            )
+            return None, updated_by_hash
         except NotImplementedError:
             current_app.logger.warning(
                 "Unable to describe server certificate for endpoints in source {0}:"
