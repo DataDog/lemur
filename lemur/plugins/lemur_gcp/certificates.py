@@ -4,6 +4,7 @@ from google.cloud.compute_v1.services import ssl_certificates, region_ssl_certif
 
 from lemur.common.defaults import common_name, text_to_slug
 from lemur.common.utils import parse_certificate, split_pem
+from lemur.exceptions import CertificateNotManaged
 from lemur.plugins.lemur_gcp import utils
 
 
@@ -108,6 +109,8 @@ def fetch_by_name(project_id, credentials, certificate_name, region):
         client = ssl_certificates.SslCertificatesClient(credentials=credentials)
         cert_meta = client.get(project=project_id, ssl_certificate=certificate_name)
     if cert_meta:
+        if cert_meta.type_ == "MANAGED":
+            raise CertificateNotManaged("Google manages this certificate")
         cert = parse_certificate_meta(cert_meta)
         if cert:
             return cert

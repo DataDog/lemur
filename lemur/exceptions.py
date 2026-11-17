@@ -55,3 +55,7 @@ class InvalidAuthority(Exception):
 
 class UnknownProvider(Exception):
     pass
+
+
+class CertificateNotManaged(Exception):
+    """The source intentionally excludes this provider-managed certificate."""
