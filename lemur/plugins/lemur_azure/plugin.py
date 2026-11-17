@@ -11,6 +11,7 @@
 """
 
 import re
+from urllib.parse import urlparse
 
 from flask import current_app
 from sentry_sdk import capture_exception
@@ -44,8 +45,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 
 
-def get_cdn_endpoints(cdn_client):
+def get_cdn_endpoints(cdn_client, vault_url):
     endpoints = []
+    vault_name = urlparse(vault_url).hostname.split(".")[0]
     for profile in cdn_client.profiles.list():
         resource_group_name = resource_group_from_id(profile.id)
         for endpoint in cdn_client.endpoints.list_by_profile(
@@ -70,9 +72,12 @@ def get_cdn_endpoints(cdn_client):
                 if isinstance(
                     domain.custom_https_parameters, UserManagedHttpsParameters
                 ):
+                    certificate_source = domain.custom_https_parameters.certificate_source_parameters
+                    if (certificate_source.vault_name or "").lower() != vault_name:
+                        continue
                     ep["sni_certificates"].append(
                         dict(
-                            name=domain.custom_https_parameters.certificate_source_parameters.secret_name,
+                            name=certificate_source.secret_name,
                             path="",
                             registry_type="keyvault",
                         )
@@ -81,11 +86,16 @@ def get_cdn_endpoints(cdn_client):
     return endpoints
 
 
-def get_application_gateways(network_client):
+def get_application_gateways(network_client, vault_url):
     endpoints = []
     for appgw in network_client.application_gateways.list_all():
         for listener in appgw.http_listeners:
             if listener.protocol == "Https":
+                certificate = certificate_from_id(
+                    appgw, listener.ssl_certificate.id, vault_url
+                )
+                if certificate is None:
+                    continue
                 port = port_from_id(appgw, listener.frontend_port.id)
                 ip_address, is_public = ip_from_cfg_id(
                     appgw, network_client, listener.frontend_ip_configuration.id
@@ -96,9 +106,7 @@ def get_application_gateways(network_client):
                     dnsname=ip_address,
                     port=port,
                     type="applicationgateway",
-                    primary_certificate=certificate_from_id(
-                        appgw, listener.ssl_certificate.id
-                    ),
+                    primary_certificate=certificate,
                     sni_certificates=[],
                     policy=policy_from_appgw(network_client, appgw),
                 )
@@ -166,9 +174,13 @@ def policy_from_appgw(network_client, appgw):
     return policy
 
 
-def certificate_from_id(appgw, certificate_id):
+def certificate_from_id(appgw, certificate_id, vault_url):
     for cert in appgw.ssl_certificates:
         if cert.id == certificate_id:
+            if not cert.key_vault_secret_id or (
+                urlparse(cert.key_vault_secret_id).hostname != urlparse(vault_url).hostname
+            ):
+                return None
             return dict(
                 name=cert.name,
                 path="",
@@ -460,6 +472,7 @@ class AzureSourcePlugin(SourcePlugin):
             return None
 
     def get_endpoints(self, options, **kwargs):
+        vault_url = self.get_option("azureKeyVaultUrl", options)
         credential = get_azure_credential(
             audience="https://management.azure.com", plugin=self, options=options
         )
@@ -470,12 +483,12 @@ class AzureSourcePlugin(SourcePlugin):
             network_client = NetworkManagementClient(
                 credential=credential, subscription_id=subscription.subscription_id
             )
-            endpoints += get_application_gateways(network_client)
+            endpoints += get_application_gateways(network_client, vault_url)
 
             cdn_client = CdnManagementClient(
                 credential=credential, subscription_id=subscription.subscription_id
             )
-            endpoints += get_cdn_endpoints(cdn_client)
+            endpoints += get_cdn_endpoints(cdn_client, vault_url)
         return endpoints
 
     @staticmethod
