@@ -8,7 +8,7 @@ alembic==1.14.1
     # via flask-migrate
 alembic-autogenerate-enums==0.1.2
     # via -r requirements-base.in
-amqp==5.4.1
+amqp==5.4.2
     # via kombu
 aniso8601==10.0.1
     # via flask-restful
@@ -63,21 +63,21 @@ bcrypt==5.0.0
     # via
     #   flask-bcrypt
     #   paramiko
-billiard==4.3.1
+billiard==4.3.2
     # via celery
 blinker==1.9.0
     # via
     #   flask
     #   flask-mail
     #   flask-principal
-boto3==1.43.123
+boto3==1.43.126
     # via -r requirements-base.in
-botocore==1.43.123
+botocore==1.43.126
     # via
     #   -r requirements-base.in
     #   boto3
     #   s3transfer
-celery==5.6.3
+celery==5.7.0
     # via -r requirements-base.in
 cert-manager==4.0.0
     # via -r requirements-datadog.in
@@ -100,7 +100,7 @@ cffi==2.1.1
     #   pynacl
 charset-normalizer==3.5.2
     # via requests
-click==8.5.0
+click==8.5.1
     # via
     #   celery
     #   click-didyoumean
@@ -113,7 +113,7 @@ click-plugins==1.1.1.2
     # via celery
 click-repl==0.4.1
     # via celery
-cloudflare==5.9.0
+cloudflare==5.10.0
     # via -r requirements-base.in
 configargparse==1.9.0
     # via certbot
@@ -185,16 +185,16 @@ flask-sqlalchemy==2.5.1
     #   flask-migrate
 future==1.0.0
     # via -r requirements-base.in
-google-api-core==2.43.2
+google-api-core==2.44.0
     # via
     #   google-cloud-compute
     #   google-cloud-private-ca
-google-auth==2.62.0
+google-auth==2.62.1
     # via
     #   google-api-core
     #   google-cloud-compute
     #   google-cloud-private-ca
-google-cloud-compute==1.56.0
+google-cloud-compute==1.57.0
     # via -r requirements-datadog.in
 google-cloud-private-ca==1.20.0
     # via -r requirements-base.in
@@ -266,7 +266,7 @@ josepy==2.2.0
     # via
     #   acme
     #   certbot
-kombu==5.6.2
+kombu==5.7.0
     # via celery
 limits==5.8.0
     # via flask-limiter
@@ -346,11 +346,11 @@ pyasn1-modules==0.4.2
     #   python-ldap
 pycparser==3.12
     # via cffi
-pycryptodomex==3.24.1
+pycryptodomex==3.24.2
     # via pyjks
-pydantic==2.14.2
+pydantic==2.14.3
     # via cloudflare
-pydantic-core==2.50.2
+pydantic-core==2.50.4
     # via pydantic
 pyjks==20.0.0
     # via -r requirements-base.in
@@ -388,7 +388,7 @@ pytz==2026.6
     # via flask-restful
 pyyaml==6.0.3
     # via -r requirements-base.in
-redis==6.4.0
+redis==8.1.0
     # via
     #   -r requirements-base.in
     #   kombu
@@ -413,7 +413,7 @@ retrying==1.4.2
     # via -r requirements-base.in
 s3transfer==0.19.3
     # via boto3
-sentry-sdk==2.73.0
+sentry-sdk==2.74.0
     # via -r requirements-base.in
 simplejson==4.2.0
     # via -r requirements-datadog.in
@@ -464,12 +464,10 @@ typing-extensions==4.16.0
     #   pydantic-core
     #   pyopenssl
     #   typing-inspection
-typing-inspection==0.4.4
+typing-inspection==0.4.5
     # via pydantic
 tzdata==2026.6
-    # via
-    #   arrow
-    #   kombu
+    # via arrow
 tzlocal==5.4.5
     # via celery
 urllib3==2.8.0
