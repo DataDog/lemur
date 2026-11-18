@@ -13,7 +13,8 @@ def _get_client(options):
 
 
 def _public_zones(client):
-    return [zone for zone in client.list_zones() if zone.name_servers]
+    # The SDK exposes visibility only in the API properties. Private zones have nameservers too.
+    return [zone for zone in client.list_zones() if zone._properties.get("visibility") == "public"]
 
 
 def _find_zone(host, client):

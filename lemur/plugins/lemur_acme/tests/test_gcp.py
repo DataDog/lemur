@@ -15,7 +15,9 @@ def zone(name, dns_name, public=True):
     result = Mock()
     result.name = name
     result.dns_name = dns_name
-    result.name_servers = ["ns-cloud.example."] if public else None
+    result.name_servers = ["ns-cloud.example."]
+    result._properties = {"visibility": "public" if public else "private"}
+    result.list_resource_record_sets.return_value = []
     return result
 
 
@@ -36,6 +38,32 @@ def test_get_zones_returns_public_zones(mock_get_client):
     ]
 
     assert gcp.get_zones(OPTIONS) == ["example.com"]
+
+
+@pytest.mark.parametrize("visibility", [None, "unknown"])
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_get_zones_excludes_unspecified_or_unknown_visibility(mock_get_client, visibility):
+    managed_zone = zone("example", "example.com.")
+    managed_zone._properties = {} if visibility is None else {"visibility": visibility}
+    mock_get_client.return_value.list_zones.return_value = [managed_zone]
+
+    assert gcp.get_zones(OPTIONS) == []
+
+
+@patch("lemur.plugins.lemur_acme.gcp._get_client")
+def test_create_txt_record_ignores_more_specific_private_zone(mock_get_client):
+    public_zone = zone("public", "example.com.")
+    private_zone = zone("private", "sub.example.com.", public=False)
+    public_zone.list_resource_record_sets.return_value = []
+    public_zone.changes.return_value.name = "change-1"
+    mock_get_client.return_value.list_zones.return_value = [public_zone, private_zone]
+
+    change_id = gcp.create_txt_record("_acme-challenge.sub.example.com", "token", OPTIONS)
+
+    assert change_id[0] == "public"
+    public_zone.changes.return_value.create.assert_called_once_with()
+    private_zone.list_resource_record_sets.assert_not_called()
+    private_zone.changes.assert_not_called()
 
 
 @patch("lemur.plugins.lemur_acme.gcp._get_client")
