@@ -1,6 +1,6 @@
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
@@ -108,7 +108,7 @@ class TestAzureSource(unittest.TestCase):
     def setUp(self):
         self.azure_source = plugin.AzureSourcePlugin()
         self.options = [
-            {"name": "azureKeyVaultUrl", "value": "https://couldbeanyvalue.com"},
+            {"name": "azureKeyVaultUrl", "value": "https://fake-key-vault.vault.azure.net"},
             {"name": "azureTenant", "value": "mockedTenant"},
             {"name": "azureAppID", "value": "mockedAppID"},
             {"name": "azurePassword", "value": "mockedPW"},
@@ -277,6 +277,7 @@ class TestAzureSource(unittest.TestCase):
                         resource_name="fake-ssl-certificate-foo",
                     ),
                     name="fake-ssl-certificate-foo",
+                    key_vault_secret_id="https://fake-key-vault.vault.azure.net/secrets/foo",
                 )
             ],
             ssl_policy=ApplicationGatewaySslPolicy(
@@ -444,6 +445,7 @@ class TestAzureSource(unittest.TestCase):
                         resource_name="fake-ssl-certificate-baz-1",
                     ),
                     name="fake-ssl-certificate-baz-1",
+                    key_vault_secret_id="https://fake-key-vault.vault.azure.net/secrets/baz-1/version",
                 ),
                 ApplicationGatewaySslCertificate(
                     id=_ssl_certificate_id(
@@ -452,6 +454,7 @@ class TestAzureSource(unittest.TestCase):
                         resource_name="fake-ssl-certificate-baz-2",
                     ),
                     name="fake-ssl-certificate-baz-2",
+                    key_vault_secret_id="https://fake-key-vault.vault.azure.net/secrets/baz-2",
                 ),
             ],
             ssl_policy=ApplicationGatewaySslPolicy(
@@ -590,3 +593,74 @@ class TestAzureSource(unittest.TestCase):
                 ),
             ),
         ]
+
+    def test_application_gateway_vault_scope(self):
+        vault_url = "https://fake-key-vault.vault.azure.net/"
+        cases = [
+            ("https://fake-key-vault.vault.azure.net/secrets/shared-name", True),
+            ("https://FAKE-KEY-VAULT.vault.azure.net/secrets/shared-name/version", True),
+            ("https://other-vault.vault.azure.net/secrets/shared-name", False),
+            ("https://fake-key-vault.vault.azure.net.other.example/secrets/shared-name", False),
+            (None, False),
+        ]
+        for secret_id, included in cases:
+            with self.subTest(secret_id=secret_id):
+                appgw = ApplicationGateway(
+                    http_listeners=[ApplicationGatewayHttpListener(
+                        protocol="Https", ssl_certificate=SubResource(id="cert-id"),
+                        frontend_port=SubResource(id="port-id"),
+                        frontend_ip_configuration=SubResource(id="ip-id"),
+                    )],
+                    ssl_certificates=[ApplicationGatewaySslCertificate(
+                        id="cert-id", name="shared-name", key_vault_secret_id=secret_id,
+                    )],
+                )
+                appgw.name = "gateway"
+                network_client = Mock()
+                network_client.application_gateways.list_all.return_value = [appgw]
+                with patch.object(plugin, "port_from_id", return_value=443), \
+                        patch.object(plugin, "ip_from_cfg_id", return_value=("10.0.0.1", False)), \
+                        patch.object(plugin, "policy_from_appgw", return_value={}):
+                    endpoints = plugin.get_application_gateways(network_client, vault_url)
+                self.assertEqual(len(endpoints), int(included))
+                if included:
+                    self.assertEqual(endpoints[0]["primary_certificate"], {
+                        "name": "shared-name", "path": "", "registry_type": "keyvault",
+                    })
+
+    def test_missing_gateway_certificate_still_raises(self):
+        appgw = ApplicationGateway(id="gateway-id", ssl_certificates=[])
+        with self.assertRaisesRegex(Exception, "No certificate with ID missing"):
+            plugin.certificate_from_id(appgw, "missing", "https://fake-key-vault.vault.azure.net")
+
+    def test_cdn_vault_scope(self):
+        cdn_client = Mock()
+        profile = Profile(location="Global", sku=Sku(name="Standard_Microsoft"))
+        profile.name = "profile"
+        profile.id = _cdn_profile_resource_id("subscription", "group", "profile")
+        endpoint = Endpoint(location="Global")
+        endpoint.name = "endpoint"
+        endpoint.host_name = "endpoint.azureedge.net"
+        cdn_client.profiles.list.return_value = [profile]
+        cdn_client.endpoints.list_by_profile.return_value = [endpoint]
+        for vault_name, included in [("FAKE-KEY-VAULT", True), ("other-vault", False), (None, False)]:
+            with self.subTest(vault_name=vault_name):
+                cdn_client.custom_domains.list_by_endpoint.return_value = [CustomDomain(
+                    host_name="custom.example.com",
+                    custom_https_parameters=UserManagedHttpsParameters(
+                        protocol_type="Https",
+                        certificate_source_parameters=KeyVaultCertificateSourceParameters(
+                            subscription_id="subscription", resource_group_name="group",
+                            vault_name=vault_name, secret_name="shared-name",
+                            update_rule="", delete_rule="", type_name="",
+                        ),
+                    ),
+                )]
+                endpoints = plugin.get_cdn_endpoints(
+                    cdn_client, "https://fake-key-vault.vault.azure.net/"
+                )
+                self.assertEqual(len(endpoints), int(included))
+                if included:
+                    self.assertEqual(endpoints[0]["sni_certificates"], [{
+                        "name": "shared-name", "path": "", "registry_type": "keyvault",
+                    }])
