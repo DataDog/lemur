@@ -117,7 +117,7 @@ def test_sync_skips_managed_without_promoting_sni(managed_primary):
     with Flask(__name__).app_context(), patch.object(
         service.plugins, "get", return_value=plugin
     ), patch.object(
-        service.endpoint_service, "get_by_dnsname_and_port", return_value=None
+        service.endpoint_service, "get_by_dedupe_key", return_value={}
     ), patch.object(
         service, "get_cert_for_endpoint", side_effect=lookup_results
     ) as lookup, patch.object(
