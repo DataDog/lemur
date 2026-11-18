@@ -101,7 +101,7 @@ def test_endpoint_lookup_only_suppresses_explicit_managed_signal(outcome):
 
 @pytest.mark.parametrize("managed_primary", [True, False])
 def test_sync_skips_managed_without_promoting_sni(managed_primary):
-    source = SimpleNamespace(plugin_name="gcp-source", label="GCP test", options=[])
+    source = SimpleNamespace(id=1, plugin_name="gcp-source", label="GCP test", options=[])
     primary = Mock()
     endpoint = {
         "name": "endpoint",
