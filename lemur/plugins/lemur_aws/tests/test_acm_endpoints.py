@@ -135,14 +135,13 @@ def test_acm_endpoint_rotation_is_left_to_reimport_and_sync(app):
     rotate.assert_not_called()
 
 
-def test_listener_helpers_preserve_acm_arns_without_changing_iam_defaults(app):
+def test_listener_helpers_keep_acm_arns_out_of_iam_discovery(app):
     classic = dict(LoadBalancerName="classic", DNSName="classic.example.com",
                    ListenerDescriptions=[dict(
                        Listener=dict(SSLCertificateId=ARN, LoadBalancerPort=443),
                        PolicyNames=[],
                    )])
-    assert plugin.get_elb_endpoints(ACCOUNT, "us-east-1", classic)[0][
-        "primary_certificate"]["name"] == "primary"
+    assert plugin.get_elb_endpoints(ACCOUNT, "us-east-1", classic) == []
     assert plugin.acm_endpoints.get_elb_endpoints(ACCOUNT, "us-east-1", classic)[0][
         "primary_certificate"]["name"] == ARN
 

@@ -1,4 +1,5 @@
 import boto3
+import pytest
 from moto import mock_sts, mock_s3, mock_ec2, mock_elb, mock_elbv2, mock_acm
 from unittest import mock
 
@@ -99,7 +100,8 @@ def test_upload_acme_token(app):
 @mock_elb()
 @mock_ec2()
 @mock_elbv2()
-def test_get_all_elb_and_elbv2s(app, aws_credentials):
+@pytest.mark.parametrize("certificate_type", ["iam", "acm"])
+def test_get_all_elb_and_elbv2s(app, aws_credentials, certificate_type):
     from copy import deepcopy
     from lemur.plugins.lemur_aws import elb as lemur_elb
     from lemur.plugins.base import plugins
@@ -125,6 +127,9 @@ def test_get_all_elb_and_elbv2s(app, aws_credentials):
     )
     arn2 = acm_request_response["CertificateArn"]
     cert_name2 = arn2.split("/")[-1]
+    if certificate_type == "iam":
+        arn1 = f"arn:aws:iam::123456789012:server-certificate/{cert_name1}"
+        arn2 = f"arn:aws:iam::123456789012:server-certificate/{cert_name2}"
     client = boto3.client("elb", region_name="us-east-1")
 
     client.create_load_balancer(
@@ -192,17 +197,54 @@ def test_get_all_elb_and_elbv2s(app, aws_credentials):
         elbs = aws_source.get_endpoints(options)
         assert lemur_elb.describe_listener_certificates_v2.called
 
+    if certificate_type == "acm":
+        assert elbs == []
+        return
+
     elb_map = {}
     for elb in elbs:
         elb_map[elb["name"]] = elb
     assert elb_map["example-lb"]["primary_certificate"]["name"] == cert_name1
-    assert elb_map["example-lb"]["primary_certificate"]["registry_type"] == "acm"
+    assert elb_map["example-lb"]["primary_certificate"]["registry_type"] == "iam"
     assert elb_map["example-lb"]["port"] == 443
     assert elb_map["test-lbv2"]["primary_certificate"]["name"] == cert_name2
-    assert elb_map["test-lbv2"]["primary_certificate"]["registry_type"] == "acm"
+    assert elb_map["test-lbv2"]["primary_certificate"]["registry_type"] == "iam"
     assert elb_map["test-lbv2"]["sni_certificates"][0]["name"] == cert_name1
-    assert elb_map["test-lbv2"]["sni_certificates"][0]["registry_type"] == "acm"
+    assert elb_map["test-lbv2"]["sni_certificates"][0]["registry_type"] == "iam"
     assert elb_map["test-lbv2"]["port"] == 1443
+
+
+@pytest.mark.parametrize("partition", ["aws", "aws-us-gov", "aws-cn"])
+@pytest.mark.parametrize("protocol", ["HTTPS", "TLS"])
+@pytest.mark.parametrize("acm_primary", [False, True])
+def test_iam_discovery_skips_acm_on_mixed_listener(partition, protocol, acm_primary):
+    from lemur.plugins.lemur_aws import elb as lemur_elb
+    from lemur.plugins.lemur_aws.plugin import get_elb_endpoints_v2
+
+    certificates = [
+        {"CertificateArn": f"arn:{partition}:iam::123456789012:server-certificate/primary",
+         "IsDefault": not acm_primary},
+        {"CertificateArn": f"arn:{partition}:acm:us-east-1:123456789012:certificate/test",
+         "IsDefault": acm_primary},
+        {"CertificateArn": f"arn:{partition}:iam::123456789012:server-certificate/sni",
+         "IsDefault": False},
+    ]
+    with mock.patch.object(lemur_elb, "describe_listeners_v2", return_value={
+        "Listeners": [{"ListenerArn": "listener", "Protocol": protocol,
+                       "Port": 443, "SslPolicy": None}],
+    }), mock.patch.object(lemur_elb, "describe_listener_certificates_v2", return_value={
+        "Certificates": certificates,
+    }):
+        endpoints = get_elb_endpoints_v2("123456789012", "us-east-1", {
+            "LoadBalancerArn": "lb", "LoadBalancerName": "test", "DNSName": "test.example.com",
+        })
+
+    if acm_primary:
+        assert endpoints == []
+    else:
+        assert len(endpoints) == 1
+        assert endpoints[0]["primary_certificate"]["name"] == "primary"
+        assert [c["name"] for c in endpoints[0]["sni_certificates"]] == ["sni"]
 
 
 def test_get_elb_endpoints_v2_skips_gwlb_listeners():

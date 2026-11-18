@@ -296,6 +296,37 @@ ACME_DNS_PROVIDER_TYPES = {
             ],
         },
         {
+            "name": "gcp",
+            "requirements": [
+                {
+                    "name": "projectID",
+                    "type": "str",
+                    "required": True,
+                    "helpMessage": "GCP Project ID",
+                },
+                {
+                    "name": "authenticationMethod",
+                    "type": "select",
+                    "value": "vault",
+                    "required": True,
+                    "available": ["vault", "serviceAccountToken"],
+                    "helpMessage": "Authentication method to use",
+                },
+                {
+                    "name": "vaultMountPoint",
+                    "type": "str",
+                    "required": False,
+                    "helpMessage": "Required for Vault authentication",
+                },
+                {
+                    "name": "serviceAccountTokenPath",
+                    "type": "str",
+                    "required": False,
+                    "helpMessage": "Required for service account authentication",
+                },
+            ],
+        },
+        {
             "name": "cloudflare",
             "requirements": [
                 {
