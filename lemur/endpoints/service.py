@@ -9,8 +9,6 @@
 
 """
 
-import warnings
-
 import arrow
 from flask import current_app
 
@@ -105,32 +103,6 @@ def get_by_dnsname(dnsname):
     :return:
     """
     return database.get(Endpoint, dnsname, field="dnsname")
-
-
-def get_by_dnsname_and_port(dnsname, port):
-    """
-    Retrieves and endpoint by it's dnsname and port.
-
-    .. deprecated:: CLOUDR-1927
-        This function ignores the source. Two sources that report the same
-        dnsname and port get the same row, and each sync changes the source of
-        that row. Use :func:`get_by_dedupe_key` instead.
-
-    :param dnsname:
-    :param port:
-    :return:
-    """
-    warnings.warn(
-        "get_by_dnsname_and_port is deprecated (CLOUDR-1927): it ignores the source. "
-        "Use get_by_dedupe_key instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return (
-        Endpoint.query.filter(Endpoint.dnsname == dnsname)
-        .filter(Endpoint.port == port)
-        .scalar()
-    )
 
 
 def get_by_dedupe_key(dnsname, port, sources, name):

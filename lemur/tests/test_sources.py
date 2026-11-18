@@ -382,13 +382,6 @@ def test_acm_source_skips_an_endpoint_that_iam_owns(session):
     assert [row.source_id for row in rows] == [iam.id]
 
 
-def test_get_by_dnsname_and_port_is_deprecated(session):
-    from lemur.endpoints import service as endpoint_service
-
-    with pytest.warns(DeprecationWarning, match="CLOUDR-1927"):
-        assert endpoint_service.get_by_dnsname_and_port("none.example.com", 443) is None
-
-
 def test_is_attached_to_endpoint_with_the_same_name_in_two_sources(session):
     """Endpoints of many sources can have one name. The endpoint that the caller gives is the one checked."""
     from unittest import mock
