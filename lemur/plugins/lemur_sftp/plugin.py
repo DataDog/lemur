@@ -64,6 +64,7 @@ class SFTPDestinationPlugin(DestinationPlugin):
         },
         {
             "name": "password",
+            "sensitive": True,
             "type": "str",
             "required": False,
             "helpMessage": "The SFTP password (optional when the private key is used).",
@@ -78,6 +79,7 @@ class SFTPDestinationPlugin(DestinationPlugin):
         },
         {
             "name": "privateKeyPass",
+            "sensitive": True,
             "type": "str",
             "required": False,
             "helpMessage": "The password for the encrypted RSA private key (optional).",

@@ -104,6 +104,7 @@ class OpenSSLExportPlugin(ExportPlugin):
         },
         {
             "name": "passphrase",
+            "sensitive": True,
             "type": "str",
             "required": False,
             "helpMessage": "If no passphrase is given one will be generated for you, we highly recommend this.",
