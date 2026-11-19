@@ -7,6 +7,8 @@
 """
 
 from marshmallow import fields, post_dump
+from flask import has_request_context
+from lemur.auth.permissions import write_permission
 from lemur.common.schema import LemurInputSchema, LemurOutputSchema
 from lemur.schemas import PluginInputSchema, PluginOutputSchema
 
@@ -30,6 +32,8 @@ class DestinationOutputSchema(LemurOutputSchema):
     @post_dump
     def fill_object(self, data):
         if data:
+            if not has_request_context() or not write_permission.can():
+                data["options"] = []
             data["plugin"]["pluginOptions"] = data["options"]
             for option in data["plugin"]["pluginOptions"]:
                 if "export-plugin" in option["type"]:
