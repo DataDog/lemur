@@ -34,8 +34,18 @@ def test_plugin_options_visibility(roles, many, schema_class, relationship):
             "type": "export-plugin",
             "value": {
                 "slug": "test-export",
-                "plugin_options": [{"name": "passphrase", "value": "nested-secret"}],
-                "pluginOptions": [{"name": "passphrase", "value": "nested-secret"}],
+                "plugin_options": [
+                    {"name": "passphrase", "value": "nested-secret"},
+                    {"name": "format", "value": "PEM"},
+                ],
+                "pluginOptions": [
+                    {"name": "passphrase", "value": "nested-secret"},
+                    {"name": "format", "value": "PEM"},
+                ],
+            },
+            "default": {
+                "slug": "test-export",
+                "pluginOptions": [{"name": "passphrase", "default": "nested-default-secret"}],
             },
         },
     ]
@@ -58,7 +68,7 @@ def test_plugin_options_visibility(roles, many, schema_class, relationship):
             ]
         ),
         "test-export": SimpleNamespace(
-            options=[{"name": "passphrase", "sensitive": True}]
+            options=[{"name": "passphrase", "sensitive": True}, {"name": "format"}]
         ),
     }
     with Flask(__name__).test_request_context(), patch(
@@ -73,8 +83,16 @@ def test_plugin_options_visibility(roles, many, schema_class, relationship):
         assert output["options"][0] == original[0]
         assert output["options"][1] == original[1]
         assert output["plugin"]["pluginOptions"] == output["options"]
-        expected = "secret-sentinel" if can_write else "[REDACTED]"
-        assert output["options"][2]["value"] == expected
+        if can_write:
+            assert output["options"] == original
+        else:
+            assert [option["name"] for option in output["options"]] == [
+                "host", "privateKeyPath", "export"
+            ]
+            export = output["options"][2]
+            for field in ("plugin_options", "pluginOptions"):
+                assert export["value"][field] == [{"name": "format", "value": "PEM"}]
+            assert export["default"]["pluginOptions"] == []
 
         nested, errors = CertificateOutputSchema(only=(relationship,)).dump(
             {relationship: [record]}
@@ -87,11 +105,12 @@ def test_plugin_options_visibility(roles, many, schema_class, relationship):
                 assert "secret-sentinel" not in json.dumps(payload)
                 assert "nested-secret" not in json.dumps(payload)
                 assert "default-secret" not in json.dumps(payload)
-            assert options == original
+                assert "[REDACTED]" not in json.dumps(payload)
         else:
             for payload in (result, nested):
                 assert "secret-sentinel" in json.dumps(payload)
                 assert "nested-secret" in json.dumps(payload)
+        assert options == original
 
 
 @pytest.mark.parametrize(
@@ -119,5 +138,21 @@ def test_secret_option_definitions(module_name, class_name, secret_names):
     ]
     with patch("lemur.plugins.utils.plugins.get", return_value=plugin):
         result = redact_plugin_options(plugin.slug, options)
-    assert all(option["value"] == "[REDACTED]" for option in result)
+    assert result == []
     assert all(option["value"] == "secret-sentinel" for option in options)
+
+
+@pytest.mark.parametrize("options", [None, []])
+def test_source_without_options(options):
+    from lemur.tests.plugins.source_plugin import TestSourcePlugin
+
+    plugin = TestSourcePlugin()
+    record = SimpleNamespace(id=1, label="test", options=options, plugin=plugin)
+    with Flask(__name__).test_request_context(), patch(
+        "lemur.plugins.utils.plugins.get", return_value=plugin
+    ):
+        g.identity = Identity(1)
+        result, errors = SourceOutputSchema(many=True).dump([record])
+        assert not errors
+        assert result[0]["options"] == []
+        assert result[0]["plugin"]["pluginOptions"] == []

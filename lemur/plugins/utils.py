@@ -15,21 +15,21 @@ from lemur.plugins.base import plugins
 
 
 def redact_plugin_options(slug, options):
-    """Redact credentials using trusted plugin definitions, not stored metadata."""
+    """Omit credentials using trusted plugin definitions, not stored metadata."""
     definitions = {option["name"]: option for option in plugins.get(slug).options}
-    result = deepcopy(options or [])
-    for option in result:
+    result = []
+    for option in deepcopy(options or []):
         definition = definitions.get(option.get("name"), {})
         if definition.get("sensitive"):
-            for field in ("value", "default"):
-                if field in option:
-                    option[field] = "[REDACTED]"
-        elif "plugin" in definition.get("type", ""):
-            nested = option.get("value")
-            if isinstance(nested, dict):
-                for field in ("plugin_options", "pluginOptions"):
-                    if field in nested:
-                        nested[field] = redact_plugin_options(nested["slug"], nested[field])
+            continue
+        if "plugin" in definition.get("type", ""):
+            for value_field in ("value", "default"):
+                nested = option.get(value_field)
+                if isinstance(nested, dict):
+                    for field in ("plugin_options", "pluginOptions"):
+                        if field in nested:
+                            nested[field] = redact_plugin_options(nested["slug"], nested[field])
+        result.append(option)
     return result
 
 
