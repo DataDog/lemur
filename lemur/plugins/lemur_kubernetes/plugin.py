@@ -131,6 +131,7 @@ class KubernetesDestinationPlugin(DestinationPlugin):
         },
         {
             "name": "kubernetesAuthToken",
+            "sensitive": True,
             "type": "str",
             "required": False,
             "validation": check_validation("[0-9a-zA-Z-_.]+"),

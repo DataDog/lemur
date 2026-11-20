@@ -5,6 +5,7 @@ class TestSourcePlugin(SourcePlugin):
     title = "Test"
     slug = "test-source"
     description = "Enables testing"
+    additional_options = []
 
     author = "Kevin Glisson"
     author_url = "https://github.com/netflix/lemur.git"

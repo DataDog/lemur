@@ -268,6 +268,7 @@ class AzureDestinationPlugin(DestinationPlugin):
         },
         {
             "name": "azurePassword",
+            "sensitive": True,
             "type": "str",
             "required": False,
             "validation": check_validation("([0-9a-zA-Z.:_-~]?)+"),
@@ -400,6 +401,7 @@ class AzureSourcePlugin(SourcePlugin):
         },
         {
             "name": "azurePassword",
+            "sensitive": True,
             "type": "str",
             "required": False,
             "validation": check_validation("([0-9a-zA-Z.:_-~]?)+"),
