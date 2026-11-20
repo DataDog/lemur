@@ -9,6 +9,29 @@
 
 """
 
+from copy import deepcopy
+
+from lemur.plugins.base import plugins
+
+
+def redact_plugin_options(slug, options):
+    """Omit credentials using trusted plugin definitions, not stored metadata."""
+    definitions = {option["name"]: option for option in plugins.get(slug).options}
+    result = []
+    for option in deepcopy(options or []):
+        definition = definitions.get(option.get("name"), {})
+        if definition.get("sensitive"):
+            continue
+        if "plugin" in definition.get("type", ""):
+            for value_field in ("value", "default"):
+                nested = option.get(value_field)
+                if isinstance(nested, dict):
+                    for field in ("plugin_options", "pluginOptions"):
+                        if field in nested:
+                            nested[field] = redact_plugin_options(nested["slug"], nested[field])
+        result.append(option)
+    return result
+
 
 def get_plugin_option(name, options):
     """
