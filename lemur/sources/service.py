@@ -92,10 +92,18 @@ def sync_endpoints(source):
         )
         return new, updated, updated_by_hash
 
+    # The ACM source also looks at the endpoints that an IAM source owns.
+    # This is one query for each sync, not for each endpoint.
+    lookup_sources = [source]
+    if source.plugin_name == "aws-acm-source":
+        lookup_sources = get_by_plugin_name("aws-source") + [source]
+
     for endpoint in endpoints:
         try:
-            exists = endpoint_service.get_by_dnsname_and_port(
-                endpoint["dnsname"], endpoint["port"]
+            # The key has the source and the name. Many sources can report the same
+            # dnsname and port, and each one must keep its own row (CLOUDR-1927).
+            rows = endpoint_service.get_by_dedupe_key(
+                endpoint["dnsname"], endpoint["port"], lookup_sources, endpoint["name"]
             )
         except OperationalError as e:
             # This is a workaround for handling sqlalchemy error "idle-in-transaction timeout", which is seen rarely
@@ -105,16 +113,20 @@ def sync_endpoints(source):
                 # all the update, insert operations are committed individually. So this should be harmless/no-op
                 database.rollback()
                 # retry one more time
-                exists = endpoint_service.get_by_dnsname_and_port(
-                    endpoint["dnsname"], endpoint["port"]
+                rows = endpoint_service.get_by_dedupe_key(
+                    endpoint["dnsname"], endpoint["port"], lookup_sources, endpoint["name"]
                 )
             else:
                 raise e
 
-        if (source.plugin_name == "aws-acm-source" and exists and exists.source
-                and exists.source.plugin_name == "aws-source"):
+        if source.plugin_name == "aws-acm-source" and any(
+            row.source and row.source.plugin_name == "aws-source" for row in rows.values()
+        ):
             # Prefer IAM ownership: IAM rotates endpoints; ACM only inventories them.
             continue
+
+        # The row of the source that we sync. A row of another source is never updated.
+        exists = rows.get(source.id)
 
         if "primary_certificate" in endpoint:
             crt_name = endpoint["primary_certificate"]["name"]
@@ -535,6 +547,16 @@ def get_by_label(label):
     :return:
     """
     return database.get(Source, label, field="label")
+
+
+def get_by_plugin_name(plugin_name):
+    """
+    Retrieves all sources that use the given plugin.
+
+    :param plugin_name:
+    :return: a list of sources
+    """
+    return Source.query.filter(Source.plugin_name == plugin_name).order_by(Source.id).all()
 
 
 def get_all():

@@ -105,18 +105,54 @@ def get_by_dnsname(dnsname):
     return database.get(Endpoint, dnsname, field="dnsname")
 
 
-def get_by_dnsname_and_port(dnsname, port):
+def get_by_dedupe_key(dnsname, port, sources, name):
     """
-    Retrieves and endpoint by it's dnsname and port.
-    :param dnsname:
-    :param port:
-    :return:
+    Retrieves the endpoints that a source sync uses to find an existing endpoint.
+    The key has four values: dnsname, port, source and name.
+
+    Many sources can report the same dnsname and port. For example, one hostname
+    can be served from many data centers. The source and the name keep these
+    endpoints apart, so each deployment has its own row.
+
+    The function makes one query. It returns one row for each source in the input
+    that has a match. It does not choose between sources. The caller decides.
+    For example, the ACM source gives its IAM sources too, to see the endpoints that
+    IAM owns.
+
+    If one source has more than one row with the same four values (a duplicate),
+    the function returns the row with the lowest id and writes a warning.
+
+    :param dnsname: the dnsname that the source plugin reports
+    :param port: the port that the source plugin reports
+    :param sources: a list of Source objects
+    :param name: the name that the source plugin reports (for example a Vault path)
+    :return: a dict {source_id: endpoint}. It is empty if there is no match.
     """
-    return (
-        Endpoint.query.filter(Endpoint.dnsname == dnsname)
+    if not sources:
+        return {}
+
+    rows = (
+        Endpoint.query.options(joinedload(Endpoint.source))
+        .filter(Endpoint.dnsname == dnsname)
         .filter(Endpoint.port == port)
-        .scalar()
+        .filter(Endpoint.source_id.in_([source.id for source in sources]))
+        .filter(Endpoint.name == name)
+        .order_by(Endpoint.id)
+        .all()
     )
+
+    result = {}
+    for row in rows:
+        if row.source_id in result:
+            current_app.logger.warning(
+                "Duplicate endpoints for dnsname {0}, port {1}, source id {2} and name {3}: "
+                "using endpoint id {4}, ignoring endpoint id {5}".format(
+                    dnsname, port, row.source_id, name, result[row.source_id].id, row.id
+                )
+            )
+            continue
+        result[row.source_id] = row
+    return result
 
 
 def get_by_source(source_label):

@@ -144,6 +144,7 @@
                       <ul class="list-unstyled">
                         <li>{{ endpoint.name }}</li>
                         <li><span class="text-muted">{{ endpoint.dnsname }}</span></li>
+                        <li ng-if="endpoint.sourceLabel"><span class="text-muted">Source: {{ endpoint.sourceLabel }}</span></li>
                       </ul>
                     </li>
                   </ul>

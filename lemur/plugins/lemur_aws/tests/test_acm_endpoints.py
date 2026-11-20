@@ -95,10 +95,11 @@ def test_acm_lookup_reads_current_body_without_cached_inventory(app):
 
 
 def test_acm_sync_does_not_touch_iam_owned_endpoint(app):
-    source = SimpleNamespace(plugin_name="aws-acm-source", label="acm", options=[])
-    existing = SimpleNamespace(source=SimpleNamespace(plugin_name="aws-source"))
+    source = SimpleNamespace(id=1, plugin_name="aws-acm-source", label="acm", options=[])
+    iam_row = SimpleNamespace(source=SimpleNamespace(plugin_name="aws-source"))
     with mock.patch.object(service.plugins, "get") as plugins, \
-            mock.patch.object(service.endpoint_service, "get_by_dnsname_and_port", return_value=existing), \
+            mock.patch.object(service, "get_by_plugin_name", return_value=[]), \
+            mock.patch.object(service.endpoint_service, "get_by_dedupe_key", return_value={2: iam_row}), \
             mock.patch.object(service, "get_cert_for_endpoint") as resolve, \
             mock.patch.object(service.endpoint_service, "update") as update, \
             mock.patch.object(service.endpoint_service, "create") as create:
@@ -110,11 +111,12 @@ def test_acm_sync_does_not_touch_iam_owned_endpoint(app):
 
 
 def test_acm_sync_reassociates_existing_endpoint(app):
-    source = SimpleNamespace(plugin_name="aws-acm-source", label="acm", options=[])
+    source = SimpleNamespace(id=1, plugin_name="aws-acm-source", label="acm", options=[])
     replacement = object()
     existing = SimpleNamespace(id=42, source=source)
     with mock.patch.object(service.plugins, "get") as plugins, \
-            mock.patch.object(service.endpoint_service, "get_by_dnsname_and_port", return_value=existing), \
+            mock.patch.object(service.endpoint_service, "get_by_dedupe_key", return_value={1: existing}), \
+            mock.patch.object(service, "get_by_plugin_name", return_value=[]), \
             mock.patch.object(service, "get_cert_for_endpoint", return_value=(replacement, 1)), \
             mock.patch.object(service.endpoint_service, "get_or_create_policy"), \
             mock.patch.object(service.endpoint_service, "update") as update:
@@ -160,10 +162,11 @@ def test_listener_helpers_keep_acm_arns_out_of_iam_discovery(app):
 
 
 def test_acm_sync_creates_unowned_endpoint(app):
-    source = SimpleNamespace(plugin_name="aws-acm-source", label="acm", options=[])
+    source = SimpleNamespace(id=1, plugin_name="aws-acm-source", label="acm", options=[])
     certificate = object()
     with mock.patch.object(service.plugins, "get") as plugins, \
-            mock.patch.object(service.endpoint_service, "get_by_dnsname_and_port", return_value=None), \
+            mock.patch.object(service.endpoint_service, "get_by_dedupe_key", return_value={}), \
+            mock.patch.object(service, "get_by_plugin_name", return_value=[]), \
             mock.patch.object(service, "get_cert_for_endpoint", return_value=(certificate, 1)), \
             mock.patch.object(service.endpoint_service, "get_or_create_policy"), \
             mock.patch.object(service.endpoint_service, "create") as create:
