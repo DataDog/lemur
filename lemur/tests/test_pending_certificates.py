@@ -51,7 +51,9 @@ def test_increment_attempt(pending_certificate):
 
 
 @pytest.mark.parametrize("match", ["full", "partial", "uppercase", "missing"])
-def test_pending_certificate_cn_filter(client, pending_certificate, match):
+def test_pending_certificate_cn_filter(client, pending_certificate, session, match):
+    pending_certificate.cn = "pending-search-{0}.example.invalid".format(pending_certificate.id)
+    session.commit()
     searches = {
         "full": pending_certificate.cn,
         "partial": pending_certificate.cn[1:-1],
@@ -86,6 +88,7 @@ def test_pending_certificate_cn_filter_empty_inventory(client):
 
 
 def test_pending_certificate_cn_filter_excludes_resolved(client, pending_certificate, session):
+    pending_certificate.cn = "pending-resolved-{0}.example.invalid".format(pending_certificate.id)
     pending_certificate.resolved = True
     session.commit()
     response = client.get(
