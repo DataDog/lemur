@@ -16,7 +16,6 @@ from lemur.certificates.schemas import CertificateUploadInputSchema
 from lemur.common.utils import truthiness, parse_cert_chain, parse_certificate
 from lemur.common import validators
 from lemur.destinations.models import Destination
-from lemur.domains.models import Domain
 from lemur.extensions import metrics
 from lemur.notifications.models import Notification
 from lemur.pending_certificates.models import PendingCertificate
@@ -265,12 +264,7 @@ def render(args):
             query = query.filter(PendingCertificate.active == truthiness(terms[1]))
         elif "cn" in terms:
             query = query.filter(
-                or_(
-                    PendingCertificate.cn.ilike("%{0}%".format(terms[1])),
-                    PendingCertificate.domains.any(
-                        Domain.name.ilike("%{0}%".format(terms[1]))
-                    ),
-                )
+                PendingCertificate.cn.ilike("%{0}%".format(terms[1]))
             )
         elif "id" in terms:
             query = query.filter(PendingCertificate.id == cast(terms[1], Integer))
