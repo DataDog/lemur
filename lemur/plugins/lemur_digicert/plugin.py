@@ -330,8 +330,101 @@ class DigiCertSourcePlugin(SourcePlugin):
 
         super(DigiCertSourcePlugin, self).__init__(*args, **kwargs)
 
-    def get_certificates(self):
-        pass
+    def get_certificates(self, options, **kwargs):
+        """Discover all CSR-originated certificates in DigiCert not managed by Lemur.
+
+        Paginates through all issued DigiCert orders and cross-references each
+        certificate ID against Lemur's certificates.external_id column. Any cert
+        DigiCert has issued whose ID is NOT in Lemur's DB was submitted via an
+        external CSR (e.g. Salesforce-generated) and is returned so it becomes
+        visible in Lemur inventory for expiry tracking.
+
+        No configuration required — automatically discovers any CSR-originated
+        cert, including ones not yet known to the team.
+
+        :returns: list of {"body": pem, "chain": pem, "name": cn}
+        """
+        from lemur.certificates.models import Certificate
+        from lemur.extensions import db
+
+        base_url = current_app.config.get("DIGICERT_URL")
+
+        # Fetch all external_ids Lemur already knows about in one query
+        known_ids = {
+            str(r[0])
+            for r in db.session.query(Certificate.external_id)
+            .filter(Certificate.external_id.isnot(None))
+            .all()
+        }
+
+        certs = []
+        offset = 0
+        limit = 1000
+
+        while True:
+            response = self.session.get(
+                "{0}/services/v2/order/certificate"
+                "?filters[status]=issued&limit={1}&offset={2}".format(
+                    base_url, limit, offset
+                )
+            )
+            if response.status_code != 200:
+                current_app.logger.warning(
+                    f"digicert_source: failed to list orders at offset {offset}: "
+                    f"{response.status_code} {response.text[:200]}"
+                )
+                break
+
+            data = response.json()
+            orders = data.get("orders", [])
+            if not orders:
+                break
+
+            for order in orders:
+                cert_meta = order.get("certificate", {})
+                cert_id = str(cert_meta.get("id", ""))
+                cn = cert_meta.get("common_name", "")
+                if not cert_id or not cn:
+                    continue
+
+                # Skip certs Lemur already manages
+                if cert_id in known_ids:
+                    continue
+
+                dl = self.session.get(
+                    "{0}/services/v2/certificate/{1}/download/format/pem_all".format(
+                        base_url, cert_id
+                    )
+                )
+                if dl.status_code != 200:
+                    current_app.logger.debug(
+                        f"digicert_source: could not download cert {cert_id} ({cn}): {dl.status_code}"
+                    )
+                    continue
+
+                try:
+                    end_entity, intermediate, *_ = pem.parse(dl.content)
+                    certs.append({
+                        "body": "\n".join(str(end_entity).splitlines()),
+                        "chain": "\n".join(str(intermediate).splitlines()),
+                        "name": cn,
+                    })
+                    current_app.logger.info(
+                        f"digicert_source: discovered CSR-originated cert: {cn} (id={cert_id})"
+                    )
+                except Exception as e:
+                    current_app.logger.debug(
+                        f"digicert_source: failed to parse cert {cert_id} ({cn}): {e}"
+                    )
+
+            if len(orders) < limit:
+                break
+            offset += limit
+
+        current_app.logger.info(
+            f"digicert_source: found {len(certs)} CSR-originated certs not in Lemur"
+        )
+        return certs
 
 
 class DigiCertIssuerPlugin(IssuerPlugin):
