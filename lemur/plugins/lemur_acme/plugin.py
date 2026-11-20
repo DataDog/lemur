@@ -172,7 +172,6 @@ class ACMEIssuerPlugin(IssuerPlugin):
 
     def get_ordered_certificates(self, pending_certs):
         self.acme = AcmeDnsHandler()
-        self.acme_dns_challenge = AcmeDnsChallenge()
         pending = []
         certs = []
         for pending_cert in pending_certs:
@@ -262,10 +261,10 @@ class ACMEIssuerPlugin(IssuerPlugin):
             except (PollError, AcmeError, Exception) as e:
                 capture_exception()
                 metrics.send("get_ordered_certificates_resolution_error", "counter", 1)
-                order_url = order.uri
+                order_url = entry["order"].uri
                 error = f"{e}. Order URI: {order_url}"
                 current_app.logger.error(
-                    f"Unable to resolve pending cert: {pending_cert}. "
+                    f"Unable to resolve pending cert: {entry['pending_cert']}. "
                     f"Check out {order_url} for more information.",
                     exc_info=True,
                 )
@@ -276,9 +275,9 @@ class ACMEIssuerPlugin(IssuerPlugin):
                         "last_error": error,
                     }
                 )
-                # Ensure DNS records get deleted
-                self.acme_dns_challenge.cleanup(
-                    entry["authorizations"], entry["acme_client"]
+                # Reuse the handler that selected the DNS providers for these challenges.
+                self.acme.cleanup_dns_challenges(
+                    entry["acme_client"], entry["authorizations"]
                 )
         return certs
 
