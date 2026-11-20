@@ -50,6 +50,56 @@ def test_increment_attempt(pending_certificate):
     assert attempts == initial_attempt + 1
 
 
+@pytest.mark.parametrize("match", ["full", "partial", "uppercase", "missing"])
+def test_pending_certificate_cn_filter(client, pending_certificate, match):
+    searches = {
+        "full": pending_certificate.cn,
+        "partial": pending_certificate.cn[1:-1],
+        "uppercase": pending_certificate.cn.upper(),
+        "missing": "pending-search-no-match.invalid",
+    }
+    response = client.get(
+        api.url_for(PendingCertificatesList),
+        query_string={"filter": "cn;" + searches[match]},
+        headers=VALID_ADMIN_HEADER_TOKEN,
+    )
+
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["total"] == (0 if match == "missing" else 1)
+    assert [item["id"] for item in data["items"]] == (
+        [] if match == "missing" else [pending_certificate.id]
+    )
+
+
+def test_pending_certificate_cn_filter_empty_inventory(client):
+    response = client.get(
+        api.url_for(PendingCertificatesList),
+        query_string={"filter": "cn;pending-search-no-match.invalid"},
+        headers=VALID_ADMIN_HEADER_TOKEN,
+    )
+
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["items"] == []
+    assert data["total"] == 0
+
+
+def test_pending_certificate_cn_filter_excludes_resolved(client, pending_certificate, session):
+    pending_certificate.resolved = True
+    session.commit()
+    response = client.get(
+        api.url_for(PendingCertificatesList),
+        query_string={"filter": "cn;" + pending_certificate.cn},
+        headers=VALID_ADMIN_HEADER_TOKEN,
+    )
+
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["items"] == []
+    assert data["total"] == 0
+
+
 def test_create_pending_certificate(async_issuer_plugin, async_authority, user):
     from lemur.certificates.service import create
 
